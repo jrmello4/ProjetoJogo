@@ -1,5 +1,5 @@
 const DB_NAME = 'MMAManagerDB';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 export class DB {
   constructor() {
@@ -48,6 +48,17 @@ export class DB {
         // v3: hallOfFame store
         if (oldVersion < 3 && !db.objectStoreNames.contains('hallOfFame')) {
           db.createObjectStore('hallOfFame', { keyPath: 'id' });
+        }
+
+        // v4: gameState store
+        if (oldVersion < 4 && !db.objectStoreNames.contains('gameState')) {
+          db.createObjectStore('gameState', { keyPath: 'id' });
+        }
+
+        // v4: notifications store
+        if (oldVersion < 4 && !db.objectStoreNames.contains('notifications')) {
+          const notifStore = db.createObjectStore('notifications', { keyPath: 'id' });
+          notifStore.createIndex('read', 'read');
         }
       };
 

@@ -7,6 +7,8 @@ import { RankingService } from '../services/ranking.js';
 import { SimulationEngine } from './simulation.js';
 import { FighterController } from './fighter-controller.js';
 import { EventController } from './event-controller.js';
+import { SeasonService } from '../services/season-service.js';
+import { NotificationService } from '../services/notification-service.js';
 import { generateId } from '../utils/helpers.js';
 
 export class GameController {
@@ -15,6 +17,8 @@ export class GameController {
     this.organization = null;
     this.fighterCtrl = null;
     this.eventCtrl = null;
+    this.seasonService = null;
+    this.notifService = null;
   }
 
   async init() {
@@ -22,7 +26,10 @@ export class GameController {
 
     this.fighterCtrl = new FighterController(this.db);
     this.eventCtrl = new EventController(this.db);
+    this.seasonService = new SeasonService(this.db);
+    this.notifService = new NotificationService(this.db);
 
+    await this.seasonService.initSeason();
     await this._ensureOrganization();
     await this._ensureInitialData();
 
@@ -129,12 +136,49 @@ export class GameController {
       fighterA.recoverFromWeightCut();
       fighterB.recoverFromWeightCut();
 
+      // Decrementar contratos (useFight fix)
+      if (fighterA.contract && fighterA.contract.useFight) {
+        fighterA.contract.useFight();
+        if (fighterA.contract.fightsRemaining <= 0) {
+          fighterA.status = 'free';
+          fighterA.organizationId = null;
+          fighterA.contract = null;
+          await this.notifService.add('contract-expiry', 'Contrato Expirado', `${fighterA.name} teve o contrato expirado e foi liberado.`);
+        } else if (fighterA.contract.fightsRemaining === 1) {
+          await this.notifService.add('contract-expiry', 'Contrato Prestes a Expirar', `${fighterA.name} tem 1 luta restante no contrato.`);
+        }
+      }
+      if (fighterB.contract && fighterB.contract.useFight) {
+        fighterB.contract.useFight();
+        if (fighterB.contract.fightsRemaining <= 0) {
+          fighterB.status = 'free';
+          fighterB.organizationId = null;
+          fighterB.contract = null;
+          await this.notifService.add('contract-expiry', 'Contrato Expirado', `${fighterB.name} teve o contrato expirado e foi liberado.`);
+        } else if (fighterB.contract.fightsRemaining === 1) {
+          await this.notifService.add('contract-expiry', 'Contrato Prestes a Expirar', `${fighterB.name} tem 1 luta restante no contrato.`);
+        }
+      }
+
+      // Verificar lesao
+      if (fighterA.status === 'injured') {
+        await this.notifService.add('injury', 'Lesão', `${fighterA.name} ficou lesionado.`);
+      }
+      if (fighterB.status === 'injured') {
+        await this.notifService.add('injury', 'Lesão', `${fighterB.name} ficou lesionado.`);
+      }
+
       await this.fighterCtrl.updateFighter(fighterA);
       await this.fighterCtrl.updateFighter(fighterB);
       await this.eventCtrl.saveFightResult(result);
 
       results.push(result);
     }
+
+    // Avançar semana após evento
+    const newState = await this.seasonService.advanceWeek();
+    await this.seasonService.applyWeeklyRecovery(this.fighterCtrl);
+    await this.notifService.add('week-advance', 'Semana Avançada', `Agora é Semana ${newState.week}, Ano ${newState.year}. Fadiga e moral recuperadas.`);
 
     event.status = 'completed';
     event.results = results;

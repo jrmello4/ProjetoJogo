@@ -136,6 +136,20 @@ export class DataGenerator {
     const losses = Math.floor(Math.random() * (fights - wins + 1));
     const draws = fights - wins - losses;
 
+    // DNA traits: máx 2 traits, chances ponderadas
+    const dna = DataGenerator._generateDNA();
+
+    // Popularidade baseada em experiência
+    const basePop = Math.min(80, fights * 2 + Math.floor(Math.random() * 20));
+    const popularity = Math.max(5, basePop);
+
+    // Corte de peso
+    const weightCut = {
+      naturalWeight: Math.floor(Math.random() * 15) + 1,
+      ease: Math.floor(Math.random() * 60) + 20,
+      lastCutImpact: 0,
+    };
+
     return {
       id: null,
       name: DataGenerator.randomName(),
@@ -146,6 +160,9 @@ export class DataGenerator {
       record: { wins, losses, draws },
       attributes,
       hidden,
+      dna,
+      popularity,
+      weightCut,
       status: organizationId ? 'roster' : 'free',
       organizationId: organizationId || null,
       contract: null,
@@ -155,6 +172,36 @@ export class DataGenerator {
       fatigue: 0,
       createdAt: new Date().toISOString(),
     };
+  }
+
+  static _generateDNA() {
+    const traits = [];
+    const pool = [
+      { key: 'pressurePerformer', chance: 0.15 },
+      { key: 'bigEventNervous', chance: 0.12 },
+      { key: 'exceptionalRecovery', chance: 0.10 },
+      { key: 'injuryProne', chance: 0.10 },
+      { key: 'emotionallyUnstable', chance: 0.08 },
+    ];
+
+    for (const t of pool) {
+      if (traits.length >= 2) break;
+      if (Math.random() < t.chance) {
+        traits.push(t.key);
+      }
+    }
+
+    const dna = {
+      pressurePerformer: false,
+      bigEventNervous: false,
+      exceptionalRecovery: false,
+      injuryProne: false,
+      emotionallyUnstable: false,
+    };
+    for (const key of traits) {
+      dna[key] = true;
+    }
+    return dna;
   }
 
   static generateFreeAgents(count = 30) {

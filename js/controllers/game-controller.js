@@ -116,8 +116,18 @@ export class GameController {
 
       if (!fighterA || !fighterB) continue;
 
-      const result = SimulationEngine.simulateFight(fighterA, fighterB);
+      // Corte de peso antes da luta
+      fighterA.applyWeightCutImpact();
+      fighterB.applyWeightCutImpact();
+
+      const isBigEvent = fight.card === 'main' || this.organization.reputation >= 70;
+
+      const result = SimulationEngine.simulateFight(fighterA, fighterB, isBigEvent);
       result.eventId = eventId;
+
+      // Recuperar corte de peso após luta
+      fighterA.recoverFromWeightCut();
+      fighterB.recoverFromWeightCut();
 
       await this.fighterCtrl.updateFighter(fighterA);
       await this.fighterCtrl.updateFighter(fighterB);
@@ -131,9 +141,18 @@ export class GameController {
 
     const org = await this.getOrganization();
 
+    // Popularidade afeta receita
+    const allFighters = await this.fighterCtrl.getAllFighters();
+    const starPower = allFights.reduce((sum, fight) => {
+      const a = allFighters.find(f => f.id === fight.fighterAId);
+      const b = allFighters.find(f => f.id === fight.fighterBId);
+      return sum + (a ? a.popularity : 0) + (b ? b.popularity : 0);
+    }, 0);
+    const attendanceMultiplier = 1 + starPower / 800;
+
     const attendance = Math.floor(
       (org.reputation * 10 + Math.random() * 500) *
-      (0.8 + event.totalFights * 0.1)
+      (0.8 + event.totalFights * 0.1) * attendanceMultiplier
     );
 
     const ticketPrice = Math.floor(50 + org.reputation * 2);

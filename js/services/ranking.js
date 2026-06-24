@@ -1,56 +1,64 @@
-const WEIGHT_CLASSES = [
-  'Strawweight', 'Flyweight', 'Bantamweight', 'Featherweight',
-  'Lightweight', 'Welterweight', 'Middleweight', 'Light Heavyweight', 'Heavyweight',
-];
-
 export class RankingService {
   static calculateRankings(fighters) {
-    const rankings = {};
+    const ranked = fighters
+      .filter(f => f.totalFights > 0)
+      .map(f => ({
+        fighter: f,
+        score: this._rankingScore(f),
+      }))
+      .sort((a, b) => b.score - a.score);
 
-    for (const wc of WEIGHT_CLASSES) {
-      const wcFighters = fighters
-        .filter(f => f.weightClass === wc)
-        .sort((a, b) => {
-          const scoreA = this._rankingScore(a);
-          const scoreB = this._rankingScore(b);
-          return scoreB - scoreA;
-        });
-
-      rankings[wc] = wcFighters.map((fighter, index) => ({
-        id: fighter.id,
-        name: fighter.name,
-        ranking: index + 1,
-        score: this._rankingScore(fighter),
-      }));
-    }
-
-    return rankings;
+    return ranked.map((item, index) => ({
+      ...item,
+      rank: index + 1,
+    }));
   }
 
   static _rankingScore(fighter) {
     const overall = fighter.overallRating || fighter.averageSkill;
-    const winRateBonus = fighter.winRate * 0.3;
-    const expBonus = Math.min(15, fighter.totalFights * 0.75);
-    const recentBonus = fighter.fights.length > 0
-      ? (fighter.fights[fighter.fights.length - 1].won ? 5 : -3)
+
+    // Quality of victory: média do rating dos oponentes vencidos
+    const wins = fighter.fights.filter(f => f.won);
+    const qualityOfVictory = wins.length > 0
+      ? wins.reduce((sum, f) => sum + (f.opponentRating || 50), 0) / wins.length * 0.1
       : 0;
-    return overall + winRateBonus + expBonus + recentBonus;
+
+    // Streak bonus: até +15
+    let streak = 0;
+    for (const f of fighter.fights) {
+      if (f.won) streak++;
+      else break;
+    }
+    const streakBonus = Math.min(15, streak * 3);
+
+    // Popularity factor
+    const popFactor = (fighter.popularity || 0) * 0.05;
+
+    // Win rate bonus
+    const winRateBonus = fighter.winRate * 0.3;
+
+    // Experience bonus
+    const expBonus = Math.min(15, fighter.totalFights * 0.75);
+
+    return overall + qualityOfVictory + streakBonus + popFactor + winRateBonus + expBonus;
   }
 
   static getChampions(rankings) {
+    const weightClasses = [
+      'Strawweight', 'Flyweight', 'Bantamweight', 'Featherweight',
+      'Lightweight', 'Welterweight', 'Middleweight', 'Light Heavyweight', 'Heavyweight',
+    ];
+
     const champions = {};
-    for (const [wc, ranked] of Object.entries(rankings)) {
-      if (ranked.length > 0) {
-        champions[wc] = ranked[0];
+    for (const wc of weightClasses) {
+      const best = rankings
+        .filter(r => r.fighter.weightClass === wc)
+        .sort((a, b) => b.score - a.score)[0];
+      if (best) {
+        champions[wc] = best.fighter;
       }
     }
-    return champions;
-  }
 
-  static getFighterRanking(fighter, rankings) {
-    const ranked = rankings[fighter.weightClass];
-    if (!ranked) return 0;
-    const entry = ranked.find(r => r.id === fighter.id);
-    return entry ? entry.ranking : 0;
+    return champions;
   }
 }

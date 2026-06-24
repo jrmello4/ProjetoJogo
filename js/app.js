@@ -4,7 +4,15 @@ import { RosterView } from './views/roster.js';
 import { MarketView } from './views/market.js';
 import { EventsView } from './views/events.js';
 import { FighterProfileView } from './views/fighter-profile.js';
+import { TrainingCampView } from './views/training-camp.js';
+import { RivalriesView } from './views/rivalries.js';
+import { PressConferenceView } from './views/press-conference.js';
+import { HallOfFameView } from './views/hall-of-fame.js';
 import { GameController } from './controllers/game-controller.js';
+import { TrainingCamp } from './controllers/training-camp.js';
+import { PressConference } from './controllers/press-conference.js';
+import { RivalryService } from './services/rivalry-service.js';
+import { HallOfFame } from './services/hall-of-fame.js';
 
 class App {
   constructor() {
@@ -13,11 +21,14 @@ class App {
     this.rosterFilter = '';
     this.marketFilter = '';
     this.previousView = 'dashboard';
+    this.rivalryService = null;
+    this.trainingState = { intensity: null, spec: null };
   }
 
   async init() {
     LayoutView.initNavigation();
     await this.game.init();
+    this.rivalryService = new RivalryService(this.game.db);
 
     window.addEventListener('navigate', (e) => {
       this.navigateTo(e.detail.view);
@@ -42,6 +53,15 @@ class App {
         break;
       case 'events':
         await this.renderEvents();
+        break;
+      case 'training':
+        await this.renderTrainingCamp();
+        break;
+      case 'rivalries':
+        await this.renderRivalries();
+        break;
+      case 'hall-of-fame':
+        await this.renderHallOfFame();
         break;
       default:
         await this.renderDashboard();
@@ -317,6 +337,29 @@ class App {
     const result = await this.game.simulateEvent(eventId);
     if (!result) return;
 
+    // Check rivalries after fights
+    const allFighters = await this.game.fighterCtrl.getAllFighters();
+    for (const fightResult of result.results) {
+      const fighterA = allFighters.find(f => f.id === fightResult.fighterAId);
+      const fighterB = allFighters.find(f => f.id === fightResult.fighterBId);
+      if (fighterA && fighterB) {
+        await this.rivalryService.checkPostFight(fighterA, fighterB, fightResult, false);
+      }
+    }
+
+    // Check Hall of Fame eligibility
+    for (const fighter of allFighters) {
+      const eligibility = HallOfFame.checkEligibility(fighter);
+      if (eligibility.eligible) {
+        const existing = await this.game.db.get('hallOfFame', fighter.id);
+        if (!existing) {
+          const entry = HallOfFame.induct(fighter);
+          entry.id = fighter.id; // Use fighter id as key
+          await this.game.db.put('hallOfFame', entry);
+        }
+      }
+    }
+
     const html = EventsView.renderSimulation(result.event, result.results);
     LayoutView.render(html);
 
@@ -339,6 +382,83 @@ class App {
         this.navigateTo(this.previousView);
       });
     });
+  }
+
+  // ===== Training Camp =====
+  async renderTrainingCamp() {
+    const roster = await this.game.fighterCtrl.getRoster('org-001');
+    const html = TrainingCampView.render(roster);
+    LayoutView.render(html);
+    this._bindTrainingCamp(roster);
+  }
+
+  _bindTrainingCamp(roster) {
+    const select = document.getElementById('trainingFighterSelect');
+    if (!select) return;
+
+    select.addEventListener('change', () => {
+      document.getElementById('trainingOptions').style.display = 'block';
+    });
+
+    document.querySelectorAll('.training-intensity').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.trainingState.intensity = btn.dataset.intensity;
+        document.querySelectorAll('.training-intensity').forEach(b => b.classList.remove('btn-primary'));
+        btn.classList.add('btn-primary');
+        this._checkTrainingReady();
+      });
+    });
+
+    document.querySelectorAll('.training-spec').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.trainingState.spec = btn.dataset.spec;
+        document.querySelectorAll('.training-spec').forEach(b => b.classList.remove('btn-primary'));
+        btn.classList.add('btn-primary');
+        this._checkTrainingReady();
+      });
+    });
+
+    document.getElementById('startTrainingBtn')?.addEventListener('click', async () => {
+      const fighterId = select.value;
+      if (!fighterId || !this.trainingState.intensity || !this.trainingState.spec) return;
+
+      const fighter = await this.game.fighterCtrl.getFighter(fighterId);
+      if (!fighter) return;
+
+      const result = TrainingCamp.runCamp(fighter, this.trainingState.intensity, this.trainingState.spec);
+      await this.game.fighterCtrl.saveFighter(fighter);
+
+      const resultContainer = document.getElementById('trainingResult');
+      resultContainer.innerHTML = TrainingCampView.renderResult(result, fighter);
+
+      // Reset selections
+      this.trainingState = { intensity: null, spec: null };
+      document.querySelectorAll('.training-intensity').forEach(b => b.classList.remove('btn-primary'));
+      document.querySelectorAll('.training-spec').forEach(b => b.classList.remove('btn-primary'));
+      document.getElementById('startTrainingBtn').disabled = true;
+    });
+  }
+
+  _checkTrainingReady() {
+    const btn = document.getElementById('startTrainingBtn');
+    if (btn) {
+      btn.disabled = !(this.trainingState.intensity && this.trainingState.spec);
+    }
+  }
+
+  // ===== Rivalries =====
+  async renderRivalries() {
+    const rivalries = await this.rivalryService.getAllActive();
+    const fighters = await this.game.fighterCtrl.getAllFighters();
+    const html = RivalriesView.render(rivalries, fighters);
+    LayoutView.render(html);
+  }
+
+  // ===== Hall of Fame =====
+  async renderHallOfFame() {
+    const entries = await this.game.db.getAll('hallOfFame');
+    const html = HallOfFameView.render(entries);
+    LayoutView.render(html);
   }
 }
 

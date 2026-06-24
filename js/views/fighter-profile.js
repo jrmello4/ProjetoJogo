@@ -168,6 +168,57 @@ export class FighterProfileView {
 
       ${contractHtml}
 
+      <!-- DNA Traits -->
+      <div class="card mt-4">
+        <div class="card-header">
+          <span class="card-title">DNA Oculto</span>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          ${fighter.dnaTraits.length > 0
+            ? fighter.dnaTraits.map(t => `<span class="badge badge-info">${t.label}</span>`).join('')
+            : '<span class="text-xs text-muted">Nenhum trait especial detectado</span>'
+          }
+        </div>
+      </div>
+
+      <!-- Popularidade -->
+      <div class="card mt-4">
+        <div class="card-header">
+          <span class="card-title">Popularidade</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="progress-bar flex-1" style="height:12px">
+            <div class="progress-fill ${fighter.popularity >= 70 ? 'high' : fighter.popularity >= 40 ? 'medium' : 'low'}" style="width:${fighter.popularity}%"></div>
+          </div>
+          <span class="text-sm font-bold">${fighter.popularity}</span>
+          <span class="badge ${fighter.popularity >= 80 ? 'badge-success' : fighter.popularity >= 60 ? 'badge-info' : 'badge-warning'}">${fighter.popularityTier}</span>
+        </div>
+      </div>
+
+      <!-- Corte de Peso -->
+      <div class="card mt-4">
+        <div class="card-header">
+          <span class="card-title">Corte de Peso</span>
+        </div>
+        <div class="grid grid-cols-3 gap-4">
+          <div>
+            <div class="text-xs text-muted">Peso Natural Acima</div>
+            <div class="text-sm font-bold">${fighter.weightCut.naturalWeight} lbs</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted">Facilidade de Corte</div>
+            <div class="text-sm font-bold">${fighter.weightCut.ease}%</div>
+            <div class="progress-bar mt-1" style="height:6px">
+              <div class="progress-fill ${fighter.weightCut.ease >= 60 ? 'high' : fighter.weightCut.ease >= 40 ? 'medium' : 'low'}" style="width:${fighter.weightCut.ease}%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="text-xs text-muted">Impacto Estimado</div>
+            <div class="text-sm font-bold">${Math.round(fighter.weightCut.naturalWeight * (1 - fighter.weightCut.ease / 100) * 0.5)} cardio</div>
+          </div>
+        </div>
+      </div>
+
       <div class="mt-4">
         ${historyHtml}
       </div>

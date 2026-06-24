@@ -1,9 +1,9 @@
 import { Gaussian } from '../utils/gaussian.js';
 
 export class SimulationEngine {
-  static simulateFight(fighterA, fighterB) {
-    const perfA = this._calculatePerformance(fighterA, fighterB);
-    const perfB = this._calculatePerformance(fighterB, fighterA);
+  static simulateFight(fighterA, fighterB, isBigEvent = false) {
+    const perfA = this._calculatePerformance(fighterA, fighterB, isBigEvent);
+    const perfB = this._calculatePerformance(fighterB, fighterA, isBigEvent);
 
     const diff = perfA.score - perfB.score;
     const winProb = Gaussian.probability(perfA.score, perfB.score);
@@ -38,10 +38,18 @@ export class SimulationEngine {
     this._updateFighter(winner, loser, true, method, round);
     this._updateFighter(loser, winner, false, method, round);
 
+    // Popularidade pós-luta
+    this._updatePopularity(winner, loser, method, true);
+    this._updatePopularity(loser, winner, method, false);
+
+    // DNA: efeitos pós-luta
+    winner.applyPostFightEffects();
+    loser.applyPostFightEffects();
+
     return result;
   }
 
-  static _calculatePerformance(fighter, opponent) {
+  static _calculatePerformance(fighter, opponent, isBigEvent = false) {
     const fatigueFactor = 1 - (fighter.fatigue / 200);
     const moraleFactor = 0.7 + (fighter.morale / 100) * 0.3;
     const determinationFactor = 0.8 + (fighter.hidden.determination / 100) * 0.2;
@@ -61,7 +69,17 @@ export class SimulationEngine {
       styleAdvantage * 10;
 
     const noise = Gaussian.random(0, 8);
-    const finalScore = baseScore + noise;
+    let finalScore = baseScore + noise;
+
+    // DNA: pressurePerformer / bigEventNervous
+    if (isBigEvent) {
+      if (fighter.dna.pressurePerformer) {
+        finalScore *= 1.10;
+      }
+      if (fighter.dna.bigEventNervous) {
+        finalScore *= 0.90;
+      }
+    }
 
     return {
       score: finalScore,
@@ -180,5 +198,25 @@ export class SimulationEngine {
     if (fighter.fights.length > 50) {
       fighter.fights = fighter.fights.slice(0, 50);
     }
+  }
+
+  static _updatePopularity(fighter, opponent, method, won) {
+    let change = 0;
+
+    if (won) {
+      change = 2 + Math.floor(Math.random() * 4);
+      // Bônus por finalização
+      if (method.type === 'strike') change += 3;
+      if (method.type === 'grapple') change += 2;
+      // Bônus por vencer oponente forte
+      if (opponent.overallRating >= 70) change += 5;
+      if (opponent.overallRating >= 80) change += 5;
+    } else {
+      change = -1 - Math.floor(Math.random() * 3);
+      // Menos penalidade se perdeu contra oponente forte
+      if (opponent.overallRating >= 70) change = Math.max(change, -2);
+    }
+
+    fighter.updatePopularity(change);
   }
 }

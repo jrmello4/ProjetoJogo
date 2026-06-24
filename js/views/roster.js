@@ -52,6 +52,7 @@ export class RosterView {
               <th>GRP</th>
               <th>Cardio</th>
               <th>IQ</th>
+              <th>POP</th>
               <th>Fadiga</th>
               <th>Moral</th>
               <th>Contrato</th>
@@ -74,6 +75,10 @@ export class RosterView {
                 <td>${Math.round(f.grapplingScore)}</td>
                 <td>${f.attributes.cardio}</td>
                 <td>${f.attributes.fightIQ}</td>
+                <td>
+                  <span class="font-bold text-sm">${f.popularity}</span>
+                  <span class="text-xs text-muted ml-1">${f.popularityTier}</span>
+                </td>
                 <td>
                   <div class="flex items-center gap-1">
                     <div class="progress-bar" style="width:40px">

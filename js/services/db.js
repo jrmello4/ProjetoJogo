@@ -1,5 +1,5 @@
 const DB_NAME = 'MMAManagerDB';
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 
 export class DB {
   constructor() {
@@ -12,6 +12,7 @@ export class DB {
 
       request.onupgradeneeded = (e) => {
         const db = e.target.result;
+        const oldVersion = e.oldVersion;
 
         if (!db.objectStoreNames.contains('fighters')) {
           const fighterStore = db.createObjectStore('fighters', { keyPath: 'id' });
@@ -34,6 +35,19 @@ export class DB {
           const fightStore = db.createObjectStore('fights', { keyPath: 'id' });
           fightStore.createIndex('fighterId', 'fighterId');
           fightStore.createIndex('eventId', 'eventId');
+        }
+
+        // v2: rivalries store
+        if (oldVersion < 2 && !db.objectStoreNames.contains('rivalries')) {
+          const rivalryStore = db.createObjectStore('rivalries', { keyPath: 'id' });
+          rivalryStore.createIndex('fighterAId', 'fighterAId');
+          rivalryStore.createIndex('fighterBId', 'fighterBId');
+          rivalryStore.createIndex('active', 'active');
+        }
+
+        // v3: hallOfFame store
+        if (oldVersion < 3 && !db.objectStoreNames.contains('hallOfFame')) {
+          db.createObjectStore('hallOfFame', { keyPath: 'id' });
         }
       };
 

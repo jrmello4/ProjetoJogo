@@ -1,5 +1,21 @@
 import { clamp } from '../utils/helpers.js';
 
+const DNA_TRAIT_NAMES = {
+  pressurePerformer: 'Cresce sob pressão',
+  bigEventNervous: 'Medo em grandes eventos',
+  exceptionalRecovery: 'Recuperação excepcional',
+  injuryProne: 'Tendência a lesões',
+  emotionallyUnstable: 'Instável emocionalmente',
+};
+
+const POPULARITY_TIERS = [
+  { min: 80, label: 'Superstar' },
+  { min: 60, label: 'Popular' },
+  { min: 40, label: 'Conhecido' },
+  { min: 20, label: 'Desconhecido' },
+  { min: 0, label: 'Novato' },
+];
+
 export class Fighter {
   constructor(data) {
     this.id = data.id;
@@ -11,6 +27,9 @@ export class Fighter {
     this.record = { ...data.record };
     this.attributes = { ...data.attributes };
     this.hidden = { ...data.hidden };
+    this.dna = data.dna || this._defaultDNA();
+    this.popularity = data.popularity ?? Math.floor(Math.random() * 30) + 15;
+    this.weightCut = data.weightCut || this._defaultWeightCut();
     this.status = data.status;
     this.organizationId = data.organizationId;
     this.contract = data.contract ? { ...data.contract } : null;
@@ -19,6 +38,24 @@ export class Fighter {
     this.morale = data.morale || 75;
     this.fatigue = data.fatigue || 0;
     this.createdAt = data.createdAt;
+  }
+
+  _defaultDNA() {
+    return {
+      pressurePerformer: false,
+      bigEventNervous: false,
+      exceptionalRecovery: false,
+      injuryProne: false,
+      emotionallyUnstable: false,
+    };
+  }
+
+  _defaultWeightCut() {
+    return {
+      naturalWeight: Math.floor(Math.random() * 15) + 1,
+      ease: Math.floor(Math.random() * 60) + 20,
+      lastCutImpact: 0,
+    };
   }
 
   get totalFights() {
@@ -68,6 +105,23 @@ export class Fighter {
     return Math.round(skill + iq + cardio + chin + exp);
   }
 
+  get dnaTraits() {
+    return Object.entries(this.dna)
+      .filter(([_, v]) => v)
+      .map(([key]) => ({ key, label: DNA_TRAIT_NAMES[key] || key }));
+  }
+
+  get popularityTier() {
+    for (const tier of POPULARITY_TIERS) {
+      if (this.popularity >= tier.min) return tier.label;
+    }
+    return POPULARITY_TIERS[POPULARITY_TIERS.length - 1].label;
+  }
+
+  hasDNA(trait) {
+    return !!this.dna[trait];
+  }
+
   evolve() {
     const rate = (this.hidden.evolution / 100) * (this.hidden.discipline / 100);
     const potentialGap = (this.hidden.potential - this.averageSkill) * 0.1;
@@ -98,6 +152,33 @@ export class Fighter {
   }
 
   applyMoraleChange(amount) {
-    this.morale = clamp(this.morale + amount, 0, 100);
+    const multiplier = this.dna.emotionallyUnstable ? 2.0 : 1.0;
+    this.morale = clamp(this.morale + Math.round(amount * multiplier), 0, 100);
+  }
+
+  applyWeightCutImpact() {
+    const diff = this.weightCut.naturalWeight;
+    const ease = this.weightCut.ease / 100;
+    const impact = diff * (1 - ease);
+    this.attributes.cardio = clamp(this.attributes.cardio - Math.round(impact * 0.5), 0, 99);
+    this.weightCut.lastCutImpact = impact;
+  }
+
+  recoverFromWeightCut() {
+    this.attributes.cardio = clamp(
+      this.attributes.cardio + Math.round(this.weightCut.lastCutImpact * 0.3),
+      0, 99
+    );
+    this.weightCut.lastCutImpact = 0;
+  }
+
+  applyPostFightEffects() {
+    if (this.dna.exceptionalRecovery) {
+      this.fatigue = clamp(this.fatigue - 15, 0, 100);
+    }
+  }
+
+  updatePopularity(amount) {
+    this.popularity = clamp(this.popularity + amount, 0, 100);
   }
 }

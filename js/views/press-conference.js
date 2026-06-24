@@ -1,0 +1,67 @@
+export class PressConferenceView {
+  static render(scenarios, fighterA, fighterB, event) {
+    return `
+      <div class="page-header">
+        <h2>Conferência de Imprensa</h2>
+        <p>${event.name} — Face-off</p>
+      </div>
+
+      <div class="card mb-4">
+        <div class="flex items-center justify-center gap-4 mb-4">
+          <div class="text-center">
+            <div class="font-bold text-lg">${fighterA.name}</div>
+            <div class="text-sm text-muted">${fighterA.record.wins}-${fighterA.record.losses}-${fighterA.record.draws}</div>
+          </div>
+          <div class="text-danger font-bold text-xl">VS</div>
+          <div class="text-center">
+            <div class="font-bold text-lg">${fighterB.name}</div>
+            <div class="text-sm text-muted">${fighterB.record.wins}-${fighterB.record.losses}-${fighterB.record.draws}</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="pressConferenceQuestions">
+        ${scenarios.map((s, i) => `
+          <div class="card mb-4 pc-question" data-index="${i}" style="${i > 0 ? 'display:none' : ''}">
+            <div class="card-header">
+              <span class="card-title">Pergunta ${i + 1} de ${scenarios.length}</span>
+            </div>
+            <div class="text-lg font-bold mb-3">"${s.question}"</div>
+            <div class="flex flex-col gap-2">
+              ${s.options.map((opt, j) => `
+                <button class="btn btn-secondary pc-answer" data-question="${i}" data-option="${j}" style="text-align:left">
+                  "${opt.text}"
+                  <span class="text-xs text-muted ml-2">(Hype +${opt.effects.hype})</span>
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+
+      <div id="pressConferenceSummary" style="display:none"></div>
+
+      <div class="mt-4">
+        <button class="btn btn-primary pc-simulate" id="pcSimulateBtn" style="display:none">
+          Simular Evento
+        </button>
+      </div>
+    `;
+  }
+
+  static renderSummary(effects, totalHype) {
+    return `
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Resumo da Conferência</span>
+        </div>
+        <div class="grid grid-cols-3 gap-4">
+          <div>
+            <div class="text-xs text-muted">Hype Total</div>
+            <div class="text-lg font-bold text-success">+${totalHype}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+}

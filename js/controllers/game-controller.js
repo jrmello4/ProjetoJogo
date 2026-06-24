@@ -170,8 +170,8 @@ export class GameController {
     await this.eventCtrl.updateEvent(event);
 
     const newOrg = await this.getOrganization();
-    const allFighters = await this.fighterCtrl.getAllFighters();
-    const rankings = RankingService.calculateRankings(allFighters);
+    const allFighters2 = await this.fighterCtrl.getAllFighters();
+    const rankings = RankingService.calculateRankings(allFighters2);
 
     return {
       event,

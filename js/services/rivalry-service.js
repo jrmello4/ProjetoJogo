@@ -42,11 +42,12 @@ export class RivalryService {
     const existing = await this.getRivalryBetween(fighterA.id, fighterB.id);
 
     if (existing) {
-      // Aumentar intensidade em rematch
-      existing.increaseIntensity(1);
-      existing.addEvent('rematch', `Rematch — ${result.winnerName} venceu`);
-      await this.db.put('rivalries', existing);
-      return existing;
+      // Wrap plain DB object in Rivalry instance
+      const rivalry = new Rivalry(existing);
+      rivalry.increaseIntensity(1);
+      rivalry.addEvent('rematch', `Rematch — ${result.winnerName} venceu`);
+      await this.db.put('rivalries', rivalry);
+      return rivalry;
     }
 
     // Criar nova rivalidade se luta foi close ou main card

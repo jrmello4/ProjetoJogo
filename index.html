@@ -62,6 +62,12 @@
             <span>Hall da Fama</span>
           </a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link" data-view="notifications">
+            <span class="nav-icon">🔔</span>
+            <span>Notificações</span>
+          </a>
+        </li>
       </ul>
 
       <div class="sidebar-footer">
@@ -77,5 +83,26 @@
   </div>
 
   <script type="module" src="js/app.js"></script>
+
+  <input type="file" id="saveFileInput" accept=".json" style="display: none;">
+  <script>
+    document.getElementById('saveFileInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const saveData = JSON.parse(event.target.result);
+            localStorage.setItem('mmaManagerSave', JSON.stringify(saveData));
+            alert('Save carregado com sucesso!');
+            location.reload();
+          } catch (err) {
+            alert('Erro ao carregar save: arquivo inválido');
+          }
+        };
+        reader.readAsText(file);
+      }
+    });
+  </script>
 </body>
 </html>

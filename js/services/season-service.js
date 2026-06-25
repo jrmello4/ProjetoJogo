@@ -59,4 +59,9 @@ export class SeasonService {
     const state = await this.getState();
     return `Semana ${state.week}, Ano ${state.year}`;
   }
+
+  async isWeekBlocked() {
+    const state = await this.getState();
+    return state.eventThisWeek;
+  }
 }

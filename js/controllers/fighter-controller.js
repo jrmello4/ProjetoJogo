@@ -82,6 +82,16 @@ export class FighterController {
     return fighter;
   }
 
+  async renewContract(fighterId, newContractData) {
+    const fighter = await this.getFighter(fighterId);
+    if (!fighter) return null;
+    const contract = new Contract(newContractData);
+    fighter.contract = contract;
+    fighter.applyMoraleChange(5);
+    await this.db.put('fighters', fighter);
+    return new Fighter(fighter);
+  }
+
   async removeFighter(id) {
     await this.db.delete('fighters', id);
   }

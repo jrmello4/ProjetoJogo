@@ -1,7 +1,9 @@
 import { formatCurrency, formatDate, formatDateShort, getWeightClassShort } from '../utils/helpers.js';
 
 export class EventsView {
-  static render(events, roster, upcomingEvents) {
+  static async render(events, roster, upcomingEvents, seasonService) {
+    const weekLabel = seasonService ? await seasonService.getWeekLabel() : 'Semana 1';
+    const isWeekBlocked = seasonService ? await seasonService.isWeekBlocked() : false;
     let upcomingHtml = '';
     if (upcomingEvents.length > 0) {
       upcomingHtml = `
@@ -66,11 +68,18 @@ export class EventsView {
     return `
       <div class="page-header">
         <h2>Eventos</h2>
-        <p>Criar e gerenciar eventos de MMA</p>
+        <p>${weekLabel} ${isWeekBlocked ? '<span class="badge badge-warning">Bloqueado</span>' : ''}</p>
       </div>
+
+      ${isWeekBlocked ? `
+        <div class="alert alert-warning mb-4">
+          <strong>⚠️ Semana Bloqueada</strong> - Não é possível criar ou simular eventos nesta semana. Avance a semana para continuar.
+        </div>
+      ` : ''}
 
       <div class="flex gap-2 mb-4">
         <button class="btn btn-primary event-create">+ Criar Novo Evento</button>
+        <button class="btn btn-secondary auto-matchmaker" id="autoMatchmakerBtn">🎲 Auto-Matchmaker</button>
       </div>
 
       ${upcomingHtml}
@@ -78,7 +87,18 @@ export class EventsView {
     `;
   }
 
-  static renderCreateModal(roster) {
+  static async renderCreateModal(roster, seasonService) {
+    const weekLabel = seasonService ? await seasonService.getWeekLabel() : 'Semana 1';
+    const isWeekBlocked = seasonService ? await seasonService.isWeekBlocked() : false;
+
+    if (isWeekBlocked) {
+      return `
+        <div class="alert alert-warning">
+          <strong>⚠️ Semana Bloqueada</strong> - Não é possível criar eventos nesta semana.
+        </div>
+      `;
+    }
+
     const byWeight = {};
     roster.forEach(f => {
       if (!byWeight[f.weightClass]) byWeight[f.weightClass] = [];

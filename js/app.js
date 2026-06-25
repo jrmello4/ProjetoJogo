@@ -8,11 +8,15 @@ import { TrainingCampView } from './views/training-camp.js';
 import { RivalriesView } from './views/rivalries.js';
 import { PressConferenceView } from './views/press-conference.js';
 import { HallOfFameView } from './views/hall-of-fame.js';
+import { NotificationsView } from './views/notifications.js';
 import { GameController } from './controllers/game-controller.js';
 import { TrainingCamp } from './controllers/training-camp.js';
 import { PressConference } from './controllers/press-conference.js';
 import { RivalryService } from './services/rivalry-service.js';
 import { HallOfFame } from './services/hall-of-fame.js';
+import { SeasonService } from './services/season-service.js';
+import { NotificationService } from './services/notification-service.js';
+import { SaveService } from './services/save-service.js';
 
 class App {
   constructor() {
@@ -23,6 +27,9 @@ class App {
     this.previousView = 'dashboard';
     this.rivalryService = null;
     this.trainingState = { intensity: null, spec: null };
+    this.seasonService = new SeasonService(this.game.db);
+    this.notificationService = new NotificationService(this.game.db);
+    this.saveService = new SaveService(this.game.db);
   }
 
   async init() {
@@ -33,6 +40,22 @@ class App {
     window.addEventListener('navigate', (e) => {
       this.navigateTo(e.detail.view);
     });
+
+    // Week advance button
+    document.getElementById('weekAdvanceBtn')?.addEventListener('click', () => this.advanceWeek());
+
+    // Save/Load button
+    document.getElementById('saveLoadBtn')?.addEventListener('click', () => this.handleSaveLoad());
+
+    // Roster renew button
+    document.addEventListener('click', (e) => {
+      if (e.target.classList.contains('roster-renew')) {
+        this.handleRenewContract(e.target.dataset.id);
+      }
+    });
+
+    // Auto-Matchmaker button
+    document.getElementById('autoMatchmakerBtn')?.addEventListener('click', () => this.handleAutoMatchmaker());
 
     this.navigateTo('dashboard');
   }
@@ -63,6 +86,12 @@ class App {
       case 'hall-of-fame':
         await this.renderHallOfFame();
         break;
+      case 'notifications':
+        await this.renderNotifications();
+        break;
+      case 'press-conference':
+        await this.renderPressConference();
+        break;
       default:
         await this.renderDashboard();
     }
@@ -70,7 +99,14 @@ class App {
 
   async renderDashboard() {
     const data = await this.game.getDashboard();
-    const html = DashboardView.render(data);
+    const weekLabel = await this.seasonService.getWeekLabel();
+    const freeAgents = await this.game.fighterCtrl.getFreeAgents();
+    const saveInfo = {
+      rosterSize: data.roster.length,
+      freeAgents: freeAgents.length,
+      totalEvents: data.pastEvents.length,
+    };
+    const html = DashboardView.render(data, weekLabel, saveInfo);
     LayoutView.render(html);
 
     document.querySelectorAll('[data-fighter-click]').forEach(el => {
@@ -198,13 +234,13 @@ class App {
     const allEvents = await this.game.eventCtrl.getAllEvents();
     const upcoming = await this.game.eventCtrl.getUpcomingEvents();
     const roster = await this.game.fighterCtrl.getRoster('org-001');
-    const html = EventsView.render(allEvents, roster, upcoming);
+    const html = await EventsView.render(allEvents, roster, upcoming, this.seasonService);
     LayoutView.render(html);
 
     document.querySelectorAll('.event-create').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const modalHtml = EventsView.renderCreateModal(roster);
-        const baseHtml = EventsView.render(allEvents, roster, upcoming);
+      btn.addEventListener('click', async () => {
+        const modalHtml = await EventsView.renderCreateModal(roster, this.seasonService);
+        const baseHtml = await EventsView.render(allEvents, roster, upcoming, this.seasonService);
         LayoutView.render(baseHtml + modalHtml);
         this._bindEventCreate(roster, allEvents, upcoming);
       });
@@ -219,9 +255,9 @@ class App {
 
   _bindEventCreate(roster, allEvents, upcoming) {
     document.querySelectorAll('.event-create').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const modalHtml = EventsView.renderCreateModal(roster);
-        const baseHtml = EventsView.render(allEvents, roster, upcoming);
+      btn.addEventListener('click', async () => {
+        const modalHtml = await EventsView.renderCreateModal(roster, this.seasonService);
+        const baseHtml = await EventsView.render(allEvents, roster, upcoming, this.seasonService);
         LayoutView.render(baseHtml + modalHtml);
         this._bindEventCreate(roster, allEvents, upcoming);
       });
@@ -331,6 +367,98 @@ class App {
         this.renderEvents();
       });
     });
+  }
+
+  async advanceWeek() {
+    const week = await this.seasonService.advanceWeek();
+    this.notificationService.add('week-advance', 'Semana Iniciada', `Semana ${week} iniciada!`);
+    this.renderDashboard();
+  }
+
+  async handleSaveLoad() {
+    const saveInfo = await this.saveService.getSaveInfo();
+    const saveData = await this.saveService.loadSave();
+    const html = NotificationsView.renderSaveLoad(saveInfo, saveData);
+    LayoutView.render(html);
+
+    document.querySelectorAll('.save-load-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (btn.dataset.action === 'save') {
+          await this.saveService.saveSave();
+          this.notificationService.add('success', 'Save', 'Jogo salvo com sucesso!');
+          this.renderDashboard();
+        } else if (btn.dataset.action === 'load') {
+          await this.saveService.loadSave();
+          this.notificationService.add('success', 'Load', 'Jogo carregado com sucesso!');
+          this.renderDashboard();
+        }
+      });
+    });
+  }
+
+  async handleRenewContract(fighterId) {
+    const fighter = await this.game.fighterCtrl.getFighter(fighterId);
+    if (!fighter) return;
+
+    const newContract = {
+      fightsRemaining: 5,
+      salary: fighter.contract.salary,
+      startDate: new Date().toISOString(),
+    };
+
+    const updated = await this.game.fighterCtrl.renewContract(fighterId, newContract);
+    if (updated) {
+      this.notificationService.add('success', 'Contrato', `Contrato renovado para ${updated.name}!`);
+      this.renderRoster();
+    }
+  }
+
+  async handleAutoMatchmaker() {
+    const roster = await this.game.fighterCtrl.getRoster('org-001');
+    const freeAgents = await this.game.fighterCtrl.getFreeAgents();
+    const allFighters = [...roster, ...freeAgents];
+
+    const byWeight = {};
+    allFighters.forEach(f => {
+      if (!byWeight[f.weightClass]) byWeight[f.weightClass] = [];
+      byWeight[f.weightClass].push(f);
+    });
+
+    const events = await this.game.eventCtrl.getAllEvents();
+    const newEvent = {
+      id: 'evt-' + Date.now(),
+      name: 'Auto-Matchmaker ' + new Date().toLocaleDateString('pt-BR'),
+      date: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      totalFights: 0,
+      revenue: 0,
+      expenses: 0,
+      status: 'scheduled',
+      fights: [],
+    };
+
+    for (const [weightClass, fighters] of Object.entries(byWeight)) {
+      if (fighters.length >= 2) {
+        const sorted = fighters.sort((a, b) => b.overallRating - a.overallRating);
+        const match = {
+          fighter1: sorted[0].id,
+          fighter2: sorted[1].id,
+          weightClass: weightClass,
+          winner: null,
+        };
+        newEvent.fights.push(match);
+        newEvent.totalFights++;
+        newEvent.expenses += sorted[0].contract.salary + sorted[1].contract.salary;
+      }
+    }
+
+    if (newEvent.totalFights > 0) {
+      newEvent.revenue = newEvent.expenses * 1.5;
+      await this.game.eventCtrl.createEvent(newEvent);
+      this.notificationService.add('success', 'Auto-Matchmaker', `Evento criado com ${newEvent.totalFights} lutas!`);
+      this.renderEvents();
+    } else {
+      this.notificationService.add('warning', 'Auto-Matchmaker', 'Não há lutadores suficientes para criar lutas.');
+    }
   }
 
   async simulateEvent(eventId) {
@@ -459,6 +587,47 @@ class App {
     const entries = await this.game.db.getAll('hallOfFame');
     const html = HallOfFameView.render(entries);
     LayoutView.render(html);
+  }
+
+  async renderNotifications() {
+    const notifications = await this.notificationService.getAll();
+    const unreadCount = notifications.filter(n => !n.read).length;
+    const html = NotificationsView.render(notifications, unreadCount);
+    LayoutView.render(html);
+  }
+
+  async renderPressConference() {
+    const roster = await this.game.fighterCtrl.getRoster('org-001');
+    const upcoming = await this.game.eventCtrl.getUpcomingEvents();
+    const event = upcoming[0] || { name: 'Próximo Evento' };
+    const fighterA = roster[0] || { name: 'N/A', record: { wins: 0, losses: 0, draws: 0 } };
+    const fighterB = roster[1] || { name: 'N/A', record: { wins: 0, losses: 0, draws: 0 } };
+    const scenarios = PressConference.getScenarios();
+    const html = PressConferenceView.render(scenarios, fighterA, fighterB, event);
+    LayoutView.render(html);
+
+    document.querySelectorAll('.pc-answer').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const questionIndex = parseInt(btn.dataset.question);
+        const optionIndex = parseInt(btn.dataset.option);
+        const option = scenarios[questionIndex].options[optionIndex];
+        PressConference.applyEffects(fighterA, option.effects);
+        await this.game.fighterCtrl.updateFighter(fighterA);
+        const current = document.querySelector(`.pc-question[data-index="${questionIndex}"]`);
+        current.style.display = 'none';
+        const next = document.querySelector(`.pc-question[data-index="${questionIndex + 1}"]`);
+        if (next) {
+          next.style.display = 'block';
+        } else {
+          const totalHype = PressConference.getTotalHype(option.effects);
+          const summary = PressConferenceView.renderSummary(option.effects, totalHype);
+          document.getElementById('pressConferenceSummary').innerHTML = summary;
+          document.getElementById('pressConferenceSummary').style.display = 'block';
+          document.getElementById('pcSimulateBtn').style.display = 'none';
+          this.notificationService.add('success', 'Imprensa', 'Conferência de imprensa concluída!');
+        }
+      });
+    });
   }
 }
 

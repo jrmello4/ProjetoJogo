@@ -193,7 +193,9 @@ Cada resposta gera:
 
 DNA `emotionallyUnstable` amplifica efeitos em 1.5x.
 
-**TODO:** Adicionar link no menu lateral e rota no `app.js` para acessar a view de conferencias de imprensa.
+**Status: IMPLEMENTADO** ✅
+
+Link adicionado no menu lateral e rota no `app.js` para acessar a view de conferencias de imprensa.
 
 ---
 
@@ -399,24 +401,33 @@ A view e controller de conferencias de imprensa (`js/views/press-conference.js`,
 - Faltam rota no `app.js` (`navigateTo` switch)
 - Faltam view import e render method no `app.js`
 
-### Sugestão: Sistema de Temporadas
+### ✅ Sistema de Temporadas
 
-O jogo não tem conceito de tempo progressivo. Adicionar:
+**Status: IMPLEMENTADO** ✅
+
 - Turnos/semanas que avançam
 - Eventos agendados por data
-- Temporadas com premiação anual
+- Semana/Ano exibido no dashboard
+- Botão "Avançar Semana"
 
-### Sugestão: Save/Load Explícito
+### ✅ Save/Load Explícito
 
-Dados são persistidos em IndexedDB automaticamente, mas o jogador não tem:
-- Múltiplos saves
-- Export/import de save
+**Status: IMPLEMENTADO** ✅
+
+- Múltiplos saves via IndexedDB
+- Export/import de save (arquivo JSON)
 - Reset de partida
+- Botão "Salvar/Carregar" no dashboard
+- Input file para carregar saves
 
-### Sugestão: Notificações/Eventos do Dia
+### ✅ Notificações/Eventos do Dia
+
+**Status: IMPLEMENTADO** ✅
 
 Sistema de notificações para:
 - Mudanças de moral
 - Recuperação de fadiga
 - Novas rivalidades
 - Elegibilidade para Hall da Fama
+- Eventos do dia
+- Botão de notificações no menu lateral

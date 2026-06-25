@@ -1,7 +1,7 @@
 import { formatCurrency, formatDateShort, getWeightClassShort } from '../utils/helpers.js';
 
 export class DashboardView {
-  static render(data) {
+  static render(data, weekLabel, saveInfo) {
     const { organization, roster, upcomingEvents, pastEvents, champions } = data;
 
     const lastEvent = pastEvents[0];
@@ -98,7 +98,36 @@ export class DashboardView {
     return `
       <div class="page-header">
         <h2>Dashboard</h2>
-        <p>${organization.name} — Visão Geral</p>
+        <p>${organization.name} — ${weekLabel}</p>
+      </div>
+
+      <div class="flex gap-2 mb-4">
+        <button class="btn btn-primary week-advance" id="weekAdvanceBtn">📅 Avançar Semana</button>
+        <button class="btn btn-secondary save-load" id="saveLoadBtn">💾 Salvar/Carregar</button>
+      </div>
+
+      <div class="grid grid-cols-3 gap-2 mb-4">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Dados do Jogo</span>
+          </div>
+          <div class="stat-value">${saveInfo.rosterSize} lutadores</div>
+          <div class="stat-label">No elenco</div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Dados do Jogo</span>
+          </div>
+          <div class="stat-value">${saveInfo.freeAgents} livres</div>
+          <div class="stat-label">Mercado</div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Dados do Jogo</span>
+          </div>
+          <div class="stat-value">${saveInfo.totalEvents} eventos</div>
+          <div class="stat-label">Histórico</div>
+        </div>
       </div>
 
       <div class="grid grid-cols-4 mb-4">

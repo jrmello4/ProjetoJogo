@@ -95,8 +95,13 @@ export class RosterView {
                     <span class="text-xs">${f.morale}%</span>
                   </div>
                 </td>
-                <td class="text-xs">${f.contract ? `${f.contract.fightsRemaining} lutas` : '—'}</td>
+                <td class="text-xs">
+                  ${f.contract ? `<span class="${f.contract.fightsRemaining <= 1 ? 'text-danger font-bold' : ''}">${f.contract.fightsRemaining} lutas</span>` : '—'}
+                </td>
                 <td>
+                  ${f.contract && f.contract.fightsRemaining <= 1 ? `
+                    <button class="btn btn-sm btn-warning roster-renew" data-id="${f.id}" style="margin-right:0.25rem">Renovar</button>
+                  ` : ''}
                   <button class="btn btn-sm btn-danger roster-fire" data-id="${f.id}">Demitir</button>
                 </td>
               </tr>

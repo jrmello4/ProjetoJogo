@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
-  <button class="hamburger" id="hamburgerBtn">☰</button>
+  <button class="hamburger" id="hamburgerBtn" aria-label="Abrir menu">☰</button>
 
   <div class="app-container">
     <aside class="sidebar" id="sidebar">
@@ -21,49 +21,49 @@
 
       <ul class="nav-menu">
         <li class="nav-item">
-          <a class="nav-link active" data-view="dashboard">
+          <a class="nav-link active" data-view="dashboard" href="#" role="button">
             <span class="nav-icon">📊</span>
             <span>Dashboard</span>
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" data-view="roster">
+          <a class="nav-link" data-view="roster" href="#" role="button">
             <span class="nav-icon">👥</span>
             <span>Elenco</span>
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" data-view="market">
+          <a class="nav-link" data-view="market" href="#" role="button">
             <span class="nav-icon">🌐</span>
             <span>Mercado</span>
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" data-view="events">
+          <a class="nav-link" data-view="events" href="#" role="button">
             <span class="nav-icon">🏆</span>
             <span>Eventos</span>
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" data-view="training">
+          <a class="nav-link" data-view="training" href="#" role="button">
             <span class="nav-icon">🏋️</span>
             <span>Acampamento</span>
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" data-view="rivalries">
+          <a class="nav-link" data-view="rivalries" href="#" role="button">
             <span class="nav-icon">⚔️</span>
             <span>Rivalidades</span>
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" data-view="hall-of-fame">
+          <a class="nav-link" data-view="hall-of-fame" href="#" role="button">
             <span class="nav-icon">🏛️</span>
             <span>Hall da Fama</span>
           </a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" data-view="notifications">
+          <a class="nav-link" data-view="notifications" href="#" role="button">
             <span class="nav-icon">🔔</span>
             <span>Notificações</span>
           </a>
@@ -75,14 +75,27 @@
           <span>🌓</span>
           <span id="themeLabel">Alternar Tema</span>
         </button>
+        <button class="theme-toggle" id="resetDbBtn" title="Limpar dados e recomeçar">
+          <span>🗑️</span>
+          <span>Resetar Dados</span>
+        </button>
       </div>
     </aside>
 
     <main class="main-content" id="mainContent">
+      <div class="loading-state">
+        <div class="loading-spinner"></div>
+        <p>Carregando...</p>
+      </div>
     </main>
   </div>
 
   <script type="module" src="js/app.js"></script>
+  <noscript>
+    <div style="padding: 2rem; text-align: center; color: #c41e3a; font-family: sans-serif;">
+      JavaScript é necessário para executar esta aplicação.
+    </div>
+  </noscript>
 
   <input type="file" id="saveFileInput" accept=".json" style="display: none;">
   <script>

@@ -79,7 +79,6 @@ export class EventsView {
 
       <div class="flex gap-2 mb-4">
         <button class="btn btn-primary event-create">+ Criar Novo Evento</button>
-        <button class="btn btn-secondary auto-matchmaker" id="autoMatchmakerBtn">🎲 Auto-Matchmaker</button>
       </div>
 
       ${upcomingHtml}
@@ -144,7 +143,10 @@ export class EventsView {
                 <button class="btn btn-sm btn-danger remove-fight">&times;</button>
               </div>
             </div>
-            <button class="btn btn-sm btn-secondary add-fight" data-card="main">+ Adicionar Luta</button>
+            <div class="flex gap-2 mb-2">
+              <button class="btn btn-sm btn-secondary add-fight" data-card="main">+ Adicionar Luta</button>
+              <button class="btn btn-sm btn-primary auto-fill-main">🎯 Auto-Match Card Principal</button>
+            </div>
           </div>
 
           <div class="mb-4">
@@ -157,7 +159,14 @@ export class EventsView {
                 <button class="btn btn-sm btn-danger remove-fight">&times;</button>
               </div>
             </div>
-            <button class="btn btn-sm btn-secondary add-fight" data-card="prelim">+ Adicionar Luta</button>
+            <div class="flex gap-2 mb-2">
+              <button class="btn btn-sm btn-secondary add-fight" data-card="prelim">+ Adicionar Luta</button>
+              <button class="btn btn-sm btn-primary auto-fill-prelim">🎯 Auto-Match Card Preliminar</button>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <button class="btn btn-primary auto-fill-all" style="width:100%">⚡ Auto-Match Completo (Preenche Tudo)</button>
           </div>
 
           <div class="modal-actions">
@@ -170,6 +179,24 @@ export class EventsView {
   }
 
   static renderSimulation(event, results) {
+    const bonuses = event.bonuses || [];
+
+    const bonusesHtml = bonuses.length > 0 ? `
+      <div class="mb-4">
+        ${bonuses.map(b => `
+          <div class="card" style="border-top-color:var(--gold,#d4a843);margin-bottom:0.5rem">
+            <div class="flex items-center gap-2">
+              <span style="font-size:1.5rem">🏆</span>
+              <div>
+                <div class="font-bold" style="color:var(--gold,#d4a843)">${b.type}</div>
+                <div class="text-sm">${b.winner} — bônus de ${formatCurrency(b.amount)}</div>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    ` : '';
+
     return `
       <div class="page-header">
         <h2>${event.name}</h2>
@@ -193,29 +220,91 @@ export class EventsView {
         </div>
       </div>
 
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Card</th>
-              <th>Luta</th>
-              <th>Vencedor</th>
-              <th>Método</th>
-              <th>Round</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${results.map((r, i) => `
-              <tr>
-                <td><span class="badge ${i < 2 ? 'badge-info' : 'badge-warning'}">${i < 2 ? 'Main' : 'Prelim'}</span></td>
-                <td>${r.fighterAName} <span class="text-muted">vs</span> ${r.fighterBName}</td>
-                <td class="font-bold text-success">${r.winnerName}</td>
-                <td>${r.method}</td>
-                <td>R${r.round}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+      ${bonusesHtml}
+
+      <div class="mb-4">
+        ${results.map((r, i) => `
+          <div class="card mb-2 fight-result-card" style="cursor:pointer" data-expand="fight-${i}">
+            <div class="flex items-center justify-between mb-2">
+              <div>
+                <span class="badge ${r.card === 'main' ? 'badge-info' : 'badge-warning'}">${r.card === 'main' ? 'Main Card' : 'Prelim'}</span>
+                <span class="text-xs text-muted ml-2">${r.method} · R${r.round}</span>
+              </div>
+              <span class="text-xs text-muted">Clique para detalhes ▼</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2" style="flex:1">
+                <span class="font-bold ${r.winnerId === r.fighterAId ? 'text-success' : ''}">${r.fighterAName}</span>
+                ${r.winnerId === r.fighterAId ? '<span class="badge badge-success" style="font-size:0.65rem">VENCEDOR</span>' : ''}
+              </div>
+              <span class="text-muted" style="font-size:0.8rem">vs</span>
+              <div class="flex items-center gap-2" style="flex:1;text-align:right">
+                ${r.winnerId === r.fighterBId ? '<span class="badge badge-success" style="font-size:0.65rem">VENCEDOR</span>' : ''}
+                <span class="font-bold ${r.winnerId === r.fighterBId ? 'text-success' : ''}">${r.fighterBName}</span>
+              </div>
+            </div>
+
+            <!-- Expandable details -->
+            <div id="fight-${i}" style="display:none;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
+              <!-- Round scores -->
+              ${r.rounds ? `
+              <div class="mb-3">
+                <div class="text-xs font-bold mb-1" style="text-transform:uppercase;letter-spacing:0.05em">Scorecards por Round</div>
+                <table style="width:100%;font-size:0.8rem">
+                  <thead>
+                    <tr>
+                      <th style="text-align:left">Round</th>
+                      <th style="text-align:center">${r.fighterAName}</th>
+                      <th style="text-align:center">${r.fighterBName}</th>
+                      <th style="text-align:center">Destaque</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${r.rounds.map(rd => `
+                      <tr>
+                        <td style="text-align:left">${rd.round}</td>
+                        <td style="text-align:center;font-weight:bold;color:${rd.scoreA > rd.scoreB ? 'var(--success,#2ecc71)' : ''}">${rd.scoreA}</td>
+                        <td style="text-align:center;font-weight:bold;color:${rd.scoreB > rd.scoreA ? 'var(--success,#2ecc71)' : ''}">${rd.scoreB}</td>
+                        <td style="text-align:center;font-size:0.75rem">
+                          ${rd.knockdownsA > 0 ? '🔴 KD' : ''}
+                          ${rd.knockdownsB > 0 ? '🔵 KD' : ''}
+                          ${rd.subAttemptsA > 0 ? '🔴 Sub' : ''}
+                          ${rd.subAttemptsB > 0 ? '🔵 Sub' : ''}
+                          ${rd.finished ? '💥 Finalização' : ''}
+                          ${!rd.knockdownsA && !rd.knockdownsB && !rd.subAttemptsA && !rd.subAttemptsB && !rd.finished ? '—' : ''}
+                        </td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+              ` : ''}
+
+              <!-- Fight stats -->
+              ${r.stats ? `
+              <div>
+                <div class="text-xs font-bold mb-1" style="text-transform:uppercase;letter-spacing:0.05em">Estatísticas da Luta</div>
+                <div class="grid grid-cols-2 gap-2" style="font-size:0.8rem">
+                  <div class="card" style="padding:0.5rem">
+                    <div class="font-bold">${r.fighterAName}</div>
+                    <div class="text-muted">Socos: ${r.stats.sigStrikesA}</div>
+                    <div class="text-muted">Quedas: ${r.stats.takedownsA}</div>
+                    <div class="text-muted">KDs: ${r.stats.knockdownsA}</div>
+                    <div class="text-muted">Subs: ${r.stats.subAttemptsA}</div>
+                  </div>
+                  <div class="card" style="padding:0.5rem">
+                    <div class="font-bold">${r.fighterBName}</div>
+                    <div class="text-muted">Socos: ${r.stats.sigStrikesB}</div>
+                    <div class="text-muted">Quedas: ${r.stats.takedownsB}</div>
+                    <div class="text-muted">KDs: ${r.stats.knockdownsB}</div>
+                    <div class="text-muted">Subs: ${r.stats.subAttemptsB}</div>
+                  </div>
+                </div>
+              </div>
+              ` : ''}
+            </div>
+          </div>
+        `).join('')}
       </div>
 
       <div class="flex gap-2 mt-4">

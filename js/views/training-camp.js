@@ -1,101 +1,124 @@
 export class TrainingCampView {
-  static render(fighters, selectedId = null) {
-    const available = fighters.filter(f => f.status === 'roster' && f.status !== 'injured');
+  static render(roster) {
+    const fighters = roster.filter(f => f.status === 'roster');
 
     return `
       <div class="page-header">
         <h2>Acampamento de Treinamento</h2>
-        <p>Prepare seus lutadores para as próximas lutas</p>
+        <p>Melhore os atributos dos seus lutadores</p>
       </div>
 
       <div class="card mb-4">
+        <div class="card-header">
+          <span class="card-title">Selecionar Lutador</span>
+        </div>
         <div class="form-group">
-          <label class="form-label">Selecionar Lutador</label>
-          <select class="form-select" id="trainingFighterSelect">
-            <option value="">— Escolha um lutador —</option>
-            ${available.map(f => `
-              <option value="${f.id}" ${f.id === selectedId ? 'selected' : ''}>
-                ${f.name} — OVR ${f.overallRating} · ${f.weightClass}
-              </option>
+          <label>Lutador</label>
+          <select id="trainingFighterSelect" class="form-select">
+            <option value="">-- Selecione um lutador --</option>
+            ${fighters.map(f => `
+              <option value="${f.id}">${f.name} (${f.weightClass})</option>
             `).join('')}
           </select>
         </div>
+      </div>
 
-        <div id="trainingOptions" style="display:none">
-          <div class="form-group">
-            <label class="form-label">Intensidade</label>
-            <div class="flex gap-2" id="intensityButtons">
-              <button class="btn btn-sm btn-secondary training-intensity" data-intensity="light">
-                Leve — Ganhos pequenos, risco mínimo
-              </button>
-              <button class="btn btn-sm btn-secondary training-intensity" data-intensity="medium">
-                Médio — Ganhos moderados, risco baixo
-              </button>
-              <button class="btn btn-sm btn-secondary training-intensity" data-intensity="hard">
-                Intenso — Ganhos grandes, risco alto
-              </button>
-            </div>
-          </div>
+      <div id="trainingOptions" class="card mb-4" style="display:none">
+        <div class="card-header">
+          <span class="card-title">Configurar Treinamento</span>
+        </div>
 
-          <div class="form-group">
-            <label class="form-label">Especialização</label>
-            <div class="flex gap-2" id="specButtons">
-              <button class="btn btn-sm btn-secondary training-spec" data-spec="striking">
-                Striking
-              </button>
-              <button class="btn btn-sm btn-secondary training-spec" data-spec="grappling">
-                Grappling
-              </button>
-              <button class="btn btn-sm btn-secondary training-spec" data-spec="cardio">
-                Cardio
-              </button>
-              <button class="btn btn-sm btn-secondary training-spec" data-spec="chin">
-                Chin
-              </button>
-            </div>
-          </div>
-
-          <div class="mt-4">
-            <button class="btn btn-primary training-start" id="startTrainingBtn" disabled>
-              Iniciar Treinamento
+        <div class="form-group mb-4">
+          <label class="text-sm font-bold text-secondary">Intensidade</label>
+          <div class="flex gap-2 training-intensity-group">
+            <button class="btn btn-sm btn-secondary training-intensity" data-intensity="light">
+              Leve (baixo risco)
+            </button>
+            <button class="btn btn-sm btn-secondary training-intensity" data-intensity="medium">
+              Média (risco moderado)
+            </button>
+            <button class="btn btn-sm btn-secondary training-intensity" data-intensity="heavy">
+              Pesada (alto risco)
             </button>
           </div>
-
-          <div id="trainingResult" class="mt-4"></div>
         </div>
+
+        <div class="form-group mb-4">
+          <label class="text-sm font-bold text-secondary">Especialização</label>
+          <div class="flex gap-2 training-spec-group">
+            <button class="btn btn-sm btn-secondary training-spec" data-spec="striking">
+              🥊 Striking
+            </button>
+            <button class="btn btn-sm btn-secondary training-spec" data-spec="grappling">
+              🤼 Grappling
+            </button>
+            <button class="btn btn-sm btn-secondary training-spec" data-spec="cardio">
+              🏃 Cardio
+            </button>
+            <button class="btn btn-sm btn-secondary training-spec" data-spec="chin">
+              🛡️ Resistência
+            </button>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="startTrainingBtn" disabled>
+          Iniciar Treinamento
+        </button>
+      </div>
+
+      <div id="trainingResult" class="card" style="display:none">
+        <div class="card-header">
+          <span class="card-title">Resultado do Treinamento</span>
+        </div>
+        <div id="trainingResultContent"></div>
       </div>
     `;
   }
 
   static renderResult(result, fighter) {
-    let html = '<div class="card">';
-    html += '<div class="card-header"><span class="card-title">Resultado do Treinamento</span></div>';
+    const gainRows = Object.entries(result.gains)
+      .filter(([, v]) => v > 0)
+      .map(([attr, val]) => `
+        <tr>
+          <td>${attr}</td>
+          <td class="text-success">+${val}</td>
+        </tr>
+      `).join('');
 
+    let statusHtml = '';
     if (result.injured) {
-      html += '<div class="text-danger font-bold mb-2">⚠️ Lesão! Lutador está fora de combate.</div>';
+      statusHtml += `<div class="text-danger font-bold">⚠️ Lesão! O lutador ficou fora de combate.</div>`;
     }
     if (result.overtrained) {
-      html += '<div class="text-warning font-bold mb-2">⚠️ Overtraining! Moral e energia reduzidos.</div>';
+      statusHtml += `<div class="text-warning font-bold">⚠️ Super-treinado! Moral e energia reduzidos.</div>`;
     }
     if (!result.injured && !result.overtrained) {
-      html += '<div class="text-success font-bold mb-2">✅ Treinamento concluído com sucesso!</div>';
+      statusHtml += `<div class="text-success font-bold">✅ Treinamento concluído com sucesso!</div>`;
     }
 
-    html += '<div class="grid grid-cols-2 gap-2">';
-    for (const [attr, gain] of Object.entries(result.gains)) {
-      const labels = {
-        boxing: 'Boxing', kickboxing: 'Kickboxing', muayThai: 'Muay Thai',
-        wrestling: 'Wrestling', bjj: 'BJJ', cardio: 'Cardio', chin: 'Chin',
-      };
-      html += `
-        <div>
-          <span class="text-xs text-muted">${labels[attr] || attr}</span>
-          <span class="text-success font-bold ml-1">+${gain}</span>
+    return `
+      <div class="mb-4">
+        <h3 class="text-lg font-bold">${fighter.name}</h3>
+        ${statusHtml}
+      </div>
+      ${gainRows ? `
+        <table class="mb-4">
+          <thead>
+            <tr><th>Atributo</th><th>Ganho</th></tr>
+          </thead>
+          <tbody>${gainRows}</tbody>
+        </table>
+      ` : ''}
+      <div class="flex gap-2">
+        <div class="stat-box">
+          <div class="stat-label">Fadiga</div>
+          <div class="stat-value">${fighter.fatigue}%</div>
         </div>
-      `;
-    }
-    html += '</div></div>';
-
-    return html;
+        <div class="stat-box">
+          <div class="stat-label">Moral</div>
+          <div class="stat-value">${fighter.morale}%</div>
+        </div>
+      </div>
+    `;
   }
 }

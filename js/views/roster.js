@@ -13,14 +13,26 @@ export class RosterView {
 
     const sorted = [...filtered].sort((a, b) => b.overallRating - a.overallRating);
 
+    const filterButtons = `
+      <div class="flex gap-2 mb-4" style="flex-wrap:wrap">
+        <button class="btn btn-sm ${!filter ? 'btn-primary' : 'btn-secondary'} roster-filter" data-filter="">Todos</button>
+        ${WEIGHT_CLASSES.map(wc => `
+          <button class="btn btn-sm ${filter === wc ? 'btn-primary' : 'btn-secondary'} roster-filter" data-filter="${wc}">
+            ${getWeightClassShort(wc)}
+          </button>
+        `).join('')}
+      </div>
+    `;
+
     if (sorted.length === 0) {
       return `
         <div class="page-header">
           <h2>Elenco</h2>
           <p>Lutadores da sua organização</p>
         </div>
+        ${filterButtons}
         <div class="empty-state">
-          <p>Nenhum lutador no elenco.</p>
+          <p>${filter ? `Nenhum lutador na divisao ${filter}.` : 'Nenhum lutador no elenco.'}</p>
         </div>
       `;
     }
@@ -31,14 +43,7 @@ export class RosterView {
         <p>${sorted.length} lutadores · ${fighters.length} total</p>
       </div>
 
-      <div class="flex gap-2 mb-4" style="flex-wrap:wrap">
-        <button class="btn btn-sm ${!filter ? 'btn-primary' : 'btn-secondary'} roster-filter" data-filter="">Todos</button>
-        ${WEIGHT_CLASSES.map(wc => `
-          <button class="btn btn-sm ${filter === wc ? 'btn-primary' : 'btn-secondary'} roster-filter" data-filter="${wc}">
-            ${getWeightClassShort(wc)}
-          </button>
-        `).join('')}
-      </div>
+      ${filterButtons}
 
       <div class="table-container">
         <table>
@@ -64,7 +69,7 @@ export class RosterView {
               <tr>
                 <td>
                   <div class="flex items-center gap-2">
-                    <span>${getNationalityFlag(f.nationality.code)}</span>
+                    <span>${getNationalityFlag(f.nationality?.code)}</span>
                     <span class="font-bold fighter-row" data-id="${f.id}">${f.name}</span>
                   </div>
                 </td>

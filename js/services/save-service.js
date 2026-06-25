@@ -65,6 +65,18 @@ export class SaveService {
     await this.db.delete('gameState', 'state');
   }
 
+  async saveSave() {
+    const json = await this.exportSave();
+    localStorage.setItem('mmaManagerSave', json);
+    return true;
+  }
+
+  async loadSave() {
+    const json = localStorage.getItem('mmaManagerSave');
+    if (!json) throw new Error('Nenhum save encontrado');
+    return this.importSave(json);
+  }
+
   async getSaveInfo() {
     const fighters = await this.db.getAll('fighters');
     const events = await this.db.getAll('events');

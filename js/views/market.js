@@ -6,12 +6,30 @@ const WEIGHT_CLASSES = [
 ];
 
 export class MarketView {
-  static render(fighters, filter = '') {
-    const filtered = filter
+  static render(fighters, filter = '', searchTerm = '') {
+    let filtered = filter
       ? fighters.filter(f => f.weightClass === filter)
       : fighters;
 
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(f => f.name.toLowerCase().includes(term));
+    }
+
     const sorted = [...filtered].sort((a, b) => b.overallRating - a.overallRating);
+
+    const filterButtons = `
+      <div class="flex gap-2 mb-2" style="flex-wrap:wrap">
+        <button class="btn btn-sm ${!filter ? 'btn-primary' : 'btn-secondary'} market-filter" data-filter="">Todos</button>
+        ${WEIGHT_CLASSES.map(wc => `
+          <button class="btn btn-sm ${filter === wc ? 'btn-primary' : 'btn-secondary'} market-filter" data-filter="${wc}">
+            ${getWeightClassShort(wc)}
+          </button>
+        `).join('')}
+        <button class="btn btn-sm btn-secondary market-refresh">🔄 Renovar</button>
+        <input type="text" class="form-input market-search" placeholder="Buscar por nome..." value="${searchTerm}" style="max-width:200px;margin-left:auto">
+      </div>
+    `;
 
     if (sorted.length === 0) {
       return `
@@ -19,8 +37,9 @@ export class MarketView {
           <h2>Mercado</h2>
           <p>Agentes Livres</p>
         </div>
+        ${filterButtons}
         <div class="empty-state">
-          <p>Nenhum agente livre disponível.</p>
+          <p>${filter ? `Nenhum agente livre na divisao ${filter}.` : 'Nenhum agente livre disponível.'}</p>
         </div>
       `;
     }
@@ -31,15 +50,7 @@ export class MarketView {
         <p>${sorted.length} agentes livres disponíveis</p>
       </div>
 
-      <div class="flex gap-2 mb-4" style="flex-wrap:wrap">
-        <button class="btn btn-sm ${!filter ? 'btn-primary' : 'btn-secondary'} market-filter" data-filter="">Todos</button>
-        ${WEIGHT_CLASSES.map(wc => `
-          <button class="btn btn-sm ${filter === wc ? 'btn-primary' : 'btn-secondary'} market-filter" data-filter="${wc}">
-            ${getWeightClassShort(wc)}
-          </button>
-        `).join('')}
-        <button class="btn btn-sm btn-secondary market-refresh">🔄 Renovar</button>
-      </div>
+      ${filterButtons}
 
       <div class="table-container">
         <table>
@@ -64,7 +75,7 @@ export class MarketView {
                 <td>
                   <span class="font-bold fighter-row" data-id="${f.id}">${f.name}</span>
                 </td>
-                <td>${getNationalityFlag(f.nationality.code)} ${f.nationality.name}</td>
+                <td>${getNationalityFlag(f.nationality?.code)} ${f.nationality?.name || 'Desconhecido'}</td>
                 <td><span class="badge badge-info">${getWeightClassShort(f.weightClass)}</span></td>
                 <td class="font-bold">${f.record.wins}-${f.record.losses}-${f.record.draws}</td>
                 <td class="font-bold">${f.overallRating}</td>
@@ -75,6 +86,7 @@ export class MarketView {
                 <td>${f.age} anos</td>
                 <td>
                   <button class="btn btn-sm btn-success market-hire" data-id="${f.id}">Contratar</button>
+                  <button class="btn btn-sm btn-secondary market-hire-quick" data-id="${f.id}" title="Contratar com termos padrão">⚡ Rápido</button>
                 </td>
               </tr>
             `).join('')}

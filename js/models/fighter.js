@@ -1,4 +1,5 @@
 import { clamp } from '../utils/helpers.js';
+import { Contract } from './contract.js';
 
 const DNA_TRAIT_NAMES = {
   pressurePerformer: 'Cresce sob pressão',
@@ -32,7 +33,7 @@ export class Fighter {
     this.weightCut = data.weightCut || this._defaultWeightCut();
     this.status = data.status;
     this.organizationId = data.organizationId;
-    this.contract = data.contract ? { ...data.contract } : null;
+    this.contract = data.contract ? new Contract(data.contract) : null;
     this.fights = [...(data.fights || [])];
     this.ranking = data.ranking || 0;
     this.morale = data.morale || 75;
@@ -123,21 +124,23 @@ export class Fighter {
   }
 
   evolve() {
-    const rate = (this.hidden.evolution / 100) * (this.hidden.discipline / 100);
-    const potentialGap = (this.hidden.potential - this.averageSkill) * 0.1;
+    const rate = Math.min(0.95, (this.hidden.evolution / 100) * (this.hidden.discipline / 100) * 1.3);
+    const potentialGap = (this.hidden.potential - this.averageSkill) * 0.15;
+    const isYoung = (this.age || 30) < 30;
 
     for (const key of Object.keys(this.attributes)) {
       const growth = Math.random() < rate
-        ? Math.min(potentialGap + 1, Math.random() * 3 + 0.5)
-        : Math.random() * 0.5;
+        ? Math.min(potentialGap + 1.5, Math.random() * 4 + 1)
+        : Math.random() * 0.8;
+      const multiplier = isYoung ? 1.5 : 1.0;
       this.attributes[key] = clamp(
-        Math.round(this.attributes[key] + growth),
+        Math.round(this.attributes[key] + growth * multiplier),
         0, 99
       );
     }
 
     this.attributes.fightIQ = clamp(
-      Math.round(this.attributes.fightIQ + (Math.random() * 1.5 + 0.3)),
+      Math.round(this.attributes.fightIQ + (Math.random() * 2 + 0.5)),
       0, 99
     );
   }

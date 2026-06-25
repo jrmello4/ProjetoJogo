@@ -45,6 +45,14 @@
   /* Transitions */
   --transition: all 0.15s ease;
 
+  /* Animation timings */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --anim-fast: 0.2s;
+  --anim-normal: 0.35s;
+  --anim-slow: 0.6s;
+  --anim-slower: 0.8s;
+
   /* Typography */
   --font-display: 'Oswald', 'Impact', sans-serif;
   --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -153,15 +161,6 @@ body {
   line-height: 1;
 }
 
-.sidebar-header h1::after {
-  content: '';
-  display: block;
-  width: 32px;
-  height: 3px;
-  background: var(--accent);
-  margin-top: 0.5rem;
-}
-
 .sidebar-header p {
   font-size: 0.6875rem;
   color: var(--text-muted);
@@ -184,6 +183,7 @@ body {
 }
 
 .nav-link {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -198,20 +198,12 @@ body {
   text-transform: uppercase;
   transition: var(--transition);
   cursor: pointer;
-  position: relative;
   border-left: 2px solid transparent;
 }
 
 .nav-link:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
-}
-
-.nav-link.active {
-  background: var(--accent-subtle);
-  color: var(--accent);
-  border-left-color: var(--accent);
-  font-weight: 600;
 }
 
 .nav-icon {
@@ -267,6 +259,7 @@ body {
 
 /* Page header — fight card headline style */
 .page-header {
+  position: relative;
   margin-bottom: 2rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--border);
@@ -319,11 +312,6 @@ body {
   border-top: 2px solid var(--border-light);
 }
 
-.card:hover {
-  border-color: var(--border-light);
-  border-top-color: var(--accent);
-}
-
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -369,6 +357,8 @@ body {
    ======================================== */
 
 .btn {
+  position: relative;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -392,7 +382,9 @@ body {
 
 .btn-primary:hover {
   background: var(--accent-hover);
-  box-shadow: 0 0 20px var(--accent-glow);
+  box-shadow: 0 0 20px var(--accent-glow), 0 0 40px rgba(196, 30, 58, 0.1);
+  transform: translateY(-1px);
+  transition: all var(--anim-fast) var(--ease-out-quint);
 }
 
 .btn-secondary {
@@ -529,7 +521,7 @@ tr:hover td {
 
 .alert {
   padding: 1rem;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-lg);
   margin-bottom: 1rem;
   border: 1px solid transparent;
 }
@@ -611,6 +603,8 @@ tr:hover td {
   height: 100%;
   border-radius: 2px;
   transition: width 0.4s ease;
+  position: relative;
+  overflow: hidden;
 }
 
 .progress-fill.high { background: var(--success); }
@@ -698,12 +692,6 @@ tr:hover td {
   transition: var(--transition);
 }
 
-.fighter-card:hover {
-  border-top-color: var(--accent);
-  box-shadow: 0 0 20px var(--accent-glow);
-  transform: translateY(-1px);
-}
-
 .fighter-name {
   font-family: var(--font-display);
   font-weight: 600;
@@ -788,15 +776,13 @@ tr:hover td {
   position: absolute;
   left: -1.5rem;
   top: 0.35rem;
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 0;
   /* Diamond shape — octagon reference */
   background: var(--accent);
   margin-left: 3px;
   transform: rotate(45deg);
-  width: 6px;
-  height: 6px;
 }
 
 .timeline-date {
@@ -821,6 +807,7 @@ tr:hover td {
   color: var(--text-muted);
   border: 1px dashed var(--border);
   border-radius: var(--radius-lg);
+  animation: emptyPulse 3s var(--ease-out-quint) infinite;
 }
 
 .empty-state p {
@@ -871,6 +858,7 @@ tr:hover td {
   border-radius: var(--radius);
   cursor: pointer;
   font-size: 1.25rem;
+  animation: hamburgerPulse 4s var(--ease-out-quint) infinite;
 }
 
 /* ========================================
@@ -1036,6 +1024,470 @@ tr:hover td {
 }
 
 /* ========================================
+   ANIMATIONS — Octagon War Room Energy
+   ======================================== */
+
+/* --- Page Transition --- */
+.page-enter {
+  animation: pageSlideIn var(--anim-slow) var(--ease-out-quint) forwards;
+}
+
+@keyframes pageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- Stagger children --- */
+.stagger-in > * {
+  opacity: 0;
+  animation: staggerFadeIn var(--anim-slow) var(--ease-out-quint) forwards;
+}
+
+.stagger-in > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-in > *:nth-child(2) { animation-delay: 60ms; }
+.stagger-in > *:nth-child(3) { animation-delay: 120ms; }
+.stagger-in > *:nth-child(4) { animation-delay: 180ms; }
+.stagger-in > *:nth-child(5) { animation-delay: 240ms; }
+.stagger-in > *:nth-child(6) { animation-delay: 300ms; }
+.stagger-in > *:nth-child(7) { animation-delay: 360ms; }
+.stagger-in > *:nth-child(8) { animation-delay: 420ms; }
+.stagger-in > *:nth-child(9) { animation-delay: 480ms; }
+.stagger-in > *:nth-child(10) { animation-delay: 540ms; }
+.stagger-in > *:nth-child(11) { animation-delay: 600ms; }
+.stagger-in > *:nth-child(12) { animation-delay: 660ms; }
+
+@keyframes staggerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- Card entrance (used on fighter cards, stat cards) --- */
+.card-enter {
+  animation: cardReveal var(--anim-slow) var(--ease-out-quint) forwards;
+}
+
+@keyframes cardReveal {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* --- Stat count-up trigger (JS-driven, CSS marker) --- */
+.stat-count {
+  display: inline-block;
+}
+
+.stat-count.animating {
+  animation: statPop var(--anim-normal) var(--ease-out-expo);
+}
+
+@keyframes statPop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* --- Sidebar nav link hover — fight card underline sweep --- */
+.nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 0;
+  height: 2px;
+  background: var(--accent);
+  transition: width var(--anim-normal) var(--ease-out-quint);
+}
+
+.nav-link:hover::after {
+  width: 100%;
+}
+
+.nav-link.active::after {
+  width: 100%;
+}
+
+/* --- Sidebar header accent bar — subtle pulse --- */
+.sidebar-header h1::after {
+  content: '';
+  display: block;
+  width: 32px;
+  height: 3px;
+  background: var(--accent);
+  margin-top: 0.5rem;
+  animation: accentPulse 3s var(--ease-out-quint) infinite;
+}
+
+@keyframes accentPulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 8px var(--accent-glow);
+  }
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 2px var(--accent-glow);
+  }
+}
+
+/* --- Active nav indicator glow --- */
+.nav-link.active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border-left-color: var(--accent);
+  font-weight: 600;
+  animation: navGlow 2.5s var(--ease-out-quint) infinite;
+}
+
+@keyframes navGlow {
+  0%, 100% {
+    text-shadow: 0 0 8px transparent;
+  }
+  50% {
+    text-shadow: 0 0 12px var(--accent-glow);
+  }
+}
+
+/* --- Button impact — press effect --- */
+.btn:active {
+  transform: scale(0.96);
+  transition: transform 0.1s ease;
+}
+
+/* Button ripple effect */
+.btn .ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(0);
+  animation: rippleExpand 0.6s var(--ease-out-quint) forwards;
+  pointer-events: none;
+}
+
+@keyframes rippleExpand {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* --- Button hover glow enhancement --- */
+/* (merged into .btn-primary:hover above) */
+
+.btn-primary:active {
+  transform: translateY(0) scale(0.96);
+}
+
+/* --- Card hover — enhanced lift --- */
+.card:hover {
+  border-color: var(--border-light);
+  border-top-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  transition: all var(--anim-normal) var(--ease-out-quint);
+}
+
+/* --- Fighter card hover — enhanced --- */
+.fighter-card:hover {
+  border-top-color: var(--accent);
+  box-shadow: 0 0 24px var(--accent-glow), 0 8px 24px rgba(0, 0, 0, 0.4);
+  transform: translateY(-2px);
+  transition: all var(--anim-normal) var(--ease-out-quint);
+}
+
+/* --- Progress bar fill animation --- */
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.15),
+    transparent
+  );
+  animation: progressShimmer 2s var(--ease-out-quint) infinite;
+}
+
+@keyframes progressShimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* --- Table row entrance --- */
+.table-row-enter {
+  animation: rowSlideIn var(--anim-normal) var(--ease-out-quint) forwards;
+}
+
+@keyframes rowSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+tr.table-row-enter:hover td {
+  background: var(--bg-hover);
+  transition: background var(--anim-fast) ease;
+}
+
+/* --- Modal entrance --- */
+.modal-overlay {
+  animation: overlayFadeIn var(--anim-normal) var(--ease-out-quint) forwards;
+}
+
+@keyframes overlayFadeIn {
+  from {
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
+  }
+  to {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+}
+
+.modal {
+  animation: modalScaleIn var(--anim-slow) var(--ease-out-quint) forwards;
+}
+
+@keyframes modalScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* --- Champion gold pulse --- */
+.gold-pulse {
+  animation: goldPulse 3s var(--ease-out-quint) infinite;
+}
+
+@keyframes goldPulse {
+  0%, 100% {
+    box-shadow: 0 0 8px var(--gold-glow);
+  }
+  50% {
+    box-shadow: 0 0 20px var(--gold-glow), 0 0 40px rgba(212, 168, 67, 0.08);
+  }
+}
+
+/* --- Arena dust — subtle floating particles --- */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(1px 1px at 20% 30%, rgba(196, 30, 58, 0.06), transparent),
+    radial-gradient(1px 1px at 80% 70%, rgba(196, 30, 58, 0.04), transparent),
+    radial-gradient(1px 1px at 50% 50%, rgba(212, 168, 67, 0.03), transparent),
+    radial-gradient(1px 1px at 10% 80%, rgba(196, 30, 58, 0.05), transparent),
+    radial-gradient(1px 1px at 90% 20%, rgba(212, 168, 67, 0.03), transparent);
+  animation: dustFloat 20s linear infinite;
+  z-index: 0;
+}
+
+@keyframes dustFloat {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-20px); }
+}
+
+/* --- Octagon watermark on body --- */
+body::before {
+  content: '';
+  position: fixed;
+  top: 50%;
+  left: calc(240px + 50%);
+  transform: translate(-50%, -50%) rotate(45deg);
+  width: 400px;
+  height: 400px;
+  border: 1px solid rgba(196, 30, 58, 0.02);
+  pointer-events: none;
+  z-index: 0;
+  mask-image: radial-gradient(circle, rgba(0,0,0,0.02) 0%, transparent 70%);
+  -webkit-mask-image: radial-gradient(circle, rgba(0,0,0,0.02) 0%, transparent 70%);
+}
+
+/* --- Page header underline sweep on entrance --- */
+.page-header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 60px;
+  height: 3px;
+  background: var(--accent);
+  animation: headerSweep 0.8s var(--ease-out-quint) forwards;
+  opacity: 0;
+}
+
+@keyframes headerSweep {
+  from {
+    width: 0;
+    opacity: 1;
+  }
+  to {
+    width: 60px;
+    opacity: 1;
+  }
+}
+
+/* --- Badge pulse (success/warning states) --- */
+.badge-success.pulse {
+  animation: badgePulse 2s var(--ease-out-quint) infinite;
+}
+
+.badge-danger.pulse {
+  animation: badgePulse 1.5s var(--ease-out-quint) infinite;
+}
+
+@keyframes badgePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* --- Scan line effect — subtle cage wire sweep --- */
+.main-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(196, 30, 58, 0.04),
+    transparent
+  );
+  animation: scanLine 8s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes scanLine {
+  0% { top: 0; }
+  100% { top: 100%; }
+}
+
+.main-content {
+  position: relative;
+}
+
+/* --- Loading state --- */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 1rem;
+  color: var(--text-muted);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes hamburgerPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(196, 30, 58, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(196, 30, 58, 0.1);
+  }
+}
+
+@keyframes emptyPulse {
+  0%, 100% {
+    border-color: var(--border);
+  }
+  50% {
+    border-color: var(--border-light);
+  }
+}
+
+/* --- Timeline dot entrance --- */
+.timeline-item {
+  animation: timelineReveal var(--anim-slow) var(--ease-out-quint) forwards;
+  opacity: 0;
+}
+
+.timeline-item:nth-child(1) { animation-delay: 0ms; }
+.timeline-item:nth-child(2) { animation-delay: 80ms; }
+.timeline-item:nth-child(3) { animation-delay: 160ms; }
+.timeline-item:nth-child(4) { animation-delay: 240ms; }
+.timeline-item:nth-child(5) { animation-delay: 320ms; }
+.timeline-item:nth-child(6) { animation-delay: 400ms; }
+.timeline-item:nth-child(7) { animation-delay: 480ms; }
+.timeline-item:nth-child(8) { animation-delay: 560ms; }
+
+@keyframes timelineReveal {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* --- Hall of Fame gold shimmer --- */
+.hof-card {
+  animation: hofShimmer 4s var(--ease-out-quint) infinite;
+}
+
+@keyframes hofShimmer {
+  0%, 100% {
+    box-shadow: 0 0 8px var(--gold-glow);
+  }
+  50% {
+    box-shadow: 0 0 16px var(--gold-glow), 0 0 32px rgba(212, 168, 67, 0.06);
+  }
+}
+
+/* ========================================
    Reduced Motion
    ======================================== */
 
@@ -1044,6 +1496,32 @@ tr:hover td {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* Remove decorative animations entirely */
+  body::after,
+  body::before,
+  .main-content::before {
+    display: none !important;
+  }
+
+  /* Ensure stagger items are visible */
+  .stagger-in > * {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Ensure timeline items are visible */
+  .timeline-item {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Ensure page header underline is static */
+  .page-header::after {
+    opacity: 1;
+    width: 60px;
   }
 }

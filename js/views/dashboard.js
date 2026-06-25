@@ -106,6 +106,20 @@ export class DashboardView {
         <button class="btn btn-secondary save-load" id="saveLoadBtn">💾 Salvar/Carregar</button>
       </div>
 
+      <!-- Weekly Focus -->
+      <div class="card mb-4">
+        <div class="card-header">
+          <span class="card-title">🎯 Foco da Semana</span>
+        </div>
+        <div class="flex gap-2" style="flex-wrap:wrap">
+          <button class="btn btn-sm ${data.weeklyFocus === 'striking' ? 'btn-primary' : 'btn-secondary'} weekly-focus" data-focus="striking">🥊 Striking</button>
+          <button class="btn btn-sm ${data.weeklyFocus === 'grappling' ? 'btn-primary' : 'btn-secondary'} weekly-focus" data-focus="grappling">🤼 Grappling</button>
+          <button class="btn btn-sm ${data.weeklyFocus === 'cardio' ? 'btn-primary' : 'btn-secondary'} weekly-focus" data-focus="cardio">🏃 Cardio</button>
+          <button class="btn btn-sm ${data.weeklyFocus === 'recovery' ? 'btn-primary' : 'btn-secondary'} weekly-focus" data-focus="recovery">💊 Recuperação</button>
+        </div>
+        <div class="text-xs text-muted mt-2">O foco da semana define qual atributo seus lutadores treinam mais.</div>
+      </div>
+
       <div class="grid grid-cols-3 gap-2 mb-4">
         <div class="card">
           <div class="card-header">
@@ -129,6 +143,31 @@ export class DashboardView {
           <div class="stat-label">Histórico</div>
         </div>
       </div>
+
+      ${data.milestones ? (() => {
+        const pending = data.milestones.filter(m => !m.unlocked).slice(0, 3);
+        if (pending.length === 0) return '';
+        return `
+        <div class="card mb-4">
+          <div class="card-header">
+            <span class="card-title">🎯 Próximos Objetivos</span>
+          </div>
+          ${pending.map(m => `
+            <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
+              <div>
+                <div class="text-sm font-bold">${m.label}</div>
+                <div class="text-xs text-muted">${m.desc}</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <div class="progress-bar" style="width:80px;height:6px">
+                  <div class="progress-fill" style="width:${Math.min(100, (m.current / m.max) * 100)}%"></div>
+                </div>
+                <span class="text-xs text-muted">${m.current}/${m.max}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>`;
+      })() : ''}
 
       <div class="grid grid-cols-4 mb-4">
         <div class="card">
@@ -174,6 +213,27 @@ export class DashboardView {
 
       <div class="grid grid-cols-2 mb-4">
         ${nextEventHtml}
+
+        ${data.orgStandings ? `
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">🏢 Ranking de Organizações</span>
+          </div>
+          ${data.orgStandings.map((o, i) => `
+            <div class="flex items-center justify-between" style="padding:0.4rem 0;border-bottom:1px solid var(--border)">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold" style="color:${i === 0 ? 'var(--gold,#d4a843)' : 'var(--text-muted)'}">#${i + 1}</span>
+                <span class="text-sm ${o.isPlayer ? 'font-bold' : ''}">${o.name}</span>
+                ${o.isPlayer ? '<span class="badge badge-info" style="font-size:0.6rem">VOCÊ</span>' : ''}
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="text-xs">⭐${o.rep}</span>
+                <span class="text-xs text-muted">${o.events} eventos</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        ` : ''}
         ${lastResultHtml}
       </div>
 

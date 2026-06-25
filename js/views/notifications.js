@@ -58,4 +58,48 @@ export class NotificationsView {
     };
     return icons[type] || 'ℹ️';
   }
+
+  static renderSaveLoad(saveInfo, hasSave) {
+    return `
+      <div class="page-header">
+        <h2>Salvar / Carregar</h2>
+        <p>Gerenciar dados do jogo</p>
+      </div>
+
+      <div class="grid grid-cols-3 gap-2 mb-4">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Elenco</span>
+          </div>
+          <div class="stat-value">${saveInfo.rosterSize} lutadores</div>
+          <div class="stat-label">No elenco</div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Mercado</span>
+          </div>
+          <div class="stat-value">${saveInfo.freeAgents} livres</div>
+          <div class="stat-label">Agentes livres</div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Eventos</span>
+          </div>
+          <div class="stat-value">${saveInfo.totalEvents}</div>
+          <div class="stat-label">Total realizados</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Ações</span>
+        </div>
+        <div class="flex gap-2 mt-2">
+          <button class="btn btn-primary save-load-btn" data-action="save">💾 Salvar Jogo</button>
+          <button class="btn btn-secondary save-load-btn" data-action="load" ${!hasSave ? 'disabled' : ''}>📂 Carregar Jogo</button>
+        </div>
+        ${!hasSave ? '<p class="text-muted text-sm mt-2">Nenhum save encontrado. Salve o jogo primeiro.</p>' : ''}
+      </div>
+    `;
+  }
 }

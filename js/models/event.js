@@ -9,6 +9,7 @@ export class Event {
     this.results = data.results || [];
     this.revenue = data.revenue || 0;
     this.expenses = data.expenses || 0;
+    this.bonuses = data.bonuses || [];
     this.createdAt = data.createdAt || new Date().toISOString();
   }
 

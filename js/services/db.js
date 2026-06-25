@@ -1,5 +1,5 @@
 const DB_NAME = 'MMAManagerDB';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 export class DB {
   constructor() {
@@ -12,7 +12,6 @@ export class DB {
 
       request.onupgradeneeded = (e) => {
         const db = e.target.result;
-        const oldVersion = e.oldVersion;
 
         if (!db.objectStoreNames.contains('fighters')) {
           const fighterStore = db.createObjectStore('fighters', { keyPath: 'id' });
@@ -37,26 +36,22 @@ export class DB {
           fightStore.createIndex('eventId', 'eventId');
         }
 
-        // v2: rivalries store
-        if (oldVersion < 2 && !db.objectStoreNames.contains('rivalries')) {
+        if (!db.objectStoreNames.contains('rivalries')) {
           const rivalryStore = db.createObjectStore('rivalries', { keyPath: 'id' });
           rivalryStore.createIndex('fighterAId', 'fighterAId');
           rivalryStore.createIndex('fighterBId', 'fighterBId');
           rivalryStore.createIndex('active', 'active');
         }
 
-        // v3: hallOfFame store
-        if (oldVersion < 3 && !db.objectStoreNames.contains('hallOfFame')) {
+        if (!db.objectStoreNames.contains('hallOfFame')) {
           db.createObjectStore('hallOfFame', { keyPath: 'id' });
         }
 
-        // v4: gameState store
-        if (oldVersion < 4 && !db.objectStoreNames.contains('gameState')) {
+        if (!db.objectStoreNames.contains('gameState')) {
           db.createObjectStore('gameState', { keyPath: 'id' });
         }
 
-        // v4: notifications store
-        if (oldVersion < 4 && !db.objectStoreNames.contains('notifications')) {
+        if (!db.objectStoreNames.contains('notifications')) {
           const notifStore = db.createObjectStore('notifications', { keyPath: 'id' });
           notifStore.createIndex('read', 'read');
         }
@@ -64,83 +59,89 @@ export class DB {
 
       request.onsuccess = (e) => {
         this.db = e.target.result;
+
+        // Handle version change — close old DB when another tab upgrades
+        this.db.onversionchange = (ev) => {
+          this.db.close();
+          location.reload();
+        };
+
         resolve(this.db);
       };
 
       request.onerror = (e) => {
+        console.error('IndexedDB open error:', e.target.error);
         reject(e.target.error);
+      };
+
+      request.onblocked = (e) => {
+        console.warn('IndexedDB upgrade blocked — close other tabs with this app open');
       };
     });
   }
 
   async getAll(storeName) {
-    return new Promise((resolve, reject) => {
-      const tx = this.db.transaction(storeName, 'readonly');
-      const store = tx.objectStore(storeName);
-      const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+    return this._tx(storeName, (tx, store) => store.getAll());
   }
 
   async get(storeName, id) {
-    return new Promise((resolve, reject) => {
-      const tx = this.db.transaction(storeName, 'readonly');
-      const store = tx.objectStore(storeName);
-      const request = store.get(id);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+    return this._tx(storeName, (tx, store) => store.get(id));
   }
 
   async put(storeName, data) {
-    return new Promise((resolve, reject) => {
-      const tx = this.db.transaction(storeName, 'readwrite');
-      const store = tx.objectStore(storeName);
-      const request = store.put(data);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+    return this._txw(storeName, (tx, store) => store.put(data));
   }
 
   async add(storeName, data) {
-    return new Promise((resolve, reject) => {
-      const tx = this.db.transaction(storeName, 'readwrite');
-      const store = tx.objectStore(storeName);
-      const request = store.add(data);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+    return this._txw(storeName, (tx, store) => store.add(data));
   }
 
   async delete(storeName, id) {
-    return new Promise((resolve, reject) => {
-      const tx = this.db.transaction(storeName, 'readwrite');
-      const store = tx.objectStore(storeName);
-      const request = store.delete(id);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+    return this._txw(storeName, (tx, store) => store.delete(id));
   }
 
   async clear(storeName) {
-    return new Promise((resolve, reject) => {
-      const tx = this.db.transaction(storeName, 'readwrite');
-      const store = tx.objectStore(storeName);
-      const request = store.clear();
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
+    return this._txw(storeName, (tx, store) => store.clear());
   }
 
   async getIndex(storeName, indexName, value) {
+    return this._tx(storeName, (tx, store) => store.index(indexName).getAll(value));
+  }
+
+  _tx(storeName, fn) {
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(storeName, 'readonly');
       const store = tx.objectStore(storeName);
-      const index = store.index(indexName);
-      const request = index.getAll(value);
+      const request = fn(tx, store);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(new Error('Transaction aborted'));
+    });
+  }
+
+  _txw(storeName, fn) {
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction(storeName, 'readwrite');
+      const store = tx.objectStore(storeName);
+      const request = fn(tx, store);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(new Error('Transaction aborted'));
+    });
+  }
+
+  static async reset() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.deleteDatabase(DB_NAME);
+      const done = () => {
+        localStorage.clear();
+        resolve();
+      };
+      request.onsuccess = done;
+      request.onblocked = done;
+      request.onerror = (e) => reject(e);
     });
   }
 }

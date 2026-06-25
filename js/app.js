@@ -8,6 +8,7 @@ import { TrainingCampView } from './views/training-camp.js';
 import { RivalriesView } from './views/rivalries.js';
 import { PressConferenceView } from './views/press-conference.js';
 import { HallOfFameView } from './views/hall-of-fame.js';
+import { Event } from './models/event.js';
 import { NotificationsView } from './views/notifications.js';
 import { GameController } from './controllers/game-controller.js';
 import { TrainingCamp } from './controllers/training-camp.js';
@@ -24,6 +25,8 @@ class App {
     this.currentView = 'dashboard';
     this.rosterFilter = '';
     this.marketFilter = '';
+    this.marketSearch = '';
+    this.weeklyFocus = 'striking';
     this.previousView = 'dashboard';
     this.rivalryService = null;
     this.trainingState = { intensity: null, spec: null };
@@ -34,15 +37,27 @@ class App {
 
   async init() {
     LayoutView.initNavigation();
-    await this.game.init();
+    try {
+      await this.game.init();
+    } catch (err) {
+      console.error('Failed to init game:', err);
+      document.getElementById('mainContent').innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:center;min-height:60vh;flex-direction:column;gap:1rem;">
+          <h2 style="color:var(--accent)">Erro ao carregar banco de dados</h2>
+          <p style="color:var(--text-secondary);text-align:center;max-width:500px;">
+            O banco de dados pode estar corrompido ou bloqueado. Feche todas as abas do MMA Manager e tente novamente.
+            Se persistir, clique em "Resetar Dados" no menu lateral.
+          </p>
+          <button class="btn btn-primary" onclick="location.reload()">Tentar Novamente</button>
+        </div>
+      `;
+      return;
+    }
     this.rivalryService = new RivalryService(this.game.db);
 
     window.addEventListener('navigate', (e) => {
       this.navigateTo(e.detail.view);
     });
-
-    // Week advance button
-    document.getElementById('weekAdvanceBtn')?.addEventListener('click', () => this.advanceWeek());
 
     // Save/Load button
     document.getElementById('saveLoadBtn')?.addEventListener('click', () => this.handleSaveLoad());
@@ -53,9 +68,6 @@ class App {
         this.handleRenewContract(e.target.dataset.id);
       }
     });
-
-    // Auto-Matchmaker button
-    document.getElementById('autoMatchmakerBtn')?.addEventListener('click', () => this.handleAutoMatchmaker());
 
     this.navigateTo('dashboard');
   }
@@ -106,8 +118,18 @@ class App {
       freeAgents: freeAgents.length,
       totalEvents: data.pastEvents.length,
     };
+    data.weeklyFocus = this.weeklyFocus;
     const html = DashboardView.render(data, weekLabel, saveInfo);
     LayoutView.render(html);
+
+    document.getElementById('weekAdvanceBtn')?.addEventListener('click', () => this.advanceWeek());
+
+    document.querySelectorAll('.weekly-focus').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.weeklyFocus = btn.dataset.focus;
+        this.renderDashboard();
+      });
+    });
 
     document.querySelectorAll('[data-fighter-click]').forEach(el => {
       el.style.cursor = 'pointer';
@@ -147,7 +169,7 @@ class App {
 
   async renderMarket() {
     const agents = await this.game.fighterCtrl.getFreeAgents();
-    const html = MarketView.render(agents, this.marketFilter);
+    const html = MarketView.render(agents, this.marketFilter, this.marketSearch);
     LayoutView.render(html);
     this._bindMarket(agents);
   }
@@ -167,6 +189,13 @@ class App {
       });
     });
 
+    document.querySelectorAll('.market-search').forEach(input => {
+      input.addEventListener('input', () => {
+        this.marketSearch = input.value;
+        this.renderMarket();
+      });
+    });
+
     document.querySelectorAll('.market-hire').forEach(btn => {
       btn.addEventListener('click', async () => {
         const fighter = await this.game.fighterCtrl.getFighter(btn.dataset.id);
@@ -174,11 +203,29 @@ class App {
 
         const currentAgents = agents;
         const modalHtml = MarketView.renderHireModal(fighter);
-        const baseHtml = MarketView.render(currentAgents, this.marketFilter);
-        LayoutView.render(baseHtml + modalHtml);
+        const baseHtml = MarketView.render(currentAgents, this.marketFilter, this.marketSearch);
+        LayoutView.render(baseHtml + modalHtml, false);
 
         this._bindMarket(currentAgents);
         this._bindHireModal(fighter);
+      });
+    });
+
+    document.querySelectorAll('.market-hire-quick').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const fighter = await this.game.fighterCtrl.getFighter(btn.dataset.id);
+        if (!fighter) return;
+
+        const basePurse = Math.round(fighter.overallRating * 200 + 5000);
+        await this.game.fighterCtrl.hireFighter(btn.dataset.id, 'org-001', {
+          pursePerFight: basePurse,
+          duration: 3,
+          victoryBonus: Math.round(basePurse * 0.5),
+          fightsRemaining: 3,
+        });
+
+        this.notificationService.add('success', 'Contratação', `${fighter.name} contratado com sucesso!`);
+        this.renderMarket();
       });
     });
 
@@ -188,6 +235,7 @@ class App {
         const duration = parseInt(document.getElementById('hireDuration').value) || 3;
         const bonus = parseInt(document.getElementById('hireBonus').value) || 5000;
 
+        const fighter = await this.game.fighterCtrl.getFighter(btn.dataset.id);
         await this.game.fighterCtrl.hireFighter(btn.dataset.id, 'org-001', {
           pursePerFight: purse,
           duration,
@@ -195,7 +243,7 @@ class App {
           fightsRemaining: duration,
         });
 
-        this.marketFilter = '';
+        this.notificationService.add('success', 'Contratação', `${fighter?.name || 'Fighter'} contratado com sucesso!`);
         this.renderMarket();
       });
     });
@@ -204,6 +252,7 @@ class App {
       btn.addEventListener('click', async () => {
         await this.game.refreshFreeAgents();
         this.marketFilter = '';
+        this.marketSearch = '';
         this.renderMarket();
       });
     });
@@ -241,7 +290,7 @@ class App {
       btn.addEventListener('click', async () => {
         const modalHtml = await EventsView.renderCreateModal(roster, this.seasonService);
         const baseHtml = await EventsView.render(allEvents, roster, upcoming, this.seasonService);
-        LayoutView.render(baseHtml + modalHtml);
+        LayoutView.render(baseHtml + modalHtml, false);
         this._bindEventCreate(roster, allEvents, upcoming);
       });
     });
@@ -258,7 +307,7 @@ class App {
       btn.addEventListener('click', async () => {
         const modalHtml = await EventsView.renderCreateModal(roster, this.seasonService);
         const baseHtml = await EventsView.render(allEvents, roster, upcoming, this.seasonService);
-        LayoutView.render(baseHtml + modalHtml);
+        LayoutView.render(baseHtml + modalHtml, false);
         this._bindEventCreate(roster, allEvents, upcoming);
       });
     });
@@ -299,6 +348,105 @@ class App {
     document.querySelectorAll('.remove-fight').forEach(btn => {
       btn.addEventListener('click', () => {
         btn.closest('.fight-slot').remove();
+      });
+    });
+
+    // Auto-match buttons — fill selects based on ranking
+    const globalUsedIds = new Set();
+    const autoFillCard = (cardType, roster) => {
+      // Group by weight class, sort by overall rating
+      const byWeight = {};
+      roster.forEach(f => {
+        if (!byWeight[f.weightClass]) byWeight[f.weightClass] = [];
+        byWeight[f.weightClass].push(f);
+      });
+
+      // Collect all fighters sorted by rating
+      const allSorted = [...roster].sort((a, b) => b.overallRating - a.overallRating);
+
+      // Find existing slots for this card type
+      const containerId = cardType === 'main' ? 'mainCardFights' : 'prelimCardFights';
+      const container = document.getElementById(containerId);
+      if (!container) return;
+
+      const slots = container.querySelectorAll('.fight-slot');
+
+      // For main card: pick top fighters from each weight class
+      // For prelim: pick next tier fighters
+      let fighterPool;
+
+      if (cardType === 'main') {
+        // Main card: best from each weight class
+        const topPerWeight = [];
+        for (const [, fighters] of Object.entries(byWeight)) {
+          const sorted = [...fighters].sort((a, b) => b.overallRating - a.overallRating);
+          if (sorted.length >= 2) {
+            topPerWeight.push(sorted[0], sorted[1]);
+            globalUsedIds.add(sorted[0].id);
+            globalUsedIds.add(sorted[1].id);
+          }
+        }
+        fighterPool = topPerWeight.sort((a, b) => b.overallRating - a.overallRating);
+      } else {
+        // Prelim: remaining fighters not used in main
+        fighterPool = allSorted.filter(f => !globalUsedIds.has(f.id));
+        // Also mark prelim-used fighters
+        fighterPool.forEach(f => globalUsedIds.add(f.id));
+      }
+
+      // Fill existing slots
+      slots.forEach((slot, i) => {
+        const selects = slot.querySelectorAll('.fight-select');
+        if (selects.length < 2) return;
+
+        if (i * 2 + 1 < fighterPool.length) {
+          selects[0].value = fighterPool[i * 2].id;
+          selects[1].value = fighterPool[i * 2 + 1].id;
+        }
+      });
+
+      // Add more slots if we have more fighters
+      let slotCount = slots.length;
+      while (slotCount * 2 < fighterPool.length) {
+        const newSlot = document.createElement('div');
+        newSlot.className = 'flex gap-2 mb-2 fight-slot';
+        const idx = slotCount;
+        const options = roster.sort((a, b) => b.overallRating - a.overallRating).map(f =>
+          `<option value="${f.id}">${f.name} (${f.weightClass}) — OVR ${f.overallRating}</option>`
+        ).join('');
+        newSlot.innerHTML = `
+          <select class="form-select fight-select" data-card="${cardType}">${options}</select>
+          <span class="flex items-center text-muted">vs</span>
+          <select class="form-select fight-select" data-card="${cardType}">${options}</select>
+          <button class="btn btn-sm btn-danger remove-fight">&times;</button>
+        `;
+        container.appendChild(newSlot);
+        newSlot.querySelector('.remove-fight').addEventListener('click', () => newSlot.remove());
+
+        const newSelects = newSlot.querySelectorAll('.fight-select');
+        if (idx * 2 + 1 < fighterPool.length) {
+          newSelects[0].value = fighterPool[idx * 2].id;
+          newSelects[1].value = fighterPool[idx * 2 + 1].id;
+        }
+        slotCount++;
+      }
+    };
+
+    document.querySelectorAll('.auto-fill-main').forEach(btn => {
+      btn.addEventListener('click', () => autoFillCard('main', roster));
+    });
+
+    document.querySelectorAll('.auto-fill-prelim').forEach(btn => {
+      btn.addEventListener('click', () => {
+        autoFillCard('prelim', roster);
+      });
+    });
+
+    document.querySelectorAll('.auto-fill-all').forEach(btn => {
+      btn.addEventListener('click', () => {
+        globalUsedIds.clear();
+        autoFillCard('main', roster);
+        autoFillCard('prelim', roster);
       });
     });
 
@@ -370,15 +518,48 @@ class App {
   }
 
   async advanceWeek() {
-    const week = await this.seasonService.advanceWeek();
-    this.notificationService.add('week-advance', 'Semana Iniciada', `Semana ${week} iniciada!`);
+    const weekState = await this.seasonService.advanceWeek();
+    const weekLabel = `Semana ${weekState.week}, Ano ${weekState.year}`;
+
+    // Process weekly costs (financial pressure)
+    const costs = await this.game.processWeeklyCosts();
+    const totalCost = costs.totalCost;
+
+    // Process retirements (age/loss streak based)
+    const retired = await this.game.processRetirements();
+    for (const f of retired) {
+      this.notificationService.add('info', 'Aposentadoria', `${f.name} se aposentou do MMA.`);
+    }
+
+    // Process draft (at year end)
+    const drafted = await this.game.processDraft();
+    if (drafted.length > 0) {
+      this.notificationService.add('success', 'Nova Safra', `${drafted.length} novos lutadores disponíveis no mercado!`);
+    }
+
+    // Rival organizations hire free agents
+    const hiredByRivals = await this.game.processRivalHires();
+    if (hiredByRivals.length > 0) {
+      this.notificationService.add('info', 'Mercado', `${hiredByRivals.length} lutadores foram contratados por organizações rivais.`);
+    }
+
+    // Generate weekly news
+    const news = await this.game.generateWeeklyNews();
+    for (const item of news) {
+      this.notificationService.add('info', 'Notícia', item.text);
+    }
+
+    // Recovery
+    await this.seasonService.applyWeeklyRecovery(this.game.fighterCtrl);
+
+    this.notificationService.add('week-advance', 'Semana Iniciada', `${weekLabel}. Custos: $${totalCost.toLocaleString()}.`);
     this.renderDashboard();
   }
 
   async handleSaveLoad() {
     const saveInfo = await this.saveService.getSaveInfo();
-    const saveData = await this.saveService.loadSave();
-    const html = NotificationsView.renderSaveLoad(saveInfo, saveData);
+    const hasSave = localStorage.getItem('mmaManagerSave') !== null;
+    const html = NotificationsView.renderSaveLoad(saveInfo, hasSave);
     LayoutView.render(html);
 
     document.querySelectorAll('.save-load-btn').forEach(btn => {
@@ -401,9 +582,10 @@ class App {
     if (!fighter) return;
 
     const newContract = {
+      pursePerFight: fighter.contract?.pursePerFight || 10000,
+      duration: 5,
       fightsRemaining: 5,
-      salary: fighter.contract.salary,
-      startDate: new Date().toISOString(),
+      victoryBonus: fighter.contract?.victoryBonus || 5000,
     };
 
     const updated = await this.game.fighterCtrl.renewContract(fighterId, newContract);
@@ -415,50 +597,76 @@ class App {
 
   async handleAutoMatchmaker() {
     const roster = await this.game.fighterCtrl.getRoster('org-001');
-    const freeAgents = await this.game.fighterCtrl.getFreeAgents();
-    const allFighters = [...roster, ...freeAgents];
 
     const byWeight = {};
-    allFighters.forEach(f => {
+    roster.forEach(f => {
       if (!byWeight[f.weightClass]) byWeight[f.weightClass] = [];
       byWeight[f.weightClass].push(f);
     });
 
-    const events = await this.game.eventCtrl.getAllEvents();
-    const newEvent = {
-      id: 'evt-' + Date.now(),
-      name: 'Auto-Matchmaker ' + new Date().toLocaleDateString('pt-BR'),
-      date: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-      totalFights: 0,
-      revenue: 0,
-      expenses: 0,
-      status: 'scheduled',
-      fights: [],
-    };
+    const mainCard = [];
+    const prelimCard = [];
 
     for (const [weightClass, fighters] of Object.entries(byWeight)) {
-      if (fighters.length >= 2) {
-        const sorted = fighters.sort((a, b) => b.overallRating - a.overallRating);
-        const match = {
-          fighter1: sorted[0].id,
-          fighter2: sorted[1].id,
-          weightClass: weightClass,
+      if (fighters.length < 2) continue;
+
+      // Shuffle fighters randomly (Fisher-Yates)
+      const pool = [...fighters];
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+
+      // Create fights from shuffled pool
+      const used = new Set();
+      for (let i = 0; i < pool.length; i += 2) {
+        if (i + 1 >= pool.length) break;
+        const a = pool[i];
+        const b = pool[i + 1];
+        if (used.has(a.id) || used.has(b.id)) continue;
+
+        used.add(a.id);
+        used.add(b.id);
+
+        const fight = {
+          fighterAId: a.id,
+          fighterBId: b.id,
+          weightClass,
           winner: null,
         };
-        newEvent.fights.push(match);
-        newEvent.totalFights++;
-        newEvent.expenses += sorted[0].contract.salary + sorted[1].contract.salary;
+
+        // First fight per weight class goes to main card, rest to prelim
+        if (mainCard.length < Object.keys(byWeight).length) {
+          mainCard.push(fight);
+        } else {
+          prelimCard.push(fight);
+        }
       }
     }
 
-    if (newEvent.totalFights > 0) {
-      newEvent.revenue = newEvent.expenses * 1.5;
-      await this.game.eventCtrl.createEvent(newEvent);
-      this.notificationService.add('success', 'Auto-Matchmaker', `Evento criado com ${newEvent.totalFights} lutas!`);
-      this.renderEvents();
-    } else {
-      this.notificationService.add('warning', 'Auto-Matchmaker', 'Não há lutadores suficientes para criar lutas.');
+    // Ensure main card has at least the last fight if any exist
+    if (prelimCard.length > 0 && mainCard.length === 0) {
+      mainCard.push(prelimCard.pop());
     }
+
+    const totalFights = mainCard.length + prelimCard.length;
+    if (totalFights === 0) {
+      this.notificationService.add('warning', 'Auto-Matchmaker', 'Nao ha lutadores suficientes para criar lutas.');
+      return;
+    }
+
+    const newEvent = new Event({
+      id: 'evt-' + Date.now(),
+      name: 'Auto-Matchmaker ' + new Date().toLocaleDateString('pt-BR'),
+      date: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      mainCard,
+      prelimCard,
+      status: 'scheduled',
+    });
+
+    await this.game.eventCtrl.createEvent(newEvent);
+    this.notificationService.add('success', 'Auto-Matchmaker', `Evento criado com ${totalFights} lutas!`);
+    this.renderEvents();
   }
 
   async simulateEvent(eventId) {
@@ -488,12 +696,50 @@ class App {
       }
     }
 
+    // Show milestone unlocks
+    if (result.newUnlocks && result.newUnlocks.length > 0) {
+      const unlockLabels = {
+        firstEvent: '🎉 Primeiro Evento!',
+        fiveEvents: '🔥 5 Eventos Realizados!',
+        tenEvents: '💪 10 Eventos Realizados!',
+        firstProfit: '💰 Primeiro Lucro!',
+        threeProfit: '📈 3 Lucros Consecutivos!',
+        superEvent: '⭐ Super Evento! Receita > $200k!',
+        firstChampion: '🏆 Primeiro Campeão!',
+        threeChamps: '👑 Campeão em 3 Divisões!',
+      };
+      const unlockHtml = result.newUnlocks.map(id => `
+        <div class="card" style="border-top-color:var(--gold,#d4a843);margin-bottom:0.5rem;animation:slideIn 0.3s ease">
+          <div class="flex items-center gap-2">
+            <span style="font-size:1.5rem">🏆</span>
+            <div>
+              <div class="font-bold">Conquista Desbloqueada!</div>
+              <div class="text-sm">${unlockLabels[id] || id}</div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+      document.getElementById('mainContent').insertAdjacentHTML('afterbegin', unlockHtml);
+    }
+
     const html = EventsView.renderSimulation(result.event, result.results);
     LayoutView.render(html);
 
     document.querySelectorAll('.event-back').forEach(btn => {
       btn.addEventListener('click', () => {
         this.renderEvents();
+      });
+    });
+
+    // Expand fight details
+    document.querySelectorAll('.fight-result-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const targetId = card.dataset.expand;
+        const details = document.getElementById(targetId);
+        if (details) {
+          const isVisible = details.style.display !== 'none';
+          details.style.display = isVisible ? 'none' : 'block';
+        }
       });
     });
   }
@@ -525,13 +771,22 @@ class App {
     if (!select) return;
 
     select.addEventListener('change', () => {
-      document.getElementById('trainingOptions').style.display = 'block';
+      const options = document.getElementById('trainingOptions');
+      if (select.value) {
+        options.style.display = 'block';
+      } else {
+        options.style.display = 'none';
+      }
     });
 
     document.querySelectorAll('.training-intensity').forEach(btn => {
       btn.addEventListener('click', () => {
         this.trainingState.intensity = btn.dataset.intensity;
-        document.querySelectorAll('.training-intensity').forEach(b => b.classList.remove('btn-primary'));
+        document.querySelectorAll('.training-intensity').forEach(b => {
+          b.classList.remove('btn-primary');
+          b.classList.add('btn-secondary');
+        });
+        btn.classList.remove('btn-secondary');
         btn.classList.add('btn-primary');
         this._checkTrainingReady();
       });
@@ -540,7 +795,11 @@ class App {
     document.querySelectorAll('.training-spec').forEach(btn => {
       btn.addEventListener('click', () => {
         this.trainingState.spec = btn.dataset.spec;
-        document.querySelectorAll('.training-spec').forEach(b => b.classList.remove('btn-primary'));
+        document.querySelectorAll('.training-spec').forEach(b => {
+          b.classList.remove('btn-primary');
+          b.classList.add('btn-secondary');
+        });
+        btn.classList.remove('btn-secondary');
         btn.classList.add('btn-primary');
         this._checkTrainingReady();
       });
@@ -556,13 +815,21 @@ class App {
       const result = TrainingCamp.runCamp(fighter, this.trainingState.intensity, this.trainingState.spec);
       await this.game.fighterCtrl.saveFighter(fighter);
 
-      const resultContainer = document.getElementById('trainingResult');
-      resultContainer.innerHTML = TrainingCampView.renderResult(result, fighter);
+      // Show result
+      const resultContent = document.getElementById('trainingResultContent');
+      resultContent.innerHTML = TrainingCampView.renderResult(result, fighter);
+      document.getElementById('trainingResult').style.display = 'block';
 
       // Reset selections
       this.trainingState = { intensity: null, spec: null };
-      document.querySelectorAll('.training-intensity').forEach(b => b.classList.remove('btn-primary'));
-      document.querySelectorAll('.training-spec').forEach(b => b.classList.remove('btn-primary'));
+      document.querySelectorAll('.training-intensity').forEach(b => {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-secondary');
+      });
+      document.querySelectorAll('.training-spec').forEach(b => {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-secondary');
+      });
       document.getElementById('startTrainingBtn').disabled = true;
     });
   }

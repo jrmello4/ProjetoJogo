@@ -4,6 +4,19 @@ export class EventsView {
   static async render(events, roster, upcomingEvents, seasonService) {
     const weekLabel = seasonService ? await seasonService.getWeekLabel() : 'Semana 1';
     const isWeekBlocked = seasonService ? await seasonService.isWeekBlocked() : false;
+
+    // 3D Face-off for first upcoming event
+    let faceoffHtml = '';
+    if (upcomingEvents.length > 0) {
+      const firstEvent = upcomingEvents[0];
+      const firstFight = firstEvent.fights?.[0];
+      faceoffHtml = `
+        <div class="faceoff-container" id="faceoffArena">
+          <div class="faceoff-vs">VS</div>
+        </div>
+      `;
+    }
+
     let upcomingHtml = '';
     if (upcomingEvents.length > 0) {
       upcomingHtml = `
@@ -81,6 +94,7 @@ export class EventsView {
         <button class="btn btn-primary event-create">+ Criar Novo Evento</button>
       </div>
 
+      ${faceoffHtml}
       ${upcomingHtml}
       ${pastHtml}
     `;

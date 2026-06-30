@@ -18,6 +18,10 @@ import { HallOfFame } from './services/hall-of-fame.js';
 import { SeasonService } from './services/season-service.js';
 import { NotificationService } from './services/notification-service.js';
 import { SaveService } from './services/save-service.js';
+import { ThreeArena } from './three-arena.js';
+import { ThreeFaceOff } from './three-faceoff.js';
+import { ThreeBackground } from './three-background.js';
+import { motion } from './motion/motion-engine.js';
 
 class App {
   constructor() {
@@ -33,9 +37,13 @@ class App {
     this.seasonService = new SeasonService(this.game.db);
     this.notificationService = new NotificationService(this.game.db);
     this.saveService = new SaveService(this.game.db);
+    this.threeArena = null;
+    this.threeFaceOff = null;
+    this.threeBackground = null;
   }
 
   async init() {
+    motion.init();
     LayoutView.initNavigation();
     try {
       await this.game.init();
@@ -55,12 +63,12 @@ class App {
     }
     this.rivalryService = new RivalryService(this.game.db);
 
+    // Initialize ambient 3D background
+    this.threeBackground = new ThreeBackground('mainContent');
+
     window.addEventListener('navigate', (e) => {
       this.navigateTo(e.detail.view);
     });
-
-    // Save/Load button
-    document.getElementById('saveLoadBtn')?.addEventListener('click', () => this.handleSaveLoad());
 
     // Roster renew button
     document.addEventListener('click', (e) => {
@@ -122,6 +130,9 @@ class App {
     const html = DashboardView.render(data, weekLabel, saveInfo);
     LayoutView.render(html);
 
+    // Initialize 3D Octagon Arena
+    this.initThreeArena();
+
     document.getElementById('weekAdvanceBtn')?.addEventListener('click', () => this.advanceWeek());
 
     document.querySelectorAll('.weekly-focus').forEach(btn => {
@@ -136,6 +147,30 @@ class App {
       el.addEventListener('click', () => {
         this.showFighterProfile(el.dataset.fighterClick);
       });
+    });
+
+    // Save/Load button (rendered dynamically in dashboard)
+    document.getElementById('saveLoadBtn')?.addEventListener('click', () => this.handleSaveLoad());
+  }
+
+  initThreeArena() {
+    const container = document.getElementById('octagonArena');
+    if (!container) return;
+
+    // Cleanup previous instance
+    if (this.threeArena) {
+      this.threeArena.dispose();
+      this.threeArena = null;
+    }
+
+    // Remove old canvas elements
+    const oldCanvases = container.querySelectorAll('canvas');
+    oldCanvases.forEach(c => c.remove());
+
+    // Small delay to ensure DOM is ready
+    requestAnimationFrame(() => {
+      this.threeArena = new ThreeArena('octagonArena');
+      motion.refresh();
     });
   }
 
@@ -286,6 +321,9 @@ class App {
     const html = await EventsView.render(allEvents, roster, upcoming, this.seasonService);
     LayoutView.render(html);
 
+    // Initialize 3D Face-off
+    this.initThreeFaceOff(upcoming);
+
     document.querySelectorAll('.event-create').forEach(btn => {
       btn.addEventListener('click', async () => {
         const modalHtml = await EventsView.renderCreateModal(roster, this.seasonService);
@@ -299,6 +337,23 @@ class App {
       btn.addEventListener('click', async () => {
         await this.simulateEvent(btn.dataset.id);
       });
+    });
+  }
+
+  initThreeFaceOff(upcomingEvents) {
+    const container = document.getElementById('faceoffArena');
+    if (!container || !upcomingEvents.length) return;
+
+    if (this.threeFaceOff) {
+      this.threeFaceOff.dispose();
+      this.threeFaceOff = null;
+    }
+
+    const oldCanvases = container.querySelectorAll('canvas');
+    oldCanvases.forEach(c => c.remove());
+
+    requestAnimationFrame(() => {
+      this.threeFaceOff = new ThreeFaceOff('faceoffArena');
     });
   }
 

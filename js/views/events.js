@@ -1,247 +1,184 @@
-import { formatCurrency, formatDate, formatDateShort, getWeightClassShort } from '../utils/helpers.js';
+import { formatCurrency, formatDate, formatDateShort } from '../utils/helpers.js';
+import { TIER_LABELS, CORNER_INSTRUCTIONS, MILESTONE_LABELS } from '../config/game-config.js';
 
+// Visão do mundo: calendário das promoções de IA e resultados dos eventos.
+// O jogador não cria eventos — ele coloca atletas nos cards via Ofertas.
 export class EventsView {
-  static async render(events, roster, upcomingEvents, seasonService) {
-    const weekLabel = seasonService ? await seasonService.getWeekLabel() : 'Semana 1';
-    const isWeekBlocked = seasonService ? await seasonService.isWeekBlocked() : false;
+  static render(promotions, pastEvents, bookings, now) {
+    const tierBadge = (tier) => {
+      const cls = tier === 1 ? 'badge-danger' : tier === 2 ? 'badge-warning' : 'badge-info';
+      return `<span class="badge ${cls}">${TIER_LABELS[tier]}</span>`;
+    };
 
-    // 3D Face-off for first upcoming event
-    let faceoffHtml = '';
-    if (upcomingEvents.length > 0) {
-      const firstEvent = upcomingEvents[0];
-      const firstFight = firstEvent.fights?.[0];
-      faceoffHtml = `
-        <div class="faceoff-container" id="faceoffArena">
-          <div class="faceoff-vs">VS</div>
+    const upcomingHtml = `
+      <div class="section-label" data-reveal>Calendário</div>
+      <div class="card mb-4" data-reveal>
+        <div class="card-header">
+          <span class="card-title">Próximos Eventos</span>
         </div>
-      `;
-    }
-
-    let upcomingHtml = '';
-    if (upcomingEvents.length > 0) {
-      upcomingHtml = `
-        <div class="card mb-4">
-          <div class="card-header">
-            <span class="card-title">Eventos Agendados</span>
-          </div>
-          ${upcomingEvents.map(e => `
-            <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
-              <div>
-                <span class="font-bold">${e.name}</span>
-                <span class="text-xs text-muted ml-2">${formatDate(e.date)} · ${e.totalFights} lutas</span>
+        <div data-reveal-stagger>
+          ${promotions.map(p => {
+            const weeksOut = p.nextEventAbsWeek - now;
+            const eventBookings = bookings.filter(b => b.promotionId === p.id && b.eventAbsWeek === p.nextEventAbsWeek);
+            return `
+              <div style="padding:0.75rem 0;border-bottom:1px solid var(--border)">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    ${tierBadge(p.tier)}
+                    <span class="font-bold">${p.nextEventName()}</span>
+                    <span class="text-xs text-muted">${p.name}</span>
+                  </div>
+                  <span class="badge ${weeksOut <= 0 ? 'badge-danger' : 'badge-warning'}">${weeksOut <= 0 ? 'esta semana' : `em ${weeksOut} sem`}</span>
+                </div>
+                ${eventBookings.map(b => `
+                  <div class="text-xs mt-1" style="color:var(--gold,#d4a843)">🥊 Seu atleta no card: vs ${b.opponentName} — bolsa ${formatCurrency(b.purse)}</div>
+                `).join('')}
               </div>
-              <div class="flex gap-2">
-                <button class="btn btn-sm btn-primary event-simulate" data-id="${e.id}">Simular Evento</button>
-              </div>
-            </div>
-          `).join('')}
+            `;
+          }).join('')}
         </div>
-      `;
-    }
+        <div class="text-xs text-muted mt-2">Eventos acontecem automaticamente ao avançar a semana. Feche lutas na aba Ofertas para colocar seus atletas nos cards.</div>
+      </div>
+    `;
 
-    let pastHtml = '';
-    if (events.length > 0) {
-      pastHtml = `
-        <div class="table-container mt-4">
-          <table>
-            <thead>
-              <tr>
-                <th>Evento</th>
-                <th>Data</th>
-                <th>Lutas</th>
-                <th>Receita</th>
-                <th>Despesa</th>
-                <th>Lucro</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${events.map(e => {
-                const profit = e.revenue - e.expenses;
-                return `
-                  <tr>
-                    <td class="font-bold">${e.name}</td>
-                    <td>${formatDateShort(e.date)}</td>
-                    <td>${e.totalFights}</td>
-                    <td>${formatCurrency(e.revenue)}</td>
-                    <td>${formatCurrency(e.expenses)}</td>
-                    <td class="${profit >= 0 ? 'text-success' : 'text-danger'} font-bold">
-                      ${profit >= 0 ? '+' : ''}${formatCurrency(profit)}
-                    </td>
-                    <td><span class="badge ${e.status === 'completed' ? 'badge-success' : 'badge-warning'}">${e.status === 'completed' ? 'Concluído' : 'Agendado'}</span></td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      `;
-    }
+    const pastHtml = pastEvents.length === 0 ? `
+      <div class="empty-state"><p>Nenhum evento realizado ainda. Avance a semana para o mundo girar.</p></div>
+    ` : `
+      <div class="section-label" data-reveal>Resultados</div>
+      <div class="table-container" data-reveal>
+        <table>
+          <thead>
+            <tr>
+              <th>Evento</th>
+              <th>Promoção</th>
+              <th>Data</th>
+              <th>Lutas</th>
+              <th>Luta Principal</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pastEvents.map(e => {
+              const main = e.results?.[0];
+              return `
+                <tr>
+                  <td class="font-bold">${e.name}</td>
+                  <td class="text-xs">${e.promotionName || '—'}</td>
+                  <td>${formatDateShort(e.date)}</td>
+                  <td>${e.totalFights}</td>
+                  <td class="text-xs">${main ? `${main.winnerName} venceu por ${main.method}` : '—'}</td>
+                  <td><button class="btn btn-sm btn-secondary event-details" data-id="${e.id}">Ver card</button></td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
 
     return `
       <div class="page-header">
-        <h2>Eventos</h2>
-        <p>${weekLabel} ${isWeekBlocked ? '<span class="badge badge-warning">Bloqueado</span>' : ''}</p>
+        <h2>O Mundo do MMA</h2>
+        <p>As promoções realizam eventos toda semana — acompanhe onde seus atletas podem brilhar</p>
       </div>
 
-      ${isWeekBlocked ? `
-        <div class="alert alert-warning mb-4">
-          <strong>⚠️ Semana Bloqueada</strong> - Não é possível criar ou simular eventos nesta semana. Avance a semana para continuar.
-        </div>
-      ` : ''}
-
-      <div class="flex gap-2 mb-4">
-        <button class="btn btn-primary event-create">+ Criar Novo Evento</button>
-      </div>
-
-      ${faceoffHtml}
       ${upcomingHtml}
       ${pastHtml}
     `;
   }
 
-  static async renderCreateModal(roster, seasonService) {
-    const weekLabel = seasonService ? await seasonService.getWeekLabel() : 'Semana 1';
-    const isWeekBlocked = seasonService ? await seasonService.isWeekBlocked() : false;
+  static renderLiveSimulation(event, results, playerFighterIds = new Set()) {
+    const isFinish = (m) => m && !m.startsWith('Decision');
 
-    if (isWeekBlocked) {
+    const fightsHtml = results.map((r, i) => {
+      const aWon = r.winnerId === r.fighterAId;
+      const bWon = r.winnerId === r.fighterBId;
+      const finish = isFinish(r.method);
+      const aIsPlayer = playerFighterIds.has(r.fighterAId);
+      const bIsPlayer = playerFighterIds.has(r.fighterBId);
+
+      const lead = (a, b) => a > b ? ['tot-lead', ''] : b > a ? ['', 'tot-lead'] : ['', ''];
+      const [strA, strB] = lead(r.stats.sigStrikesA, r.stats.sigStrikesB);
+      const [tdA, tdB] = lead(r.stats.takedownsA, r.stats.takedownsB);
+      const [kdA, kdB] = lead(r.stats.knockdownsA, r.stats.knockdownsB);
+      const [subA, subB] = lead(r.stats.subAttemptsA, r.stats.subAttemptsB);
+
       return `
-        <div class="alert alert-warning">
-          <strong>⚠️ Semana Bloqueada</strong> - Não é possível criar eventos nesta semana.
+        <div class="card mb-2 live-fight ${aIsPlayer || bIsPlayer ? 'live-fight--player' : ''}" data-live-index="${i}" ${aIsPlayer || bIsPlayer ? 'style="border-left:3px solid var(--gold,#d4a843)"' : ''}>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="badge ${r.card === 'main' ? 'badge-info' : 'badge-warning'}">${r.card === 'main' ? 'Card Principal' : 'Preliminar'}</span>
+              ${aIsPlayer || bIsPlayer ? '<span class="badge badge-success" style="font-size:0.6rem">SUA ACADEMIA</span>' : ''}
+            </div>
+            <span class="text-xs text-muted">Luta ${i + 1} de ${results.length}</span>
+          </div>
+
+          <div class="live-vs-card">
+            <div class="live-corner live-corner--red ${aWon ? 'live-corner--winner' : ''}">
+              <div class="live-corner-name">${aWon ? '🏆 ' : ''}${r.fighterAName}</div>
+              <div class="live-corner-record">${aIsPlayer ? 'Sua academia' : 'Córner vermelho'}</div>
+            </div>
+            <span class="live-vs">VS</span>
+            <div class="live-corner live-corner--blue ${bWon ? 'live-corner--winner' : ''}">
+              <div class="live-corner-name">${bWon ? '🏆 ' : ''}${r.fighterBName}</div>
+              <div class="live-corner-record">${bIsPlayer ? 'Sua academia' : 'Córner azul'}</div>
+            </div>
+          </div>
+
+          <div class="live-method ${finish ? 'live-method--finish' : ''}">
+            <strong>${r.winnerName}</strong> vence por <strong>${r.method}</strong> no round ${r.round}
+          </div>
+
+          <table class="tale-of-tape">
+            <tr><td class="${strA}">${r.stats.sigStrikesA}</td><td>Golpes significativos</td><td class="${strB}">${r.stats.sigStrikesB}</td></tr>
+            <tr><td class="${tdA}">${r.stats.takedownsA}</td><td>Quedas</td><td class="${tdB}">${r.stats.takedownsB}</td></tr>
+            <tr><td class="${kdA}">${r.stats.knockdownsA}</td><td>Knockdowns</td><td class="${kdB}">${r.stats.knockdownsB}</td></tr>
+            <tr><td class="${subA}">${r.stats.subAttemptsA}</td><td>Tentativas de finalização</td><td class="${subB}">${r.stats.subAttemptsB}</td></tr>
+          </table>
         </div>
       `;
-    }
-
-    const byWeight = {};
-    roster.forEach(f => {
-      if (!byWeight[f.weightClass]) byWeight[f.weightClass] = [];
-      byWeight[f.weightClass].push(f);
-    });
-
-    let fighterSelectHtml = '';
-    for (const [wc, fighters] of Object.entries(byWeight)) {
-      fighterSelectHtml += `
-        <optgroup label="${wc}">
-          ${fighters.sort((a, b) => b.overallRating - a.overallRating).map(f => `
-            <option value="${f.id}">${f.name} (${f.record.wins}-${f.record.losses}-${f.record.draws}) — OVR ${f.overallRating}</option>
-          `).join('')}
-        </optgroup>
-      `;
-    }
+    }).join('');
 
     return `
-      <div class="modal-overlay" id="createEventModal">
-        <div class="modal" style="max-width:700px">
-          <div class="modal-header">
-            <h3>Criar Novo Evento</h3>
-            <button class="modal-close" data-close="createEventModal">&times;</button>
-          </div>
+      <div class="page-header">
+        <h2>${event.name}</h2>
+        <p>${formatDate(event.date)} — transmissão do evento</p>
+      </div>
 
-          <div class="form-group">
-            <label class="form-label">Nome do Evento</label>
-            <input type="text" class="form-input" id="eventName" placeholder="Ex: Fight Night 1" value="Fight Night ${Date.now().toString().slice(-4)}">
-          </div>
+      <div class="live-banner">
+        <span class="live-dot"></span>
+        <span class="live-label">Ao Vivo</span>
+        <span class="live-status" id="liveStatus">Abrindo o octógono...</span>
+        <button class="btn btn-sm btn-secondary skip-live" id="skipLiveBtn">Pular para o resultado</button>
+      </div>
 
-          <div class="form-group">
-            <label class="form-label">Data</label>
-            <input type="date" class="form-input" id="eventDate" value="${new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]}">
-          </div>
+      <div id="liveFights">${fightsHtml}</div>
 
-          <div class="mb-4">
-            <h4 class="mb-2" style="font-size:0.9rem">Card Principal</h4>
-            <div id="mainCardFights">
-              <div class="flex gap-2 mb-2 fight-slot" data-slot="main-0">
-                <select class="form-select fight-select" data-card="main">${fighterSelectHtml}</select>
-                <span class="flex items-center text-muted">vs</span>
-                <select class="form-select fight-select" data-card="main">${fighterSelectHtml}</select>
-                <button class="btn btn-sm btn-danger remove-fight">&times;</button>
-              </div>
-            </div>
-            <div class="flex gap-2 mb-2">
-              <button class="btn btn-sm btn-secondary add-fight" data-card="main">+ Adicionar Luta</button>
-              <button class="btn btn-sm btn-primary auto-fill-main">🎯 Auto-Match Card Principal</button>
-            </div>
-          </div>
-
-          <div class="mb-4">
-            <h4 class="mb-2" style="font-size:0.9rem">Card Preliminar</h4>
-            <div id="prelimCardFights">
-              <div class="flex gap-2 mb-2 fight-slot" data-slot="prelim-0">
-                <select class="form-select fight-select" data-card="prelim">${fighterSelectHtml}</select>
-                <span class="flex items-center text-muted">vs</span>
-                <select class="form-select fight-select" data-card="prelim">${fighterSelectHtml}</select>
-                <button class="btn btn-sm btn-danger remove-fight">&times;</button>
-              </div>
-            </div>
-            <div class="flex gap-2 mb-2">
-              <button class="btn btn-sm btn-secondary add-fight" data-card="prelim">+ Adicionar Luta</button>
-              <button class="btn btn-sm btn-primary auto-fill-prelim">🎯 Auto-Match Card Preliminar</button>
-            </div>
-          </div>
-
-          <div class="mb-4">
-            <button class="btn btn-primary auto-fill-all" style="width:100%">⚡ Auto-Match Completo (Preenche Tudo)</button>
-          </div>
-
-          <div class="modal-actions">
-            <button class="btn btn-secondary" data-close="createEventModal">Cancelar</button>
-            <button class="btn btn-primary event-confirm-create">Criar Evento</button>
-          </div>
+      <div class="live-fight" id="liveSummary">
+        <div class="flex gap-2">
+          <button class="btn btn-primary event-back">Voltar ao Dashboard</button>
+          <button class="btn btn-secondary" onclick="window.dispatchEvent(new CustomEvent('navigate',{detail:{view:'rankings'}}))">Ver Rankings</button>
         </div>
       </div>
     `;
   }
 
-  static renderSimulation(event, results) {
-    const bonuses = event.bonuses || [];
-
-    const bonusesHtml = bonuses.length > 0 ? `
-      <div class="mb-4">
-        ${bonuses.map(b => `
-          <div class="card" style="border-top-color:var(--gold,#d4a843);margin-bottom:0.5rem">
-            <div class="flex items-center gap-2">
-              <span style="font-size:1.5rem">🏆</span>
-              <div>
-                <div class="font-bold" style="color:var(--gold,#d4a843)">${b.type}</div>
-                <div class="text-sm">${b.winner} — bônus de ${formatCurrency(b.amount)}</div>
-              </div>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    ` : '';
-
+  static renderSimulation(event, results, playerFighterIds = new Set()) {
     return `
       <div class="page-header">
         <h2>${event.name}</h2>
-        <p>Resultados — ${formatDate(event.date)}</p>
+        <p>${event.promotionName || ''} — Resultados de ${formatDate(event.date)}</p>
       </div>
-
-      <div class="grid grid-cols-3 mb-4">
-        <div class="card">
-          <div class="card-title">Receita</div>
-          <div class="stat-value text-success">${formatCurrency(event.revenue)}</div>
-        </div>
-        <div class="card">
-          <div class="card-title">Despesa</div>
-          <div class="stat-value text-danger">${formatCurrency(event.expenses)}</div>
-        </div>
-        <div class="card">
-          <div class="card-title">Lucro</div>
-          <div class="stat-value ${event.revenue - event.expenses >= 0 ? 'text-success' : 'text-danger'}">
-            ${event.revenue - event.expenses >= 0 ? '+' : ''}${formatCurrency(event.revenue - event.expenses)}
-          </div>
-        </div>
-      </div>
-
-      ${bonusesHtml}
 
       <div class="mb-4">
-        ${results.map((r, i) => `
-          <div class="card mb-2 fight-result-card" style="cursor:pointer" data-expand="fight-${i}">
+        ${results.map((r, i) => {
+          const isPlayer = playerFighterIds.has(r.fighterAId) || playerFighterIds.has(r.fighterBId);
+          return `
+          <div class="card mb-2 fight-result-card" style="cursor:pointer${isPlayer ? ';border-left:3px solid var(--gold,#d4a843)' : ''}" data-expand="fight-${i}">
             <div class="flex items-center justify-between mb-2">
               <div>
                 <span class="badge ${r.card === 'main' ? 'badge-info' : 'badge-warning'}">${r.card === 'main' ? 'Main Card' : 'Prelim'}</span>
+                ${isPlayer ? '<span class="badge badge-success" style="font-size:0.6rem;margin-left:0.25rem">SUA ACADEMIA</span>' : ''}
                 <span class="text-xs text-muted ml-2">${r.method} · R${r.round}</span>
               </div>
               <span class="text-xs text-muted">Clique para detalhes ▼</span>
@@ -252,15 +189,13 @@ export class EventsView {
                 ${r.winnerId === r.fighterAId ? '<span class="badge badge-success" style="font-size:0.65rem">VENCEDOR</span>' : ''}
               </div>
               <span class="text-muted" style="font-size:0.8rem">vs</span>
-              <div class="flex items-center gap-2" style="flex:1;text-align:right">
+              <div class="flex items-center gap-2" style="flex:1;justify-content:flex-end">
                 ${r.winnerId === r.fighterBId ? '<span class="badge badge-success" style="font-size:0.65rem">VENCEDOR</span>' : ''}
                 <span class="font-bold ${r.winnerId === r.fighterBId ? 'text-success' : ''}">${r.fighterBName}</span>
               </div>
             </div>
 
-            <!-- Expandable details -->
             <div id="fight-${i}" style="display:none;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
-              <!-- Round scores -->
               ${r.rounds ? `
               <div class="mb-3">
                 <div class="text-xs font-bold mb-1" style="text-transform:uppercase;letter-spacing:0.05em">Scorecards por Round</div>
@@ -294,21 +229,20 @@ export class EventsView {
               </div>
               ` : ''}
 
-              <!-- Fight stats -->
               ${r.stats ? `
               <div>
                 <div class="text-xs font-bold mb-1" style="text-transform:uppercase;letter-spacing:0.05em">Estatísticas da Luta</div>
                 <div class="grid grid-cols-2 gap-2" style="font-size:0.8rem">
                   <div class="card" style="padding:0.5rem">
                     <div class="font-bold">${r.fighterAName}</div>
-                    <div class="text-muted">Socos: ${r.stats.sigStrikesA}</div>
+                    <div class="text-muted">Golpes: ${r.stats.sigStrikesA}</div>
                     <div class="text-muted">Quedas: ${r.stats.takedownsA}</div>
                     <div class="text-muted">KDs: ${r.stats.knockdownsA}</div>
                     <div class="text-muted">Subs: ${r.stats.subAttemptsA}</div>
                   </div>
                   <div class="card" style="padding:0.5rem">
                     <div class="font-bold">${r.fighterBName}</div>
-                    <div class="text-muted">Socos: ${r.stats.sigStrikesB}</div>
+                    <div class="text-muted">Golpes: ${r.stats.sigStrikesB}</div>
                     <div class="text-muted">Quedas: ${r.stats.takedownsB}</div>
                     <div class="text-muted">KDs: ${r.stats.knockdownsB}</div>
                     <div class="text-muted">Subs: ${r.stats.subAttemptsB}</div>
@@ -318,12 +252,137 @@ export class EventsView {
               ` : ''}
             </div>
           </div>
-        `).join('')}
+        `;
+        }).join('')}
       </div>
 
       <div class="flex gap-2 mt-4">
-        <button class="btn btn-primary event-back">Voltar aos Eventos</button>
+        <button class="btn btn-primary event-back">Voltar ao Mundo</button>
       </div>
+    `;
+  }
+
+  // ===== Instruções de córner ao vivo (Fase 3) =====
+
+  static renderCornerFightIntro(fighter, opponent, promoName) {
+    return `
+      <div class="page-header">
+        <h2>${promoName}</h2>
+        <p>Sua luta está prestes a começar — acompanhe ao vivo e comande o córner</p>
+      </div>
+
+      <div class="live-banner">
+        <span class="live-dot"></span>
+        <span class="live-label">Ao Vivo</span>
+        <span class="live-status">Round 1 prestes a começar...</span>
+      </div>
+
+      <div class="card live-fight live-fight--shown">
+        <div class="live-vs-card">
+          <div class="live-corner live-corner--red">
+            <div class="live-corner-name">${fighter.name}</div>
+            <div class="live-corner-record">Sua Academia · ${fighter.record.wins}-${fighter.record.losses}-${fighter.record.draws}</div>
+          </div>
+          <span class="live-vs">VS</span>
+          <div class="live-corner live-corner--blue">
+            <div class="live-corner-name">${opponent.name}</div>
+            <div class="live-corner-record">${opponent.record.wins}-${opponent.record.losses}-${opponent.record.draws}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  static renderCornerRound({ fighterName, opponentName, round, roundResult, totalScoreA, totalScoreB }) {
+    const leading = totalScoreA === totalScoreB
+      ? 'Round parelho nos cartões'
+      : totalScoreA > totalScoreB
+        ? `${fighterName} está na frente nos cartões`
+        : `${opponentName} está na frente nos cartões`;
+
+    return `
+      <div class="page-header">
+        <h2>Fim do Round ${round}</h2>
+        <p>${leading}</p>
+      </div>
+
+      <table class="tale-of-tape mb-4">
+        <tr><td>${roundResult.sigStrikesA}</td><td>Golpes significativos</td><td>${roundResult.sigStrikesB}</td></tr>
+        <tr><td>${roundResult.takedownsA}</td><td>Quedas</td><td>${roundResult.takedownsB}</td></tr>
+        <tr><td>${roundResult.knockdownsA}</td><td>Knockdowns</td><td>${roundResult.knockdownsB}</td></tr>
+        <tr><td>${roundResult.subAttemptsA}</td><td>Tentativas de finalização</td><td>${roundResult.subAttemptsB}</td></tr>
+      </table>
+
+      <div class="section-label">Instruções de Córner para o Round ${round + 1}</div>
+      <div class="corner-choice-grid">
+        ${Object.entries(CORNER_INSTRUCTIONS).map(([key, meta]) => `
+          <button class="card corner-choice" data-instruction="${key}">
+            <div class="corner-choice-icon">${meta.icon}</div>
+            <div class="corner-choice-label">${meta.label}</div>
+            <div class="corner-choice-desc text-xs text-muted">${meta.desc}</div>
+          </button>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // ===== Resumo de período (simular meses/anos de uma vez) =====
+
+  static renderPeriodSummary(result) {
+    const { weeksSimulated, cashDelta, repDelta, winsDelta, lossesDelta, fightResults, milestonesUnlocked } = result;
+
+    const fightsHtml = fightResults.length === 0
+      ? '<div class="empty-state"><p>Nenhuma luta da sua equipe durante o período — só o tempo passou.</p></div>'
+      : fightResults.map(f => `
+          <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
+            <div>
+              <span class="badge ${f.won ? 'badge-success' : 'badge-danger'}">${f.won ? 'VITÓRIA' : 'DERROTA'}</span>
+              <span class="text-sm font-bold ml-2">${f.fighterName}</span>
+              <span class="text-xs text-muted"> vs ${f.opponentName} · ${f.method} · ${f.promoName}</span>
+            </div>
+          </div>
+        `).join('');
+
+    const milestonesHtml = milestonesUnlocked.length === 0 ? '' : `
+      <div class="section-label" data-reveal>Conquistas Desbloqueadas</div>
+      <div class="card mb-4" data-reveal>
+        ${milestonesUnlocked.map(id => `<div class="text-sm" style="padding:0.4rem 0">${MILESTONE_LABELS[id] || id}</div>`).join('')}
+      </div>
+    `;
+
+    return `
+      <div class="page-header">
+        <h2>Resumo do Período</h2>
+        <p>${weeksSimulated} semana${weeksSimulated === 1 ? '' : 's'} simulada${weeksSimulated === 1 ? '' : 's'}</p>
+      </div>
+
+      <div class="grid grid-cols-4 mb-4" data-reveal-stagger>
+        <div class="card stat-card">
+          <div class="card-header"><span class="card-title">Caixa</span></div>
+          <div class="stat-value ${cashDelta >= 0 ? 'text-success' : 'text-danger'}" style="font-size:1.6rem">${cashDelta >= 0 ? '+' : ''}${formatCurrency(cashDelta)}</div>
+        </div>
+        <div class="card stat-card">
+          <div class="card-header"><span class="card-title">Reputação</span></div>
+          <div class="stat-value ${repDelta >= 0 ? 'text-success' : 'text-danger'}">${repDelta >= 0 ? '+' : ''}${repDelta}</div>
+        </div>
+        <div class="card stat-card">
+          <div class="card-header"><span class="card-title">Cartel no Período</span></div>
+          <div class="stat-value">${winsDelta}-${lossesDelta}</div>
+        </div>
+        <div class="card stat-card">
+          <div class="card-header"><span class="card-title">Conquistas</span></div>
+          <div class="stat-value">${milestonesUnlocked.length}</div>
+        </div>
+      </div>
+
+      ${milestonesHtml}
+
+      <div class="section-label" data-reveal>Lutas da Equipe no Período</div>
+      <div class="card mb-4" data-reveal>
+        ${fightsHtml}
+      </div>
+
+      <button class="btn btn-primary summary-back">Voltar ao Dashboard</button>
     `;
   }
 }

@@ -1,0 +1,402 @@
+import { Promotion } from '../models/promotion.js';
+import { Fighter } from '../models/fighter.js';
+import { Event } from '../models/event.js';
+import { OFFER_STATUS } from '../models/fight-offer.js';
+import { SimulationEngine } from '../controllers/simulation.js';
+import { DataGenerator } from './data-generator.js';
+import { HallOfFame } from './hall-of-fame.js';
+import { generateId } from '../utils/helpers.js';
+import {
+  GYM_CONFIG,
+  WORLD_CONFIG,
+  CORE_WEIGHT_CLASSES,
+  absWeekToDate,
+  computeSuspensionWeeks,
+} from '../config/game-config.js';
+
+// Motor do mundo vivo: cada promoção de IA agenda e realiza os próprios
+// eventos. Lutas do jogador entram nos cards via ofertas aceitas.
+export class WorldService {
+  constructor(db, fighterCtrl, notifService) {
+    this.db = db;
+    this.fighterCtrl = fighterCtrl;
+    this.notifService = notifService;
+  }
+
+  async getPromotions() {
+    const all = await this.db.getAll('organization');
+    return all
+      .filter(o => o.id.startsWith('promo-'))
+      .map(o => new Promotion(o))
+      .sort((a, b) => a.tier - b.tier);
+  }
+
+  async getPromotion(id) {
+    const data = await this.db.get('organization', id);
+    return data ? new Promotion(data) : null;
+  }
+
+  // Tick semanal do mundo. Retorna eventos realizados, destacando os que
+  // envolvem lutadores do jogador (para a transmissão ao vivo).
+  // cornerHooks (opcional): repassado à simulação das lutas do jogador para
+  // permitir instruções de córner ao vivo entre rounds (ver app.js).
+  async processWeek(absWeekNow, startedAt, gym, cornerHooks = null) {
+    await this._recoverInjuries(absWeekNow);
+
+    const promotions = await this.getPromotions();
+    const playerEvents = [];
+    const aiHeadlines = [];
+
+    for (const promo of promotions) {
+      if (absWeekNow < promo.nextEventAbsWeek) continue;
+
+      const outcome = await this._runEvent(promo, absWeekNow, startedAt, gym, cornerHooks);
+      if (!outcome) continue;
+
+      if (outcome.playerResults.length > 0) {
+        playerEvents.push(outcome);
+      } else if (outcome.results.length > 0) {
+        const main = outcome.results[0];
+        aiHeadlines.push(`${outcome.event.name}: ${main.winnerName} venceu ${main.winnerId === main.fighterAId ? main.fighterBName : main.fighterAName} por ${main.method}.`);
+      }
+    }
+
+    for (const headline of aiHeadlines.slice(0, 3)) {
+      await this.notifService.add('info', 'Giro do MMA', headline);
+    }
+
+    await this._refillFreeAgents();
+    await this._processYearEnd(absWeekNow);
+
+    return { playerEvents };
+  }
+
+  async _runEvent(promo, absWeekNow, startedAt, gym, cornerHooks = null) {
+    const bookings = await this._getBookings(promo.id, absWeekNow);
+    const playerFighterIds = new Set();
+    const bookedIds = new Set();
+    const fights = [];
+
+    // 1) Lutas do jogador (ofertas aceitas para este evento)
+    for (const booking of bookings) {
+      const fighter = await this.fighterCtrl.getFighter(booking.fighterId);
+      let opponent = await this.fighterCtrl.getFighter(booking.opponentId);
+
+      if (!fighter || fighter.status === 'injured' || fighter.status === 'retired') {
+        booking.status = OFFER_STATUS.CANCELLED;
+        await this.db.put('offers', booking);
+        await this.notifService.add('warning', 'Luta Cancelada', `${booking.opponentName ? 'A luta contra ' + booking.opponentName : 'Uma luta'} foi cancelada — seu atleta não pôde competir.`);
+        continue;
+      }
+
+      // Adversário indisponível: a promoção busca substituto na divisão
+      if (!opponent || opponent.status !== 'roster' || opponent.availableFromAbsWeek > absWeekNow) {
+        opponent = await this._findReplacement(promo.id, fighter, bookedIds, absWeekNow);
+        if (!opponent) {
+          booking.status = OFFER_STATUS.CANCELLED;
+          await this.db.put('offers', booking);
+          await this.notifService.add('warning', 'Luta Cancelada', `${fighter.name} ficou sem adversário no ${promo.nextEventName()} — a bolsa foi perdida.`);
+          continue;
+        }
+        booking.opponentId = opponent.id;
+        booking.opponentName = opponent.name;
+        await this.notifService.add('info', 'Troca de Adversário', `${opponent.name} substituiu o oponente original de ${fighter.name}.`);
+      }
+
+      bookedIds.add(fighter.id);
+      bookedIds.add(opponent.id);
+      playerFighterIds.add(fighter.id);
+      fights.push({ fighterA: fighter, fighterB: opponent, card: 'main', booking });
+    }
+
+    // 2) Lutas de IA para completar o card
+    const aiPairs = await this._buildAiCard(promo.id, bookedIds, absWeekNow);
+    aiPairs.forEach((pair, i) => {
+      fights.push({
+        fighterA: pair[0],
+        fighterB: pair[1],
+        card: i < 2 ? 'main' : 'prelim',
+        booking: null,
+      });
+    });
+
+    if (fights.length === 0) {
+      // Sem lutas viáveis — adia o evento em 1 semana
+      promo.nextEventAbsWeek = absWeekNow + 1;
+      await this.db.put('organization', promo);
+      return null;
+    }
+
+    // 3) Simulação
+    const eventId = generateId();
+    const results = [];
+
+    for (const fight of fights) {
+      const { fighterA, fighterB } = fight;
+
+      fighterA.applyWeightCutImpact();
+      fighterB.applyWeightCutImpact();
+
+      // Instruções de córner ao vivo só existem para a luta do jogador,
+      // e só quando o app.js fornece os hooks (fast-forward simula automático).
+      let hooks = null;
+      if (fight.booking && cornerHooks) {
+        await cornerHooks.onFightStart?.({ fighter: fighterA, opponent: fighterB, promo });
+        hooks = { onRoundEnd: (info) => cornerHooks.onRoundEnd({ ...info, fighter: fighterA, opponent: fighterB, promo }) };
+      }
+
+      const result = await SimulationEngine.simulateFight(fighterA, fighterB, promo.tier === 1, hooks);
+      result.eventId = eventId;
+      result.card = fight.card;
+
+      fighterA.recoverFromWeightCut();
+      fighterB.recoverFromWeightCut();
+
+      this._rollInjury(fighterA, result, absWeekNow);
+      this._rollInjury(fighterB, result, absWeekNow);
+      this._applySuspension(fighterA, result, absWeekNow);
+      this._applySuspension(fighterB, result, absWeekNow);
+
+      await this.fighterCtrl.updateFighter(fighterA);
+      await this.fighterCtrl.updateFighter(fighterB);
+
+      result.id = generateId();
+      await this.db.add('fights', { ...result, fighterId: fighterA.id });
+
+      results.push(result);
+
+      // 4) Consequências para o jogador
+      if (fight.booking) {
+        await this._settlePlayerFight(fight, result, promo, gym, absWeekNow);
+      }
+    }
+
+    // Luta principal por último na transmissão: ordena main por relevância
+    results.sort((a, b) => (a.card === 'main' ? 0 : 1) - (b.card === 'main' ? 0 : 1));
+
+    const event = new Event({
+      id: eventId,
+      name: promo.nextEventName(),
+      date: absWeekToDate(absWeekNow, startedAt).toISOString(),
+      mainCard: fights.filter(f => f.card === 'main').map(f => ({ fighterAId: f.fighterA.id, fighterBId: f.fighterB.id })),
+      prelimCard: fights.filter(f => f.card === 'prelim').map(f => ({ fighterAId: f.fighterA.id, fighterBId: f.fighterB.id })),
+      status: 'completed',
+      results,
+    });
+    event.promotionId = promo.id;
+    event.promotionName = promo.name;
+    event.tier = promo.tier;
+    event.absWeek = absWeekNow;
+    await this.db.put('events', event);
+
+    promo.eventsHosted++;
+    promo.nextEventAbsWeek = absWeekNow + promo.cadenceWeeks;
+    await this.db.put('organization', promo);
+
+    const playerResults = results.filter(r =>
+      playerFighterIds.has(r.fighterAId) || playerFighterIds.has(r.fighterBId)
+    );
+
+    return { event, results, playerResults, playerFighterIds };
+  }
+
+  async _settlePlayerFight(fight, result, promo, gym, absWeekNow) {
+    const { booking } = fight;
+    const fighter = fight.fighterA; // lutador do jogador é sempre o córner A
+    const won = result.winnerId === fighter.id;
+
+    const totalPurse = booking.purse + (won ? booking.winBonus : 0);
+    const gymCut = Math.round(totalPurse * gym.managerCut);
+
+    gym.addTransaction(absWeekNow, `Comissão — ${fighter.name} (${promo.short})`, gymCut);
+    gym.totalPurseEarnings += gymCut;
+
+    if (won) {
+      gym.wins++;
+      const isFinish = result.method && !result.method.startsWith('Decision');
+      let rep = GYM_CONFIG.REP_PER_WIN + (GYM_CONFIG.REP_TIER_BONUS[promo.tier] || 0);
+      if (isFinish) rep += GYM_CONFIG.REP_PER_FINISH;
+      gym.updateReputation(rep);
+      await this.notifService.add('success', '🏆 Vitória!', `${fighter.name} venceu ${result.winnerId === result.fighterAId ? result.fighterBName : result.fighterAName} por ${result.method} no ${promo.nextEventName()}. Comissão: $${gymCut.toLocaleString()}.`);
+    } else {
+      gym.losses++;
+      gym.updateReputation(GYM_CONFIG.REP_PER_LOSS);
+      await this.notifService.add('warning', 'Derrota', `${fighter.name} foi derrotado por ${result.winnerName} (${result.method}). Comissão da bolsa: $${gymCut.toLocaleString()}.`);
+    }
+
+    booking.status = OFFER_STATUS.COMPLETED;
+    booking.resultId = result.id;
+    await this.db.put('offers', booking);
+  }
+
+  // Ofertas aceitas desta promoção cuja luta é nesta semana (ou atrasada)
+  async _getBookings(promotionId, absWeekNow) {
+    const accepted = await this.db.getIndex('offers', 'status', OFFER_STATUS.ACCEPTED);
+    return accepted.filter(o => o.promotionId === promotionId && o.eventAbsWeek <= absWeekNow);
+  }
+
+  async _buildAiCard(promotionId, excludeIds, absWeekNow) {
+    const rosterData = await this.db.getIndex('fighters', 'organizationId', promotionId);
+    const available = rosterData
+      .map(d => new Fighter(d))
+      .filter(f => f.status === 'roster' && !excludeIds.has(f.id) && f.availableFromAbsWeek <= absWeekNow);
+
+    const byWeight = {};
+    for (const f of available) {
+      (byWeight[f.weightClass] ||= []).push(f);
+    }
+
+    // Pareia vizinhos de rating dentro de cada divisão, alternando
+    // divisões para variar os cards de evento para evento.
+    const divisionPairs = [];
+    for (const fighters of Object.values(byWeight)) {
+      fighters.sort((a, b) => b.overallRating - a.overallRating);
+      const pairs = [];
+      for (let i = 0; i + 1 < fighters.length; i += 2) {
+        pairs.push([fighters[i], fighters[i + 1]]);
+      }
+      if (pairs.length > 0) divisionPairs.push(pairs);
+    }
+
+    // Round-robin entre divisões
+    const card = [];
+    let idx = 0;
+    while (card.length < WORLD_CONFIG.AI_FIGHTS_PER_EVENT && divisionPairs.length > 0) {
+      const div = divisionPairs[idx % divisionPairs.length];
+      const pair = div.shift();
+      if (pair) card.push(pair);
+      if (div.length === 0) {
+        divisionPairs.splice(idx % divisionPairs.length, 1);
+      } else {
+        idx++;
+      }
+    }
+
+    return card;
+  }
+
+  async _findReplacement(promotionId, fighter, excludeIds, absWeekNow) {
+    const rosterData = await this.db.getIndex('fighters', 'organizationId', promotionId);
+    const candidates = rosterData
+      .map(d => new Fighter(d))
+      .filter(f =>
+        f.status === 'roster' &&
+        f.weightClass === fighter.weightClass &&
+        !excludeIds.has(f.id) &&
+        f.availableFromAbsWeek <= absWeekNow
+      )
+      .sort((a, b) =>
+        Math.abs(a.overallRating - fighter.overallRating) -
+        Math.abs(b.overallRating - fighter.overallRating)
+      );
+    return candidates[0] || null;
+  }
+
+  // Suspensão médica pós-luta: aplicada a TODOS os lutadores (jogador e IA)
+  // para respeitar o afastamento mínimo entre lutas real do MMA.
+  _applySuspension(fighter, result, absWeekNow) {
+    const won = result.winnerId === fighter.id;
+    const weeks = computeSuspensionWeeks(result.method, won);
+    const suspendedUntil = absWeekNow + weeks;
+    const injuryUntil = fighter.injury?.untilAbsWeek || 0;
+    fighter.availableFromAbsWeek = Math.max(suspendedUntil, injuryUntil);
+  }
+
+  _rollInjury(fighter, result, absWeekNow) {
+    const won = result.winnerId === fighter.id;
+    const isFinish = result.method && !result.method.startsWith('Decision');
+
+    let chance = won ? WORLD_CONFIG.INJURY_CHANCE_WINNER : WORLD_CONFIG.INJURY_CHANCE_LOSER;
+    if (!won && isFinish) chance += WORLD_CONFIG.INJURY_CHANCE_FINISH_BONUS;
+    if (fighter.hasDNA('injuryProne')) chance += WORLD_CONFIG.INJURY_CHANCE_PRONE_BONUS;
+
+    if (Math.random() >= chance) return;
+
+    const weeks = WORLD_CONFIG.INJURY_WEEKS_MIN +
+      Math.floor(Math.random() * (WORLD_CONFIG.INJURY_WEEKS_MAX - WORLD_CONFIG.INJURY_WEEKS_MIN + 1));
+
+    fighter.injury = {
+      untilAbsWeek: absWeekNow + weeks,
+      description: `Lesionado por ${weeks} semanas`,
+      resumeStatus: fighter.gymId ? 'gym' : 'roster',
+    };
+    fighter.status = 'injured';
+  }
+
+  async _recoverInjuries(absWeekNow) {
+    const injured = await this.db.getIndex('fighters', 'status', 'injured');
+    for (const data of injured) {
+      if (!data.injury || data.injury.untilAbsWeek > absWeekNow) continue;
+      const fighter = new Fighter(data);
+      fighter.status = fighter.injury.resumeStatus || (fighter.gymId ? 'gym' : 'roster');
+      fighter.injury = null;
+      await this.db.put('fighters', fighter);
+      if (fighter.gymId === GYM_CONFIG.ID) {
+        await this.notifService.add('success', 'Recuperado', `${fighter.name} está liberado pelo departamento médico.`);
+      }
+    }
+  }
+
+  async _refillFreeAgents() {
+    const free = await this.db.getIndex('fighters', 'status', 'free');
+    if (free.length >= WORLD_CONFIG.FREE_AGENT_MIN) return;
+
+    const count = WORLD_CONFIG.FREE_AGENT_POOL - free.length;
+    for (let i = 0; i < count; i++) {
+      const weightClass = CORE_WEIGHT_CLASSES[Math.floor(Math.random() * CORE_WEIGHT_CLASSES.length)];
+      const fighter = DataGenerator.generateFighter(null, { weightClass, skillRange: [30, 55] });
+      fighter.id = generateId();
+      await this.db.put('fighters', fighter);
+    }
+  }
+
+  // Virada de ano (semana 52): aposentadorias e nova safra de prospectos
+  async _processYearEnd(absWeekNow) {
+    if (absWeekNow % 52 !== 0) return;
+
+    const all = await this.fighterCtrl.getAllFighters();
+    for (const f of all) {
+      if (f.status === 'retired') continue;
+      f.age = (f.age || 28) + 1;
+
+      const age = f.age;
+      let chance = 0;
+      if (age >= 40) chance = 0.35;
+      else if (age >= 38) chance = 0.18;
+      else if (age >= 35) chance = 0.06;
+
+      if (chance > 0 && Math.random() < chance) {
+        f.status = 'retired';
+        f.organizationId = null;
+        const wasGymFighter = f.gymId === GYM_CONFIG.ID;
+        f.gymId = null;
+
+        const eligibility = HallOfFame.checkEligibility(f);
+        if (eligibility.eligible) {
+          const existing = await this.db.get('hallOfFame', f.id);
+          if (!existing) {
+            const entry = HallOfFame.induct(f);
+            entry.id = f.id;
+            await this.db.put('hallOfFame', entry);
+          }
+        }
+
+        if (wasGymFighter) {
+          await this.notifService.add('info', 'Aposentadoria', `${f.name} pendurou as luvas aos ${age} anos. Obrigado por tudo, campeão.`);
+        }
+      }
+
+      await this.fighterCtrl.updateFighter(f);
+    }
+
+    const count = WORLD_CONFIG.DRAFT_MIN +
+      Math.floor(Math.random() * (WORLD_CONFIG.DRAFT_MAX - WORLD_CONFIG.DRAFT_MIN + 1));
+    for (let i = 0; i < count; i++) {
+      const weightClass = CORE_WEIGHT_CLASSES[Math.floor(Math.random() * CORE_WEIGHT_CLASSES.length)];
+      const prospect = DataGenerator.generateProspect(weightClass);
+      prospect.id = generateId();
+      await this.db.put('fighters', prospect);
+    }
+    await this.notifService.add('success', 'Nova Safra', `${count} jovens prospectos chegaram ao mercado. Olho neles antes das academias rivais.`);
+  }
+}

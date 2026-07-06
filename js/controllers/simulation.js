@@ -1,7 +1,11 @@
 import { Gaussian } from '../utils/gaussian.js';
+import { CORNER_INSTRUCTIONS } from '../config/game-config.js';
 
 export class SimulationEngine {
-  static simulateFight(fighterA, fighterB, isBigEvent = false) {
+  // cornerHooks (opcional): { onRoundEnd: async ({round, roundResult, totalScoreA, totalScoreB}) => instructionKey }
+  // Só afeta o córner A (sempre o lutador da academia, por convenção do WorldService).
+  // Sem cornerHooks, o comportamento é idêntico ao automático de sempre.
+  static async simulateFight(fighterA, fighterB, isBigEvent = false, cornerHooks = null) {
     const maxRounds = 5;
     const rounds = [];
     let totalScoreA = 0, totalScoreB = 0;
@@ -18,12 +22,18 @@ export class SimulationEngine {
     const staminaA = 100, staminaB = 100;
     let winner = null, loser = null;
     let finishMethod = null, finishRound = 0;
+    let cornerInstruction = 'balanced';
+    let staminaDebtA = 0;
 
     for (let r = 1; r <= maxRounds; r++) {
       if (winner) break; // fight already finished
 
-      const perfA = this._calcRoundPerformance(fighterA, fighterB, isBigEvent, staminaA * (1 - (r - 1) * 0.12));
-      const perfB = this._calcRoundPerformance(fighterB, fighterA, isBigEvent, staminaB * (1 - (r - 1) * 0.12));
+      const cornerModA = CORNER_INSTRUCTIONS[cornerInstruction] || CORNER_INSTRUCTIONS.balanced;
+      const staminaFactorA = Math.max(10, staminaA * (1 - (r - 1) * 0.12) - staminaDebtA);
+      const staminaFactorB = staminaB * (1 - (r - 1) * 0.12);
+
+      const perfA = this._calcRoundPerformance(fighterA, fighterB, isBigEvent, staminaFactorA, cornerModA);
+      const perfB = this._calcRoundPerformance(fighterB, fighterA, isBigEvent, staminaFactorB, null);
 
       // Track total scores for decision
       totalScoreA += perfA.score;
@@ -57,7 +67,7 @@ export class SimulationEngine {
       stats.controlTimeB += roundStats.takedownsB * 30;
 
       // Check for finish this round
-      const finish = this._checkRoundFinish(fighterA, fighterB, perfA, perfB, diff, r, roundStats);
+      const finish = this._checkRoundFinish(fighterA, fighterB, perfA, perfB, diff, r, roundStats, cornerModA);
       if (finish) {
         winner = finish.winner;
         loser = finish.loser;
@@ -81,6 +91,19 @@ export class SimulationEngine {
         ...roundStats,
         finished: false,
       });
+
+      // O ritmo escolhido no córner cobra seu preço (ou ajuda) no fôlego dos rounds seguintes
+      staminaDebtA += (cornerModA.fatigueMod - 1) * 15;
+
+      if (cornerHooks?.onRoundEnd && r < maxRounds) {
+        const chosen = await cornerHooks.onRoundEnd({
+          round: r,
+          roundResult: rounds[rounds.length - 1],
+          totalScoreA: Math.round(totalScoreA),
+          totalScoreB: Math.round(totalScoreB),
+        });
+        if (chosen && CORNER_INSTRUCTIONS[chosen]) cornerInstruction = chosen;
+      }
     }
 
     // If no finish, determine winner by decision
@@ -129,7 +152,8 @@ export class SimulationEngine {
     return result;
   }
 
-  static _calcRoundPerformance(fighter, opponent, isBigEvent, staminaFactor) {
+  static _calcRoundPerformance(fighter, opponent, isBigEvent, staminaFactor, cornerMod = null) {
+    const corner = cornerMod || CORNER_INSTRUCTIONS.balanced;
     const fatiguePenalty = 1 - (fighter.fatigue / 200);
     const moraleFactor = 0.7 + (fighter.morale / 100) * 0.3;
     const determinationFactor = 0.8 + (fighter.hidden.determination / 100) * 0.2;
@@ -141,8 +165,8 @@ export class SimulationEngine {
     const cardio = fighter.attributes.cardio * fatiguePenalty * moraleFactor * staminaEffect;
     const iq = fighter.attributes.fightIQ * determinationFactor;
     const chin = fighter.attributes.chin;
-    const striking = fighter.strikingScore * fatiguePenalty * staminaEffect;
-    const grappling = fighter.grapplingScore * fatiguePenalty * staminaEffect;
+    const striking = fighter.strikingScore * fatiguePenalty * staminaEffect * corner.strikingMod;
+    const grappling = fighter.grapplingScore * fatiguePenalty * staminaEffect * corner.grapplingMod;
 
     const styleAdvantage = this._styleMatchup(fighter, opponent);
 
@@ -207,7 +231,7 @@ export class SimulationEngine {
     };
   }
 
-  static _checkRoundFinish(fighterA, fighterB, perfA, perfB, diff, round, roundStats) {
+  static _checkRoundFinish(fighterA, fighterB, perfA, perfB, diff, round, roundStats, cornerModA = null) {
     const finishChance = Math.min(0.4, 0.05 + Math.abs(diff) * 0.008);
 
     if (Math.random() > finishChance * (1 + round * 0.1)) return null;
@@ -220,7 +244,8 @@ export class SimulationEngine {
 
     const strikeDiff = winnerPerf.striking - loserPerf.striking;
     const grappleDiff = winnerPerf.grappling - loserPerf.grappling;
-    const chinFactor = loser.attributes.chin / 100;
+    let chinFactor = loser.attributes.chin / 100;
+    if (cornerModA && loser === fighterA) chinFactor *= cornerModA.chinMod;
 
     const methods = [];
 

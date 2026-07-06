@@ -28,6 +28,37 @@ export class FighterController {
     return all.map(d => new Fighter(d));
   }
 
+  // Lutadores treinados por uma academia (equipe do jogador)
+  async getTeam(gymId) {
+    const all = await this.db.getIndex('fighters', 'gymId', gymId);
+    return all.map(d => new Fighter(d)).filter(f => f.status !== 'retired');
+  }
+
+  async recruitToGym(fighterId, gymId) {
+    const fighter = await this.getFighter(fighterId);
+    if (!fighter) return null;
+
+    fighter.gymId = gymId;
+    fighter.status = 'gym';
+    fighter.organizationId = null;
+    fighter.contract = null;
+    fighter.applyMoraleChange(10);
+
+    await this.db.put('fighters', fighter);
+    return new Fighter(fighter);
+  }
+
+  async releaseFromGym(fighterId) {
+    const fighter = await this.getFighter(fighterId);
+    if (!fighter) return false;
+
+    fighter.gymId = null;
+    fighter.status = 'free';
+
+    await this.db.put('fighters', fighter);
+    return true;
+  }
+
   async saveFighter(fighter) {
     await this.db.put('fighters', fighter);
   }

@@ -51,7 +51,7 @@ export class RivalryService {
     }
 
     // Criar nova rivalidade se luta foi close ou main card
-    const isClose = Math.abs(result.stats.diff) < 10;
+    const isClose = Math.abs((result.totalScoreA || 0) - (result.totalScoreB || 0)) < 10;
     const shouldCreate = isMainCard || isClose;
 
     if (shouldCreate) {

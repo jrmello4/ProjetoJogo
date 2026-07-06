@@ -1,4 +1,5 @@
-import Lenis from 'https://cdn.jsdelivr.net/npm/lenis@1.1.18/+esm';
+// Lenis loaded via <script> tag in index.html
+const Lenis = window.Lenis;
 
 // GSAP + ScrollTrigger loaded via <script> tags in index.html
 const gsap = window.gsap;
@@ -18,6 +19,10 @@ export class MotionEngine {
 
   init() {
     if (this.reducedMotion) return;
+    if (!gsap || !ScrollTrigger || !Lenis) {
+      console.warn('GSAP/ScrollTrigger/Lenis not loaded — motion disabled');
+      return;
+    }
 
     this.lenis = new Lenis({
       duration: 1.15,

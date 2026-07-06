@@ -1,5 +1,5 @@
 const DB_NAME = 'MMAManagerDB';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 export class DB {
   constructor() {
@@ -12,12 +12,26 @@ export class DB {
 
       request.onupgradeneeded = (e) => {
         const db = e.target.result;
+        const tx = e.target.transaction;
 
         if (!db.objectStoreNames.contains('fighters')) {
           const fighterStore = db.createObjectStore('fighters', { keyPath: 'id' });
           fighterStore.createIndex('status', 'status');
           fighterStore.createIndex('weightClass', 'weightClass');
           fighterStore.createIndex('organizationId', 'organizationId');
+        }
+
+        // v6 — modo academia: índice por academia + store de ofertas
+        const fighterStore = tx.objectStore('fighters');
+        if (!fighterStore.indexNames.contains('gymId')) {
+          fighterStore.createIndex('gymId', 'gymId');
+        }
+
+        if (!db.objectStoreNames.contains('offers')) {
+          const offerStore = db.createObjectStore('offers', { keyPath: 'id' });
+          offerStore.createIndex('status', 'status');
+          offerStore.createIndex('fighterId', 'fighterId');
+          offerStore.createIndex('promotionId', 'promotionId');
         }
 
         if (!db.objectStoreNames.contains('organization')) {

@@ -1,0 +1,21 @@
+{
+  "name": "MMA Manager — War Room Simulator",
+  "short_name": "MMA Manager",
+  "description": "Gerencie sua própria organização de MMA: contrate lutadores, monte cards, promova eventos e domine o cenário.",
+  "lang": "pt-BR",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#08080a",
+  "theme_color": "#08080a",
+  "categories": ["games", "sports", "entertainment"],
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

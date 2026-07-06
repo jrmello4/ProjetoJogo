@@ -1,12 +1,10 @@
-import { formatCurrency, getWeightClassShort, getNationalityFlag } from '../utils/helpers.js';
+import { formatCurrency, getWeightClassShort, getNationalityFlag, renderAttrBar } from '../utils/helpers.js';
+import { CORE_WEIGHT_CLASSES, POTENTIAL_TIERS } from '../config/game-config.js';
 
-const WEIGHT_CLASSES = [
-  'Strawweight', 'Flyweight', 'Bantamweight', 'Featherweight',
-  'Lightweight', 'Welterweight', 'Middleweight', 'Light Heavyweight', 'Heavyweight',
-];
-
+// Recrutamento: agentes livres que podem se juntar à academia do jogador.
+// Cartões em vez de tabela densa — a mesma informação, mais fácil de ler.
 export class MarketView {
-  static render(fighters, filter = '', searchTerm = '') {
+  static render(fighters, gym, teamSize, filter = '', searchTerm = '', feeOf = () => 0) {
     let filtered = filter
       ? fighters.filter(f => f.weightClass === filter)
       : fighters;
@@ -17,148 +15,102 @@ export class MarketView {
     }
 
     const sorted = [...filtered].sort((a, b) => b.overallRating - a.overallRating);
+    const slotsFull = teamSize >= gym.maxTeamSize;
+    const scouted = gym.scoutLevel > 0;
 
     const filterButtons = `
-      <div class="flex gap-2 mb-2" style="flex-wrap:wrap">
+      <div class="flex gap-2 mb-3" style="flex-wrap:wrap">
         <button class="btn btn-sm ${!filter ? 'btn-primary' : 'btn-secondary'} market-filter" data-filter="">Todos</button>
-        ${WEIGHT_CLASSES.map(wc => `
+        ${CORE_WEIGHT_CLASSES.map(wc => `
           <button class="btn btn-sm ${filter === wc ? 'btn-primary' : 'btn-secondary'} market-filter" data-filter="${wc}">
             ${getWeightClassShort(wc)}
           </button>
         `).join('')}
-        <button class="btn btn-sm btn-secondary market-refresh">🔄 Renovar</button>
         <input type="text" class="form-input market-search" placeholder="Buscar por nome..." value="${searchTerm}" style="max-width:200px;margin-left:auto">
       </div>
     `;
 
+    const header = `
+      <div class="page-header">
+        <h2>Recrutamento</h2>
+        <p>Agentes livres em busca de uma academia · Vagas: ${teamSize}/${gym.maxTeamSize} · Caixa: ${formatCurrency(gym.cash)}</p>
+      </div>
+      ${slotsFull ? `
+        <div class="alert alert-warning mb-4">
+          <strong>Academia lotada.</strong> Dispense um atleta em Minha Equipe ou faça upgrade da estrutura na Academia.
+        </div>
+      ` : ''}
+      ${!scouted ? `
+        <div class="alert alert-warning mb-4">
+          <strong>Sem olheiro.</strong> O potencial oculto de cada agente livre é desconhecido. Contrate um olheiro na Academia para revelá-lo antes de recrutar.
+        </div>
+      ` : ''}
+      ${filterButtons}
+    `;
+
     if (sorted.length === 0) {
       return `
-        <div class="page-header">
-          <h2>Mercado</h2>
-          <p>Agentes Livres</p>
-        </div>
-        ${filterButtons}
+        ${header}
         <div class="empty-state">
-          <p>${filter ? `Nenhum agente livre na divisao ${filter}.` : 'Nenhum agente livre disponível.'}</p>
+          <p>${filter ? `Nenhum agente livre na divisão ${filter}.` : 'Nenhum agente livre disponível. Avance a semana — novos nomes aparecem no mercado.'}</p>
         </div>
       `;
     }
 
     return `
-      <div class="page-header">
-        <h2>Mercado</h2>
-        <p>${sorted.length} agentes livres disponíveis</p>
-      </div>
-
-      ${filterButtons}
-
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Lutador</th>
-              <th>Nacionalidade</th>
-              <th>Divisão</th>
-              <th>Recorde</th>
-              <th>OVR</th>
-              <th>STR</th>
-              <th>GRP</th>
-              <th>Cardio</th>
-              <th>IQ</th>
-              <th>Idade</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${sorted.map(f => `
-              <tr>
-                <td>
-                  <span class="font-bold fighter-row" data-id="${f.id}">${f.name}</span>
-                </td>
-                <td>${getNationalityFlag(f.nationality?.code)} ${f.nationality?.name || 'Desconhecido'}</td>
-                <td><span class="badge badge-info">${getWeightClassShort(f.weightClass)}</span></td>
-                <td class="font-bold">${f.record.wins}-${f.record.losses}-${f.record.draws}</td>
-                <td class="font-bold">${f.overallRating}</td>
-                <td>${Math.round(f.strikingScore)}</td>
-                <td>${Math.round(f.grapplingScore)}</td>
-                <td>${f.attributes.cardio}</td>
-                <td>${f.attributes.fightIQ}</td>
-                <td>${f.age} anos</td>
-                <td>
-                  <button class="btn btn-sm btn-success market-hire" data-id="${f.id}">Contratar</button>
-                  <button class="btn btn-sm btn-secondary market-hire-quick" data-id="${f.id}" title="Contratar com termos padrão">⚡ Rápido</button>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+      ${header}
+      <div class="roster-cards" data-reveal-stagger>
+        ${sorted.map(f => this._renderCard(f, feeOf(f), gym, scouted, slotsFull)).join('')}
       </div>
     `;
   }
 
-  static renderHireModal(fighter) {
-    const basePurse = Math.round(fighter.overallRating * 200 + 5000);
+  static _renderCard(f, fee, gym, scouted, slotsFull) {
+    const canAfford = gym.cash >= fee;
+    const potentialHtml = scouted ? this._potentialBadge(f.hidden.potential) : '<span class="badge badge-warning" style="font-size:0.65rem">??? não revelado</span>';
 
     return `
-      <div class="modal-overlay" id="hireModal">
-        <div class="modal">
-          <div class="modal-header">
-            <h3>Contratar ${fighter.name}</h3>
-            <button class="modal-close" data-close="hireModal">&times;</button>
-          </div>
-
-          <div class="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <div class="text-xs text-muted">Divisão</div>
-              <div class="text-sm">${fighter.weightClass}</div>
+      <div class="card roster-card" data-reveal>
+        <div class="roster-card-header">
+          <div>
+            <div class="flex items-center gap-2">
+              <span>${getNationalityFlag(f.nationality?.code)}</span>
+              <span class="fighter-name-link" data-fighter-click="${f.id}">${f.name}</span>
             </div>
-            <div>
-              <div class="text-xs text-muted">Recorde</div>
-              <div class="text-sm">${fighter.record.wins}-${fighter.record.losses}-${fighter.record.draws}</div>
-            </div>
-            <div>
-              <div class="text-xs text-muted">OVR</div>
-              <div class="text-sm font-bold">${fighter.overallRating}</div>
-            </div>
-            <div>
-              <div class="text-xs text-muted">Idade</div>
-              <div class="text-sm">${fighter.age} anos</div>
-            </div>
+            <div class="text-xs text-muted mt-1">${f.age} anos · ${getWeightClassShort(f.weightClass)} · ${f.fightingStyle}</div>
           </div>
+          <div class="text-right">
+            <div class="stat-value" style="font-size:1.75rem">${f.overallRating}</div>
+            <div class="text-xs text-muted">OVR</div>
+          </div>
+        </div>
 
-          <div class="form-group">
-            <label class="form-label">Bolsa por Luta</label>
-            <input type="number" class="form-input" id="hirePurse" value="${basePurse}" min="5000" step="1000">
-          </div>
+        <div class="flex items-center gap-2 my-3" style="flex-wrap:wrap">
+          <span class="badge badge-info" style="font-size:0.75rem">${f.record.wins}-${f.record.losses}-${f.record.draws}</span>
+          <span class="text-xs text-muted">Potencial:</span>
+          ${potentialHtml}
+        </div>
 
-          <div class="form-group">
-            <label class="form-label">Duração (lutas)</label>
-            <select class="form-select" id="hireDuration">
-              <option value="1">1 luta</option>
-              <option value="3" selected>3 lutas</option>
-              <option value="5">5 lutas</option>
-              <option value="10">10 lutas</option>
-            </select>
-          </div>
+        <div class="attr-grid mt-2">
+          ${renderAttrBar('Striking', f.strikingScore)}
+          ${renderAttrBar('Grappling', f.grapplingScore)}
+          ${renderAttrBar('Cardio', f.attributes.cardio)}
+          ${renderAttrBar('Fight IQ', f.attributes.fightIQ)}
+        </div>
 
-          <div class="form-group">
-            <label class="form-label">Bônus de Vitória</label>
-            <input type="number" class="form-input" id="hireBonus" value="${Math.round(basePurse * 0.5)}" min="0" step="1000">
+        <div class="cost-row mt-3" style="border-top:1px solid var(--border);padding-top:0.75rem">
+          <div>
+            <div class="text-xs text-muted">Taxa de recrutamento</div>
+            <div class="text-sm font-bold ${canAfford ? '' : 'text-danger'}">${formatCurrency(fee)}</div>
           </div>
-
-          <div class="card mt-2" style="background:var(--bg-tertiary)">
-            <div class="flex justify-between">
-              <span class="text-sm text-muted">Custo total estimado:</span>
-              <span class="text-sm font-bold" id="hireTotalCost">${formatCurrency(basePurse * 3 + Math.round(basePurse * 0.5) * 3)}</span>
-            </div>
-          </div>
-
-          <div class="modal-actions">
-            <button class="btn btn-secondary" data-close="hireModal">Cancelar</button>
-            <button class="btn btn-success market-confirm-hire" data-id="${fighter.id}">Confirmar Contratação</button>
-          </div>
+          <button class="btn btn-sm btn-success market-recruit" data-id="${f.id}" ${slotsFull || !canAfford ? 'disabled' : ''}>Recrutar</button>
         </div>
       </div>
     `;
+  }
+
+  static _potentialBadge(potential) {
+    const tier = POTENTIAL_TIERS.find(t => potential >= t.min) || POTENTIAL_TIERS[POTENTIAL_TIERS.length - 1];
+    return `<span class="badge ${tier.cls}" style="font-size:0.65rem">${tier.label} (${potential})</span>`;
   }
 }

@@ -104,13 +104,14 @@ export class DataGenerator {
     return STYLES[Math.floor(Math.random() * STYLES.length)];
   }
 
-  static generateFighter(organizationId = null) {
-    const age = Math.floor(Math.random() * 15) + 21;
+  static generateFighter(organizationId = null, opts = {}) {
+    const age = opts.age ?? Math.floor(Math.random() * 15) + 21;
     const nat = DataGenerator.randomNationality();
-    const weight = DataGenerator.randomWeightClass();
+    const weight = opts.weightClass || DataGenerator.randomWeightClass();
     const style = DataGenerator.randomStyle();
 
-    const baseSkill = Math.floor(Math.random() * 30) + 30;
+    const [skillMin, skillMax] = opts.skillRange || [30, 60];
+    const baseSkill = skillMin + Math.floor(Math.random() * (skillMax - skillMin + 1));
 
     const primary = Math.floor(Math.random() * 5);
     const attributes = {
@@ -131,10 +132,14 @@ export class DataGenerator {
       evolution: Math.floor(Math.random() * 30) + 10,
     };
 
-    const fights = Math.floor(Math.random() * 20);
-    const wins = Math.floor(Math.random() * (fights + 1));
-    const losses = Math.floor(Math.random() * (fights - wins + 1));
-    const draws = fights - wins - losses;
+    const fights = opts.maxFights != null
+      ? Math.floor(Math.random() * (opts.maxFights + 1))
+      : Math.floor(Math.random() * 20);
+    // Empates são raros no MMA — no máximo 1, com chance baixa
+    const draws = fights > 0 && Math.random() < 0.1 ? 1 : 0;
+    const decided = fights - draws;
+    const wins = Math.round(decided * (0.35 + Math.random() * 0.4));
+    const losses = decided - wins;
 
     // DNA traits: máx 2 traits, chances ponderadas
     const dna = DataGenerator._generateDNA();
@@ -204,19 +209,49 @@ export class DataGenerator {
     return dna;
   }
 
-  static generateFreeAgents(count = 30) {
+  static generateFreeAgents(count = 30, opts = {}) {
     const agents = [];
     for (let i = 0; i < count; i++) {
-      agents.push(DataGenerator.generateFighter(null));
+      agents.push(DataGenerator.generateFighter(null, opts));
     }
     return agents;
   }
 
-  static generateRoster(count = 10, organizationId) {
+  static generateRoster(count = 10, organizationId, opts = {}) {
     const roster = [];
     for (let i = 0; i < count; i++) {
-      roster.push(DataGenerator.generateFighter(organizationId));
+      roster.push(DataGenerator.generateFighter(organizationId, opts));
     }
     return roster;
+  }
+
+  // Roster de uma promoção de IA, distribuído uniformemente entre as
+  // divisões informadas para garantir matchmaking viável.
+  static generatePromotionRoster(promotion, weightClasses) {
+    const roster = [];
+    for (let i = 0; i < promotion.rosterSize; i++) {
+      const weightClass = weightClasses[i % weightClasses.length];
+      const fighter = DataGenerator.generateFighter(promotion.id, {
+        weightClass,
+        skillRange: promotion.skill,
+      });
+      roster.push(fighter);
+    }
+    return roster;
+  }
+
+  // Prospecto jovem para a equipe inicial do jogador: cru, mas com
+  // potencial alto — o arco "do zero ao campeão" começa aqui.
+  static generateProspect(weightClass) {
+    const fighter = DataGenerator.generateFighter(null, {
+      weightClass,
+      skillRange: [36, 48],
+      age: 20 + Math.floor(Math.random() * 4),
+      maxFights: 4,
+    });
+    fighter.hidden.potential = 65 + Math.floor(Math.random() * 26); // 65-90
+    fighter.hidden.evolution = 25 + Math.floor(Math.random() * 20);
+    fighter.popularity = 5 + Math.floor(Math.random() * 10);
+    return fighter;
   }
 }

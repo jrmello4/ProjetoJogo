@@ -1,0 +1,219 @@
+import { FightOffer, OFFER_STATUS } from '../models/fight-offer.js';
+import { Fighter } from '../models/fighter.js';
+import { generateId, clamp } from '../utils/helpers.js';
+import { OFFER_CONFIG, NEGOTIATION_CONFIG } from '../config/game-config.js';
+
+// Ciclo de vida das ofertas de luta: geração semanal pelas promoções,
+// expiração, aceite e recusa.
+export class OfferService {
+  constructor(db, fighterCtrl, notifService) {
+    this.db = db;
+    this.fighterCtrl = fighterCtrl;
+    this.notifService = notifService;
+  }
+
+  async getAll() {
+    const data = await this.db.getAll('offers');
+    return data.map(d => new FightOffer(d));
+  }
+
+  async getPending() {
+    const data = await this.db.getIndex('offers', 'status', OFFER_STATUS.PENDING);
+    return data.map(d => new FightOffer(d)).sort((a, b) => b.purse - a.purse);
+  }
+
+  async getAccepted() {
+    const data = await this.db.getIndex('offers', 'status', OFFER_STATUS.ACCEPTED);
+    return data.map(d => new FightOffer(d)).sort((a, b) => a.eventAbsWeek - b.eventAbsWeek);
+  }
+
+  async getHistory(limit = 12) {
+    const all = await this.getAll();
+    return all
+      .filter(o => !o.isPending && !o.isAccepted)
+      .sort((a, b) => b.createdAtAbsWeek - a.createdAtAbsWeek)
+      .slice(0, limit);
+  }
+
+  async accept(offerId, absWeekNow) {
+    const data = await this.db.get('offers', offerId);
+    if (!data || data.status !== OFFER_STATUS.PENDING) return null;
+
+    const offer = new FightOffer(data);
+    offer.status = OFFER_STATUS.ACCEPTED;
+    await this.db.put('offers', offer);
+
+    const weeksOut = offer.eventAbsWeek - absWeekNow;
+    await this.notifService.add('success', 'Luta Fechada!', `${offer.opponentName} em ${weeksOut} semana${weeksOut === 1 ? '' : 's'} pelo ${offer.promotionName}. Hora do camp!`);
+    return offer;
+  }
+
+  // Negociação de bolsa: uma tentativa por oferta. Quanto maior o pedido
+  // frente à força de barganha (popularidade do lutador + reputação da
+  // academia), maior o risco de a promoção recusar ou cancelar a oferta.
+  async negotiate(offerId, bumpIndex, fighter, gym) {
+    const data = await this.db.get('offers', offerId);
+    if (!data || data.status !== OFFER_STATUS.PENDING) return { ok: false, reason: 'Oferta indisponível.' };
+
+    const offer = new FightOffer(data);
+    if (offer.negotiated) return { ok: false, reason: 'Você já negociou esta oferta.' };
+
+    const bump = NEGOTIATION_CONFIG.BUMP_OPTIONS[bumpIndex];
+    if (bump == null) return { ok: false, reason: 'Opção de negociação inválida.' };
+
+    const leverage = clamp((fighter?.popularity || 0) / 100 * 0.6 + (gym?.reputation || 0) / 100 * 0.4, 0, 1);
+    const acceptCeiling = leverage * NEGOTIATION_CONFIG.BASE_ACCEPT_LEVERAGE;
+
+    offer.negotiated = true;
+
+    if (bump <= acceptCeiling) {
+      offer.purse = Math.round(offer.purse * (1 + bump) / 50) * 50;
+      offer.winBonus = Math.round(offer.winBonus * (1 + bump) / 50) * 50;
+      await this.db.put('offers', offer);
+      return { ok: true, outcome: 'accepted', offer };
+    }
+
+    if (bump <= acceptCeiling + NEGOTIATION_CONFIG.RESCIND_MARGIN) {
+      offer.purse = Math.round(offer.purse * (1 + acceptCeiling) / 50) * 50;
+      offer.winBonus = Math.round(offer.winBonus * (1 + acceptCeiling) / 50) * 50;
+      await this.db.put('offers', offer);
+      return { ok: true, outcome: 'countered', offer };
+    }
+
+    if (Math.random() < NEGOTIATION_CONFIG.RESCIND_CHANCE) {
+      offer.status = OFFER_STATUS.DECLINED;
+      await this.db.put('offers', offer);
+      return { ok: true, outcome: 'rescinded', offer };
+    }
+
+    await this.db.put('offers', offer);
+    return { ok: true, outcome: 'refused', offer };
+  }
+
+  async decline(offerId) {
+    const data = await this.db.get('offers', offerId);
+    if (!data || data.status !== OFFER_STATUS.PENDING) return null;
+
+    const offer = new FightOffer(data);
+    offer.status = OFFER_STATUS.DECLINED;
+    await this.db.put('offers', offer);
+    return offer;
+  }
+
+  async expireOld(absWeekNow) {
+    const pending = await this.getPending();
+    for (const offer of pending) {
+      if (offer.expiresAbsWeek > absWeekNow) continue;
+      offer.status = OFFER_STATUS.EXPIRED;
+      await this.db.put('offers', offer);
+      await this.notifService.add('warning', 'Oferta Expirada', `A oferta do ${offer.promotionName} para lutar contra ${offer.opponentName} expirou sem resposta.`);
+    }
+  }
+
+  // Geração semanal: promoções procuram lutadores da academia sem
+  // compromisso e enviam propostas compatíveis com o nível de cada um.
+  async generateWeekly(absWeekNow, gym, team, promotions) {
+    const open = [...(await this.getPending()), ...(await this.getAccepted())];
+    const busyFighterIds = new Set(open.map(o => o.fighterId));
+    const targetedOpponentIds = new Set(open.map(o => o.opponentId));
+    const created = [];
+
+    for (const fighter of team) {
+      if (busyFighterIds.has(fighter.id)) continue;
+      if (fighter.status === 'injured' || fighter.status === 'retired') continue;
+      if (fighter.availableFromAbsWeek > absWeekNow) continue; // ainda em suspensão médica
+      if (fighter.fatigue >= 70) continue; // ninguém oferece luta a atleta esgotado
+      if (Math.random() > OFFER_CONFIG.WEEKLY_OFFER_CHANCE) continue;
+
+      const tier = this._pickTier(fighter, gym);
+      const candidates = promotions.filter(p => p.tier === tier);
+      if (candidates.length === 0) continue;
+      const promo = candidates[Math.floor(Math.random() * candidates.length)];
+
+      const opponent = await this._pickOpponent(promo.id, fighter, targetedOpponentIds, absWeekNow);
+      if (!opponent) continue;
+
+      const eventAbsWeek = promo.nextEventAbsWeek - absWeekNow >= OFFER_CONFIG.MIN_WEEKS_NOTICE
+        ? promo.nextEventAbsWeek
+        : promo.nextEventAbsWeek + promo.cadenceWeeks;
+
+      const purseCfg = OFFER_CONFIG.PURSE[promo.tier];
+      const rawPurse = purseCfg.base + fighter.popularity * purseCfg.perPop;
+      const purse = Math.round(rawPurse / 50) * 50;
+      const winBonus = Math.round((purse * OFFER_CONFIG.WIN_BONUS_RATIO) / 50) * 50;
+
+      const offer = new FightOffer({
+        id: generateId(),
+        promotionId: promo.id,
+        promotionName: promo.name,
+        tier: promo.tier,
+        fighterId: fighter.id,
+        opponentId: opponent.id,
+        opponentName: opponent.name,
+        opponentRecord: { ...opponent.record },
+        opponentOverall: opponent.overallRating,
+        opponentStyle: opponent.fightingStyle,
+        weightClass: fighter.weightClass,
+        purse,
+        winBonus,
+        eventAbsWeek,
+        expiresAbsWeek: absWeekNow + OFFER_CONFIG.EXPIRY_WEEKS,
+        createdAtAbsWeek: absWeekNow,
+      });
+
+      await this.db.put('offers', offer);
+      targetedOpponentIds.add(opponent.id);
+      busyFighterIds.add(fighter.id);
+      created.push(offer);
+
+      await this.notifService.add('offer', '📩 Nova Oferta de Luta', `${promo.name} quer ${fighter.name} contra ${opponent.name} — bolsa de $${purse.toLocaleString()}.`);
+    }
+
+    return created;
+  }
+
+  // Tier mais alto que o lutador destrava; com sorte a oferta vem dele,
+  // senão desce um degrau (mantém tier 3 sempre acessível).
+  _pickTier(fighter, gym) {
+    const gates = OFFER_CONFIG.TIER_GATES;
+    const wins = fighter.record.wins;
+
+    const unlocked = [3];
+    if ((fighter.popularity >= gates[2].popularity || wins >= gates[2].wins) && gym.reputation >= gates[2].gymRep) {
+      unlocked.push(2);
+    }
+    if ((fighter.popularity >= gates[1].popularity || wins >= gates[1].wins) && gym.reputation >= gates[1].gymRep) {
+      unlocked.push(1);
+    }
+
+    const best = Math.min(...unlocked);
+    if (best < 3 && Math.random() < OFFER_CONFIG.TOP_TIER_CHANCE) return best;
+    // desce um tier a partir do melhor (nunca abaixo de 3)
+    return Math.min(3, best + (Math.random() < 0.5 ? 0 : 1));
+  }
+
+  async _pickOpponent(promotionId, fighter, excludeIds, absWeekNow) {
+    const rosterData = await this.db.getIndex('fighters', 'organizationId', promotionId);
+    const candidates = rosterData
+      .map(d => new Fighter(d))
+      .filter(f =>
+        f.status === 'roster' &&
+        f.weightClass === fighter.weightClass &&
+        !excludeIds.has(f.id) &&
+        f.availableFromAbsWeek <= absWeekNow
+      );
+
+    if (candidates.length === 0) return null;
+
+    // Prefere adversário de nível próximo; se não houver, pega o mais próximo
+    const inWindow = candidates.filter(f =>
+      Math.abs(f.overallRating - fighter.overallRating) <= OFFER_CONFIG.OPPONENT_OVR_WINDOW
+    );
+    const pool = inWindow.length > 0 ? inWindow : candidates.sort((a, b) =>
+      Math.abs(a.overallRating - fighter.overallRating) -
+      Math.abs(b.overallRating - fighter.overallRating)
+    ).slice(0, 3);
+
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+}

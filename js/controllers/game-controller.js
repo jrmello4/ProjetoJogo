@@ -1,24 +1,40 @@
-import { Organization } from '../models/organization.js';
-import { Fighter } from '../models/fighter.js';
-import { Event } from '../models/event.js';
+import { Gym } from '../models/gym.js';
+import { Promotion } from '../models/promotion.js';
 import { DB } from '../services/db.js';
 import { DataGenerator } from '../services/data-generator.js';
 import { RankingService } from '../services/ranking.js';
-import { SimulationEngine } from './simulation.js';
 import { FighterController } from './fighter-controller.js';
 import { EventController } from './event-controller.js';
 import { SeasonService } from '../services/season-service.js';
 import { NotificationService } from '../services/notification-service.js';
-import { generateId } from '../utils/helpers.js';
+import { WorldService } from '../services/world-service.js';
+import { OfferService } from '../services/offer-service.js';
+import { generateId, clamp } from '../utils/helpers.js';
+import {
+  GYM_CONFIG,
+  PROMOTIONS,
+  CORE_WEIGHT_CLASSES,
+  WORLD_CONFIG,
+  COACH_CONFIG,
+  SCOUT_CONFIG,
+  TRAINING_FOCUS_META,
+  absWeek,
+} from '../config/game-config.js';
 
+const WORLD_MODE = 'gym';
+const WORLD_SCHEMA = 2;
+
+// Orquestrador do modo academia: o jogador é o treinador/dono de um gym;
+// as promoções são IA e o mundo gira sozinho a cada semana.
 export class GameController {
   constructor() {
     this.db = new DB();
-    this.organization = null;
     this.fighterCtrl = null;
     this.eventCtrl = null;
     this.seasonService = null;
     this.notifService = null;
+    this.worldService = null;
+    this.offerService = null;
   }
 
   async init() {
@@ -28,498 +44,397 @@ export class GameController {
     this.eventCtrl = new EventController(this.db);
     this.seasonService = new SeasonService(this.db);
     this.notifService = new NotificationService(this.db);
+    this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService);
+    this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService);
 
-    await this.seasonService.initSeason();
-    await this._ensureOrganization();
-    await this._ensureRivals();
-    await this._ensureInitialData();
+    const meta = await this.db.get('gameState', 'meta');
+    if (!meta || meta.mode !== WORLD_MODE || meta.schemaVersion !== WORLD_SCHEMA) {
+      await this._bootstrapNewWorld();
+    }
 
-    return this.organization;
+    return await this.getGym();
   }
 
-  async _ensureOrganization() {
-    let org = await this.db.get('organization', 'org-001');
-    if (!org) {
-      org = new Organization({
-        id: 'org-001',
-        name: 'Nova Fight Promotions',
-        money: 500000,
-        reputation: 50,
-        eventsHosted: 0,
-        champions: [],
+  // ===== Bootstrap do mundo =====
+  // Sem migração do modo antigo (organização): mundo novo, save novo.
+  async _bootstrapNewWorld() {
+    for (const store of ['fighters', 'organization', 'events', 'fights', 'rivalries', 'hallOfFame', 'notifications', 'offers']) {
+      await this.db.clear(store);
+    }
+    await this.db.put('gameState', {
+      id: 'state',
+      week: 1,
+      year: 1,
+      totalEvents: 0,
+      startedAt: new Date().toISOString(),
+    });
+    await this.db.put('gameState', { id: 'milestones' });
+
+    // Promoções de IA com calendários defasados para o mundo ter ritmo
+    const stagger = { 3: [2, 3], 2: [3, 4], 1: [5] };
+    const used = { 1: 0, 2: 0, 3: 0 };
+    for (const cfg of PROMOTIONS) {
+      const offsets = stagger[cfg.tier];
+      const promo = new Promotion({
+        ...cfg,
+        nextEventAbsWeek: offsets[used[cfg.tier] % offsets.length],
       });
-      await this.db.put('organization', org);
-    }
-    this.organization = new Organization(org);
-  }
+      used[cfg.tier]++;
+      await this.db.put('organization', promo);
 
-  async _ensureRivals() {
-    const existing = await this.db.getAll('organization');
-    const rivals = existing.filter(o => o.id !== 'org-001' && o.id.startsWith('rival-'));
-    if (rivals.length > 0) return;
-
-    const rivalNames = ['Pride Fighting Championship', 'Global Combat Elite', 'Iron Fist Promotions'];
-    for (let i = 0; i < rivalNames.length; i++) {
-      const rival = new Organization({
-        id: `rival-${i + 1}`,
-        name: rivalNames[i],
-        money: 200000 + Math.floor(Math.random() * 200000),
-        reputation: 30 + Math.floor(Math.random() * 30),
-        eventsHosted: 0,
-      });
-      await this.db.put('organization', rival);
-    }
-  }
-
-  async getRivalOrgs() {
-    const all = await this.db.getAll('organization');
-    return all.filter(o => o.id !== 'org-001' && o.id.startsWith('rival-'));
-  }
-
-  async processRivalHires() {
-    const rivals = await this.getRivalOrgs();
-    const freeAgents = await this.fighterCtrl.getFreeAgents();
-    const hired = [];
-
-    for (const rival of rivals) {
-      // Each rival tries to hire 1-2 free agents per week
-      const targetCount = 1 + Math.floor(Math.random() * 2);
-      const available = freeAgents.filter(f => !hired.some(h => h.id === f.id));
-
-      for (let i = 0; i < targetCount && available.length > 0; i++) {
-        // Pick a random free agent
-        const idx = Math.floor(Math.random() * available.length);
-        const target = available.splice(idx, 1)[0];
-
-        if (target && rival.money >= 10000) {
-          target.status = 'roster';
-          target.organizationId = rival.id;
-          await this.fighterCtrl.updateFighter(target);
-          rival.money -= 10000;
-          await this.db.put('organization', rival);
-          hired.push(target);
-        }
-      }
-    }
-
-    return hired;
-  }
-
-  async _ensureInitialData() {
-    const fighters = await this.fighterCtrl.getAllFighters();
-
-    if (fighters.length === 0) {
-      const roster = DataGenerator.generateRoster(12, 'org-001');
-      const freeAgents = DataGenerator.generateFreeAgents(30);
-
-      for (const f of [...roster, ...freeAgents]) {
+      const roster = DataGenerator.generatePromotionRoster(promo, CORE_WEIGHT_CLASSES);
+      for (const f of roster) {
         f.id = generateId();
         await this.db.put('fighters', f);
       }
-    } else {
-      const freeCount = fighters.filter(f => f.status === 'free').length;
-      if (freeCount < 15) {
-        const newAgents = DataGenerator.generateFreeAgents(15 - freeCount);
-        for (const f of newAgents) {
-          f.id = generateId();
-          await this.db.put('fighters', f);
-        }
-      }
+    }
+
+    // Agentes livres recrutáveis
+    for (let i = 0; i < WORLD_CONFIG.FREE_AGENT_POOL; i++) {
+      const weightClass = CORE_WEIGHT_CLASSES[i % CORE_WEIGHT_CLASSES.length];
+      const agent = DataGenerator.generateFighter(null, { weightClass, skillRange: [30, 55] });
+      agent.id = generateId();
+      await this.db.put('fighters', agent);
+    }
+
+    // Equipe inicial: 3 prospectos em divisões distintas
+    const divisions = [...CORE_WEIGHT_CLASSES].sort(() => Math.random() - 0.5).slice(0, GYM_CONFIG.STARTING_TEAM_SIZE);
+    for (const weightClass of divisions) {
+      const prospect = DataGenerator.generateProspect(weightClass);
+      prospect.id = generateId();
+      prospect.gymId = GYM_CONFIG.ID;
+      prospect.status = 'gym';
+      await this.db.put('fighters', prospect);
+    }
+
+    const gym = new Gym({});
+    await this.db.put('gameState', gym);
+
+    await this.db.put('gameState', { id: 'meta', mode: WORLD_MODE, schemaVersion: WORLD_SCHEMA, createdAt: new Date().toISOString() });
+
+    // Primeiras ofertas: o jogador precisa ter uma decisão na mesa já no load
+    await this._ensureInitialOffers(gym);
+  }
+
+  async _ensureInitialOffers(gym) {
+    const team = await this.getTeam();
+    const promotions = await this.worldService.getPromotions();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const created = await this.offerService.generateWeekly(1, gym, team, promotions);
+      if (created.length > 0) break;
     }
   }
 
-  async getOrganization() {
-    const data = await this.db.get('organization', 'org-001');
-    this.organization = new Organization(data);
-    return this.organization;
+  // ===== Academia =====
+  async getGym() {
+    const data = await this.db.get('gameState', 'gym');
+    return new Gym(data || {});
   }
 
-  async updateOrganization(org) {
-    this.organization = org;
-    await this.db.put('organization', org);
+  async updateGym(gym) {
+    gym.id = 'gym'; // keyPath do store gameState — sem isso o put falha
+    await this.db.put('gameState', gym);
   }
 
+  async getTeam() {
+    return await this.fighterCtrl.getTeam(GYM_CONFIG.ID);
+  }
+
+  recruitFee(fighter) {
+    return GYM_CONFIG.RECRUIT_FEE_BASE + fighter.overallRating * GYM_CONFIG.RECRUIT_FEE_PER_OVR;
+  }
+
+  async recruitFighter(fighterId) {
+    const gym = await this.getGym();
+    const team = await this.getTeam();
+    const fighter = await this.fighterCtrl.getFighter(fighterId);
+    if (!fighter) return { ok: false, reason: 'Lutador não encontrado.' };
+
+    if (team.length >= gym.maxTeamSize) {
+      return { ok: false, reason: `Academia lotada (${gym.maxTeamSize} atletas). Dispense alguém ou expanda as instalações.` };
+    }
+    const fee = this.recruitFee(fighter);
+    if (gym.cash < fee) {
+      return { ok: false, reason: `Caixa insuficiente. A taxa de recrutamento é $${fee.toLocaleString()}.` };
+    }
+
+    const state = await this.seasonService.getState();
+    gym.addTransaction(absWeek(state), `Recrutamento — ${fighter.name}`, -fee);
+    await this.updateGym(gym);
+    await this.fighterCtrl.recruitToGym(fighterId, GYM_CONFIG.ID);
+
+    return { ok: true, fee, fighter };
+  }
+
+  // ===== Tick semanal =====
+  // Ordem importa: mundo gira -> ofertas expiram/chegam -> economia -> treino.
+  // cornerHooks (opcional): instruções de córner ao vivo para a luta do
+  // jogador nesta semana. Omitido durante simulateWeeks (fast-forward).
+  async processWeek(cornerHooks = null) {
+    const state = await this.seasonService.advanceWeek();
+    const now = absWeek(state);
+    const gym = await this.getGym();
+
+    const world = await this.worldService.processWeek(now, state.startedAt, gym, cornerHooks);
+
+    await this.offerService.expireOld(now);
+    const team = await this.getTeam();
+    const promotions = await this.worldService.getPromotions();
+    const offersCreated = await this.offerService.generateWeekly(now, gym, team, promotions);
+
+    const economy = this._applyWeeklyEconomy(gym, team, now);
+    await this._applyWeeklyTraining(team, gym);
+
+    const milestonesUnlocked = await this._checkMilestones(world.playerEvents, gym);
+
+    await this.updateGym(gym);
+
+    if (gym.cash < 0) {
+      await this.notifService.add('warning', '⚠️ Caixa Negativo', 'A academia está no vermelho. Aceite lutas ou reduza a equipe antes que as portas fechem.');
+    }
+
+    return { state, now, world, offersCreated, economy, milestonesUnlocked };
+  }
+
+  // ===== Simulação de período (fast-forward) =====
+  // Roda N semanas em automático (sem instruções de córner) e devolve um
+  // resumo agregado em vez de centenas de notificações individuais.
+  async simulateWeeks(count) {
+    const startGym = await this.getGym();
+    const startCash = startGym.cash;
+    const startRep = startGym.reputation;
+    const startWins = startGym.wins;
+    const startLosses = startGym.losses;
+
+    this.notifService.muted = true;
+    const fightResults = [];
+    const milestonesUnlocked = [];
+    let weeksSimulated = 0;
+
+    try {
+      for (let i = 0; i < count; i++) {
+        const summary = await this.processWeek();
+        weeksSimulated++;
+
+        for (const evt of summary.world.playerEvents) {
+          for (const r of evt.playerResults) {
+            const playerIsA = evt.playerFighterIds.has(r.fighterAId);
+            const won = r.winnerId === (playerIsA ? r.fighterAId : r.fighterBId);
+            fightResults.push({
+              fighterName: playerIsA ? r.fighterAName : r.fighterBName,
+              opponentName: playerIsA ? r.fighterBName : r.fighterAName,
+              won,
+              method: r.method,
+              promoName: evt.event.promotionName,
+              absWeek: summary.now,
+            });
+          }
+        }
+        milestonesUnlocked.push(...summary.milestonesUnlocked);
+      }
+    } finally {
+      this.notifService.muted = false;
+    }
+
+    const endGym = await this.getGym();
+
+    return {
+      weeksSimulated,
+      cashDelta: endGym.cash - startCash,
+      repDelta: endGym.reputation - startRep,
+      winsDelta: endGym.wins - startWins,
+      lossesDelta: endGym.losses - startLosses,
+      fightResults,
+      milestonesUnlocked,
+      endGym,
+    };
+  }
+
+  _applyWeeklyEconomy(gym, team, now) {
+    const expenses = gym.weeklyExpenses(team.length);
+    const income = gym.weeklyIncome();
+
+    gym.addTransaction(now, 'Mensalidades de alunos', income.total);
+    gym.addTransaction(now, `Custos da academia (aluguel + treinadores)`, -expenses.total);
+
+    return { expenses, income, net: income.total - expenses.total };
+  }
+
+  // Cada lutador treina o próprio foco (fighter.trainingFocus), amplificado
+  // pelo nível da academia e por treinadores auxiliares contratados.
+  async _applyWeeklyTraining(team, gym) {
+    const facilityBonus = gym.facility.trainingBonus;
+
+    for (const fighter of team) {
+      if (fighter.status === 'injured') continue;
+
+      const focus = fighter.trainingFocus || 'striking';
+      const meta = TRAINING_FOCUS_META[focus] || TRAINING_FOCUS_META.striking;
+
+      if (focus === 'recovery') {
+        const coachRecovery = gym.hasCoach('cardio') ? (COACH_CONFIG.cardio.recoveryBonus || 0) : 0;
+        fighter.fatigue = clamp(fighter.fatigue - (12 + gym.facility.recoveryBonus + coachRecovery), 0, 100);
+        fighter.applyMoraleChange(3);
+      } else {
+        const coachBonus = gym.hasCoach(focus) ? (COACH_CONFIG[focus]?.gainBonus || 0) : 0;
+        const gainChance = Math.min(0.9, 0.35 + (fighter.hidden.discipline / 100) * 0.4 + facilityBonus + coachBonus);
+        for (const attr of meta.attrs) {
+          if (Math.random() < gainChance) {
+            fighter.attributes[attr] = clamp(fighter.attributes[attr] + 1, 0, Math.max(fighter.attributes[attr], fighter.hidden.potential));
+          }
+        }
+        fighter.applyFatigue(4);
+      }
+      fighter.recover();
+      await this.fighterCtrl.updateFighter(fighter);
+    }
+  }
+
+  async setTrainingFocus(fighterId, focus) {
+    if (!TRAINING_FOCUS_META[focus]) return null;
+    const fighter = await this.fighterCtrl.getFighter(fighterId);
+    if (!fighter) return null;
+    fighter.trainingFocus = focus;
+    await this.fighterCtrl.updateFighter(fighter);
+    return fighter;
+  }
+
+  // ===== Estrutura da academia (Fase 2) =====
+  async upgradeFacility() {
+    const gym = await this.getGym();
+    const next = gym.nextFacility;
+    if (!next) return { ok: false, reason: 'Sua academia já está no nível máximo.' };
+    if (gym.cash < next.upgradeCost) {
+      return { ok: false, reason: `Caixa insuficiente. O upgrade custa $${next.upgradeCost.toLocaleString()}.` };
+    }
+
+    const state = await this.seasonService.getState();
+    gym.addTransaction(absWeek(state), `Upgrade — ${next.name}`, -next.upgradeCost);
+    gym.level++;
+    await this.updateGym(gym);
+    return { ok: true, facility: next };
+  }
+
+  async hireCoach(category) {
+    const gym = await this.getGym();
+    if (!COACH_CONFIG[category]) return { ok: false, reason: 'Categoria inválida.' };
+    if (gym.hasCoach(category)) return { ok: false, reason: 'Treinador já contratado.' };
+    if (gym.hiredCoachCount >= gym.facility.coachSlots) {
+      return { ok: false, reason: `Sua estrutura atual só comporta ${gym.facility.coachSlots} treinador${gym.facility.coachSlots === 1 ? '' : 'es'}. Faça upgrade para abrir mais vagas.` };
+    }
+
+    gym.coaches[category] = true;
+    await this.updateGym(gym);
+    return { ok: true };
+  }
+
+  async fireCoach(category) {
+    const gym = await this.getGym();
+    gym.coaches[category] = false;
+    await this.updateGym(gym);
+    return { ok: true };
+  }
+
+  async purchaseScout() {
+    const gym = await this.getGym();
+    if (gym.scoutLevel > 0) return { ok: false, reason: 'Você já contratou um olheiro.' };
+    if (gym.cash < SCOUT_CONFIG.unlockCost) {
+      return { ok: false, reason: `Caixa insuficiente. O olheiro custa $${SCOUT_CONFIG.unlockCost.toLocaleString()}.` };
+    }
+
+    const state = await this.seasonService.getState();
+    gym.addTransaction(absWeek(state), 'Contratação — Olheiro', -SCOUT_CONFIG.unlockCost);
+    gym.scoutLevel = 1;
+    await this.updateGym(gym);
+    return { ok: true };
+  }
+
+  // ===== Objetivos (milestones do modo academia) =====
   async getMilestones() {
     const raw = await this.db.get('gameState', 'milestones');
     const state = raw || {};
-    // Lista de conquistas com progresso
-    const achievementDefs = [
-      { id: 'firstEvent', label: 'Primeiro Evento', desc: 'Realizar o primeiro evento', max: 1 },
-      { id: 'fiveEvents', label: '5 Eventos', desc: 'Realizar 5 eventos', max: 5 },
-      { id: 'tenEvents', label: '10 Eventos', desc: 'Realizar 10 eventos', max: 10 },
-      { id: 'firstProfit', label: 'Primeiro Lucro', desc: 'Ter lucro em um evento', max: 1 },
-      { id: 'threeProfit', label: '3 Lucros Consecutivos', desc: 'Lucrar em 3 eventos seguidos', max: 3 },
-      { id: 'superEvent', label: 'Super Evento', desc: 'Evento com receita > $200k', max: 1 },
-      { id: 'firstChampion', label: 'Primeiro Campeão', desc: 'Ter um campeão em qualquer divisão', max: 1 },
-      { id: 'threeChamps', label: '3 Divisões', desc: 'Campeão em 3 divisões', max: 3 },
+    const defs = [
+      { id: 'firstFight', label: 'Estreia Profissional', desc: 'Colocar um atleta para lutar', max: 1 },
+      { id: 'firstWin', label: 'Primeira Vitória', desc: 'Vencer a primeira luta', max: 1 },
+      { id: 'fiveWins', label: '5 Vitórias', desc: 'Acumular 5 vitórias da equipe', max: 5 },
+      { id: 'tenWins', label: '10 Vitórias', desc: 'Acumular 10 vitórias da equipe', max: 10 },
+      { id: 'firstFinish', label: 'Primeira Finalização', desc: 'Vencer por KO, TKO ou finalização', max: 1 },
+      { id: 'firstTier2', label: 'Palco Nacional', desc: 'Lutar em uma promoção nacional', max: 1 },
+      { id: 'firstTier1', label: 'Elite Mundial', desc: 'Lutar na Apex Fighting Championship', max: 1 },
+      { id: 'rep50', label: 'Academia Respeitada', desc: 'Alcançar reputação 50', max: 50 },
     ];
 
-    return achievementDefs.map(a => ({
-      ...a,
-      current: state[a.id] || 0,
-      unlocked: (state[a.id] || 0) >= a.max,
+    return defs.map(d => ({
+      ...d,
+      current: Math.min(state[d.id] || 0, d.max),
+      unlocked: (state[d.id] || 0) >= d.max,
     }));
   }
 
-  async checkMilestones(event, revenue, profit) {
+  async _checkMilestones(playerEvents, gym) {
     const state = await this.db.get('gameState', 'milestones') || {};
-    const roster = await this.fighterCtrl.getRoster('org-001');
-    const freeAgents = await this.fighterCtrl.getFreeAgents();
-    const allFighters = [...roster, ...freeAgents];
-    const rankings = RankingService.calculateRankings(allFighters);
-    const champions = RankingService.getChampions(rankings);
+    state.id = 'milestones'; // keyPath do store gameState — sem isso o put falha
+    const unlocked = [];
+    const bump = (id, value, max) => {
+      const prev = state[id] || 0;
+      if (prev >= max) return;
+      state[id] = value;
+      if (value >= max) unlocked.push(id);
+    };
 
-    const newUnlocks = [];
+    for (const evt of playerEvents) {
+      for (const r of evt.playerResults) {
+        const playerIsA = evt.playerFighterIds.has(r.fighterAId);
+        const playerId = playerIsA ? r.fighterAId : r.fighterBId;
+        const won = r.winnerId === playerId;
+        const isFinish = r.method && !r.method.startsWith('Decision');
 
-    // firstEvent: first event simulated
-    if (!state.firstEvent) { state.firstEvent = 1; newUnlocks.push('firstEvent'); }
-
-    // fiveEvents / tenEvents
-    state.eventCount = (state.eventCount || 0) + 1;
-    if (state.eventCount === 5 && !state.fiveEvents) { state.fiveEvents = 5; newUnlocks.push('fiveEvents'); }
-    if (state.eventCount === 10 && !state.tenEvents) { state.tenEvents = 10; newUnlocks.push('tenEvents'); }
-
-    // firstProfit / threeProfit
-    if (profit > 0) {
-      state.profitStreak = (state.profitStreak || 0) + 1;
-      if (!state.firstProfit) { state.firstProfit = 1; newUnlocks.push('firstProfit'); }
-      if (state.profitStreak >= 3 && !state.threeProfit) { state.threeProfit = 3; newUnlocks.push('threeProfit'); }
-    } else {
-      state.profitStreak = 0;
+        bump('firstFight', 1, 1);
+        if (won) {
+          bump('firstWin', 1, 1);
+          if (isFinish) bump('firstFinish', 1, 1);
+        }
+        if (evt.event.tier === 2) bump('firstTier2', 1, 1);
+        if (evt.event.tier === 1) bump('firstTier1', 1, 1);
+      }
     }
 
-    // superEvent
-    if (revenue >= 200000 && !state.superEvent) {
-      state.superEvent = 1;
-      newUnlocks.push('superEvent');
-    }
-
-    // firstChampion / threeChamps
-    const champCount = Object.keys(champions).length;
-    if (champCount >= 1 && !state.firstChampion) { state.firstChampion = 1; newUnlocks.push('firstChampion'); }
-    if (champCount >= 3 && !state.threeChamps) { state.threeChamps = 3; newUnlocks.push('threeChamps'); }
+    bump('fiveWins', Math.min(gym.wins, 5), 5);
+    bump('tenWins', Math.min(gym.wins, 10), 10);
+    bump('rep50', Math.min(gym.reputation, 50), 50);
 
     await this.db.put('gameState', state);
-    return newUnlocks;
+    return unlocked;
   }
 
-  async processWeeklyCosts() {
-    const org = await this.getOrganization();
-    const roster = await this.fighterCtrl.getRoster('org-001');
-
-    // Staff costs scale with reputation
-    const staffCost = Math.floor(5000 + org.reputation * 100);
-    // Facility maintenance
-    const facilityCost = Math.floor(2000 + org.reputation * 50);
-    // Marketing overhead
-    const marketingCost = Math.floor(1000 + org.reputation * 30);
-    // Fighter salaries (weekly retainer)
-    const salaryCost = roster.reduce((sum, f) => sum + (f.contract?.pursePerFight || 2000) * 0.1, 0);
-
-    const totalCost = staffCost + facilityCost + marketingCost + Math.round(salaryCost);
-    org.money -= totalCost;
-    await this.updateOrganization(org);
-
-    return { staffCost, facilityCost, marketingCost, salaryCost: Math.round(salaryCost), totalCost };
-  }
-
-  async processRetirements() {
-    const roster = await this.fighterCtrl.getRoster('org-001');
-    const retired = [];
-
-    for (const f of roster) {
-      const age = f.age || 30;
-      let retireChance = 0;
-
-      // Age-based retirement
-      if (age >= 40) retireChance = 0.10;
-      else if (age >= 38) retireChance = 0.05;
-      else if (age >= 35) retireChance = 0.02;
-
-      // Consecutive losses increase chance
-      let lossStreak = 0;
-      for (const fight of f.fights) {
-        if (!fight.won) lossStreak++;
-        else break;
-      }
-      if (lossStreak >= 5) retireChance += 0.05;
-      if (lossStreak >= 3) retireChance += 0.03;
-
-      if (Math.random() < retireChance) {
-        f.status = 'retired';
-        f.organizationId = null;
-        f.contract = null;
-        await this.fighterCtrl.updateFighter(f);
-        retired.push(f);
-      }
-    }
-
-    return retired;
-  }
-
-  async processDraft() {
-    const state = await this.seasonService.getState();
-    // Draft happens at the end of each year (week 52)
-    if (state.week !== 52) return [];
-
-    const newFighters = [];
-    const count = 5 + Math.floor(Math.random() * 6); // 5-10 new fighters
-
-    for (let i = 0; i < count; i++) {
-      const fighter = DataGenerator.generateFighter(null);
-      fighter.age = 20 + Math.floor(Math.random() * 5); // Young prospects
-      fighter.hidden.potential = Math.min(99, fighter.hidden.potential + Math.floor(Math.random() * 20));
-      fighter.status = 'free';
-      fighter.organizationId = null;
-      await this.fighterCtrl.createFighter(fighter);
-      newFighters.push(fighter);
-    }
-
-    return newFighters;
-  }
-
-  async generateWeeklyNews() {
-    const roster = await this.fighterCtrl.getRoster('org-001');
-    const news = [];
-
-    // Check for streaks
-    for (const f of roster) {
-      let streak = 0;
-      let streakType = null;
-      for (const fight of f.fights) {
-        if (fight.won) { streak++; streakType = 'win'; }
-        else break;
-      }
-      if (streak >= 3 && streakType === 'win') {
-        news.push({ type: 'streak', text: `${f.name} está em uma sequência de ${streak} vitórias consecutivas!`, fighterId: f.id });
-      }
-
-      // Losing streak
-      let lossStreak = 0;
-      for (const fight of f.fights) {
-        if (!fight.won) { lossStreak++; }
-        else break;
-      }
-      if (lossStreak >= 2) {
-        news.push({ type: 'losing', text: `${f.name} vem de ${lossStreak} derrotas seguidas — momento crítico na carreira.`, fighterId: f.id });
-      }
-    }
-
-    // Random callout (rivalry building)
-    if (roster.length >= 2) {
-      const caller = roster[Math.floor(Math.random() * roster.length)];
-      const target = roster.filter(f => f.id !== caller.id)[Math.floor(Math.random() * (roster.length - 1))];
-      if (caller && target && Math.random() < 0.3) {
-        news.push({ type: 'callout', text: `${caller.name} desafia ${target.name}: "Depois de você, não tem mais ninguém na divisão!"`, fighterId: caller.id });
-      }
-    }
-
-    // Random training injury
-    if (roster.length > 0 && Math.random() < 0.15) {
-      const injured = roster[Math.floor(Math.random() * roster.length)];
-      news.push({ type: 'injury', text: `${injured.name} sofreu uma lesão leve no treino — sem gravidade, mas pode afetar o desempenho.`, fighterId: injured.id });
-    }
-
-    return news;
-  }
-
+  // ===== Dashboard =====
   async getDashboard() {
-    const org = await this.getOrganization();
+    const gym = await this.getGym();
+    const team = await this.getTeam();
+    const pendingOffers = await this.offerService.getPending();
+    const bookings = await this.offerService.getAccepted();
+    const promotions = await this.worldService.getPromotions();
+    const pastEvents = (await this.eventCtrl.getAllEvents()).slice(0, 6);
     const milestones = await this.getMilestones();
-    const rivals = await this.getRivalOrgs();
-    const orgStandings = [
-      { name: org.name, rep: org.reputation, money: org.money, events: org.eventsHosted, isPlayer: true },
-      ...rivals.map(r => ({ name: r.name, rep: r.reputation, money: r.money, events: r.eventsHosted || 0, isPlayer: false })),
-    ].sort((a, b) => b.rep - a.rep);
-    const roster = await this.fighterCtrl.getRoster('org-001');
-    const freeAgents = await this.fighterCtrl.getFreeAgents();
-    const events = await this.eventCtrl.getUpcomingEvents();
-    const pastEvents = await this.eventCtrl.getPastEvents();
+    const state = await this.seasonService.getState();
 
-    const allFighters = [...roster, ...freeAgents];
-    const rankings = RankingService.calculateRankings(allFighters);
+    const allFighters = await this.fighterCtrl.getAllFighters();
+    const active = allFighters.filter(f => f.status !== 'retired');
+    const rankings = RankingService.calculateRankings(active);
     const champions = RankingService.getChampions(rankings);
 
     return {
-      organization: org,
-      roster,
-      freeAgents,
-      upcomingEvents: events,
+      gym,
+      team,
+      pendingOffers,
+      bookings,
+      promotions,
       pastEvents,
-      rankings,
-      champions,
-      rosterSize: roster.length,
-      freeAgentCount: freeAgents.length,
       milestones,
-      orgStandings,
-    };
-  }
-
-  async simulateEvent(eventId) {
-    const event = await this.eventCtrl.getEvent(eventId);
-    if (!event) return null;
-
-    const results = [];
-    const allFights = event.allFights;
-
-    for (const fight of allFights) {
-      const fighterA = await this.fighterCtrl.getFighter(fight.fighterAId);
-      const fighterB = await this.fighterCtrl.getFighter(fight.fighterBId);
-
-      if (!fighterA || !fighterB) continue;
-
-      // Corte de peso antes da luta
-      fighterA.applyWeightCutImpact();
-      fighterB.applyWeightCutImpact();
-
-      const isBigEvent = fight.card === 'main' || this.organization.reputation >= 70;
-
-      const result = SimulationEngine.simulateFight(fighterA, fighterB, isBigEvent);
-      result.eventId = eventId;
-      result.card = fight.card;
-
-      // Recuperar corte de peso após luta
-      fighterA.recoverFromWeightCut();
-      fighterB.recoverFromWeightCut();
-
-      // Decrementar contratos (useFight fix)
-      if (fighterA.contract && fighterA.contract.useFight) {
-        fighterA.contract.useFight();
-        if (fighterA.contract.fightsRemaining <= 0) {
-          fighterA.status = 'free';
-          fighterA.organizationId = null;
-          fighterA.contract = null;
-          await this.notifService.add('contract-expiry', 'Contrato Expirado', `${fighterA.name} teve o contrato expirado e foi liberado.`);
-        } else if (fighterA.contract.fightsRemaining === 1) {
-          await this.notifService.add('contract-expiry', 'Contrato Prestes a Expirar', `${fighterA.name} tem 1 luta restante no contrato.`);
-        }
-      }
-      if (fighterB.contract && fighterB.contract.useFight) {
-        fighterB.contract.useFight();
-        if (fighterB.contract.fightsRemaining <= 0) {
-          fighterB.status = 'free';
-          fighterB.organizationId = null;
-          fighterB.contract = null;
-          await this.notifService.add('contract-expiry', 'Contrato Expirado', `${fighterB.name} teve o contrato expirado e foi liberado.`);
-        } else if (fighterB.contract.fightsRemaining === 1) {
-          await this.notifService.add('contract-expiry', 'Contrato Prestes a Expirar', `${fighterB.name} tem 1 luta restante no contrato.`);
-        }
-      }
-
-      // Verificar lesao
-      if (fighterA.status === 'injured') {
-        await this.notifService.add('injury', 'Lesão', `${fighterA.name} ficou lesionado.`);
-      }
-      if (fighterB.status === 'injured') {
-        await this.notifService.add('injury', 'Lesão', `${fighterB.name} ficou lesionado.`);
-      }
-
-      await this.fighterCtrl.updateFighter(fighterA);
-      await this.fighterCtrl.updateFighter(fighterB);
-      await this.eventCtrl.saveFightResult(result);
-
-      results.push(result);
-    }
-
-    // Bônus pós-evento (Luta da Noite, Performance da Noite)
-    const bonuses = SimulationEngine.getFightBonus(results);
-    event.bonuses = bonuses;
-    let bonusTotal = 0;
-    for (const b of bonuses) {
-      bonusTotal += b.amount;
-      await this.notifService.add('success', `🏆 ${b.type}`, `${b.winner} ganhou $${b.amount.toLocaleString()}!`);
-    }
-
-    // Avançar semana após evento
-    const newState = await this.seasonService.advanceWeek();
-    await this.seasonService.applyWeeklyRecovery(this.fighterCtrl);
-    await this.notifService.add('week-advance', 'Semana Avançada', `Agora é Semana ${newState.week}, Ano ${newState.year}. Fadiga e moral recuperadas.`);
-
-    event.status = 'completed';
-    event.results = results;
-
-    const org = await this.getOrganization();
-
-    // Popularidade afeta receita
-    const allFighters = await this.fighterCtrl.getAllFighters();
-    const starPower = allFights.reduce((sum, fight) => {
-      const a = allFighters.find(f => f.id === fight.fighterAId);
-      const b = allFighters.find(f => f.id === fight.fighterBId);
-      return sum + (a ? a.popularity : 0) + (b ? b.popularity : 0);
-    }, 0);
-    const attendanceMultiplier = 1 + starPower / 1200;
-
-    // Attendance mais realista — capado
-    const baseAttendance = Math.floor(
-      org.reputation * 5 + Math.random() * 300
-    );
-    const attendance = Math.min(
-      Math.floor(baseAttendance * (0.7 + event.totalFights * 0.15) * attendanceMultiplier),
-      5000
-    );
-
-    // Ticket price mais baixo
-    const ticketPrice = Math.floor(30 + org.reputation * 1.2);
-    const revenue = attendance * ticketPrice;
-
-    // Expenses realistas: salarios + producao + marketing + venue
-    let fighterPurses = 0;
-    for (const fight of allFights) {
-      const a = allFighters.find(f => f.id === fight.fighterAId);
-      const b = allFighters.find(f => f.id === fight.fighterBId);
-      // Purses baseadas no pursePerFight do contrato
-      fighterPurses += (a?.contract?.pursePerFight || 2000) + (b?.contract?.pursePerFight || 2000);
-      // Bonus de vitoria se ganhou
-      fighterPurses += (a?.contract?.victoryBonus || 500) + (b?.contract?.victoryBonus || 500);
-    }
-    // Minimo de purse por luta
-    const minPurse = event.totalFights * 2000;
-    fighterPurses = Math.max(fighterPurses, minPurse);
-
-    // Custos de producao (escalam com reputacao)
-    const productionCost = Math.floor(3000 + org.reputation * 50 + event.totalFights * 1500);
-    // Marketing
-    const marketingCost = Math.floor(1000 + org.reputation * 30 + starPower * 2);
-    // Venue (escala com tamanho do evento)
-    const venueCost = Math.floor(2000 + attendance * 0.5 + event.totalFights * 1000);
-
-    const totalExpenses = fighterPurses + productionCost + marketingCost + venueCost + bonusTotal;
-
-    event.revenue = revenue;
-    event.expenses = totalExpenses;
-
-    org.addMoney(revenue - totalExpenses);
-    org.updateReputation(Math.floor(event.totalFights * 1.5 + Math.random() * 5));
-    org.eventsHosted++;
-
-    await this.updateOrganization(org);
-    await this.eventCtrl.updateEvent(event);
-
-    const newOrg = await this.getOrganization();
-    const allFighters2 = await this.fighterCtrl.getAllFighters();
-    const rankings = RankingService.calculateRankings(allFighters2);
-
-    // Check milestones
-    const newUnlocks = await this.checkMilestones(event, revenue, revenue - totalExpenses);
-
-    return {
-      event,
-      results,
-      organization: newOrg,
-      newUnlocks,
+      champions,
       rankings,
-      revenue,
-      expenses: totalExpenses,
-      profit: revenue - totalExpenses,
+      state,
+      now: absWeek(state),
     };
-  }
-
-  async refreshFreeAgents() {
-    const agents = DataGenerator.generateFreeAgents(5);
-    for (const f of agents) {
-      f.id = generateId();
-      await this.db.put('fighters', f);
-    }
-    return await this.fighterCtrl.getFreeAgents();
   }
 }

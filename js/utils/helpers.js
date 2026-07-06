@@ -54,6 +54,26 @@ export function getWeightClassLabel(weight) {
   return labels[weight] || weight;
 }
 
+// Nível de um atributo (0-99) — usado para colorir barras de progresso
+export function attributeTier(value) {
+  return value >= 70 ? 'high' : value >= 40 ? 'medium' : 'low';
+}
+
+// Barra de atributo rotulada — clareza > tabela crua de abreviações
+export function renderAttrBar(label, value) {
+  return `
+    <div class="attr-item">
+      <div class="attr-label">
+        <span>${label}</span>
+        <span class="attr-value">${Math.round(value)}</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill ${attributeTier(value)}" style="width:${Math.max(0, Math.min(100, value))}%"></div>
+      </div>
+    </div>
+  `;
+}
+
 export function getWeightClassShort(weight) {
   const shorts = {
     'Strawweight': 'SW',

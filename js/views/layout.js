@@ -4,28 +4,47 @@ import { riveManager } from '../motion/rive-manager.js';
 import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/+esm';
 
 export class LayoutView {
+  static _renderSeq = 0;
+
   static render(content, animate = true) {
     const mainContent = document.getElementById('mainContent');
-    if (!mainContent) return;
+    if (!mainContent) return Promise.resolve();
+
+    // Renders concorrentes: só o mais recente pode commitar,
+    // senão um tween atrasado sobrescreve a tela nova com HTML velho
+    const seq = ++LayoutView._renderSeq;
 
     if (animate) {
-      gsap.to(mainContent, {
-        opacity: 0,
-        y: -12,
-        duration: 0.2,
-        ease: 'power2.in',
-        onComplete: () => {
+      return new Promise((resolve) => {
+        const commit = () => {
+          if (seq !== LayoutView._renderSeq) return resolve();
+          LayoutView._renderSeq++; // invalida commits duplicados deste mesmo render
           mainContent.innerHTML = content;
+          gsap.set(mainContent, { opacity: 1, y: 0 });
           motion.scrollToTop();
           motion.animatePageEnter(mainContent);
           riveManager.mountAll(mainContent);
           this._animateStats(mainContent);
-        },
+          resolve();
+        };
+
+        gsap.killTweensOf(mainContent);
+        gsap.to(mainContent, {
+          opacity: 0,
+          y: -12,
+          duration: 0.2,
+          ease: 'power2.in',
+          onComplete: commit,
+        });
+
+        // rAF pausa em abas em segundo plano — garante o commit mesmo sem animação
+        setTimeout(commit, 350);
       });
-    } else {
-      mainContent.innerHTML = content;
-      riveManager.mountAll(mainContent);
     }
+
+    mainContent.innerHTML = content;
+    riveManager.mountAll(mainContent);
+    return Promise.resolve();
   }
 
   static _animateStats(container) {

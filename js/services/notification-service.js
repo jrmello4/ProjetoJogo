@@ -1,4 +1,5 @@
 import { generateId } from '../utils/helpers.js';
+import { Toast } from './toast.js';
 
 const TYPE_ICONS = {
   'contract-expiry': '⚠️',
@@ -14,9 +15,12 @@ const TYPE_ICONS = {
 export class NotificationService {
   constructor(db) {
     this.db = db;
+    this.muted = false; // true durante simulação de período — evita centenas de toasts
   }
 
   async add(type, title, message) {
+    if (this.muted) return null;
+
     const n = {
       id: generateId(),
       type,
@@ -26,6 +30,7 @@ export class NotificationService {
       timestamp: new Date().toISOString(),
     };
     await this.db.add('notifications', n);
+    try { Toast.show(type, title, message); } catch (e) { /* toast é opcional */ }
     return n;
   }
 

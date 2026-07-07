@@ -34,11 +34,12 @@ export class FighterController {
     return all.map(d => new Fighter(d)).filter(f => f.status !== 'retired');
   }
 
-  async recruitToGym(fighterId, gymId) {
+  async recruitToGym(fighterId, gymId, absWeekNow = 0) {
     const fighter = await this.getFighter(fighterId);
     if (!fighter) return null;
 
     fighter.gymId = gymId;
+    fighter.gymJoinedAbsWeek = absWeekNow;
     fighter.status = 'gym';
     fighter.organizationId = null;
     fighter.contract = null;

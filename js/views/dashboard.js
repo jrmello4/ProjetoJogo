@@ -147,6 +147,27 @@ export class DashboardView {
       </div>
     `;
 
+    // ===== Ranking de Academias — a rivalidade que dá gás pra competir =====
+    const standingsHtml = data.gymStandings ? `
+      <div class="section-label" data-reveal>Rivalidade</div>
+      <div class="card mb-4" data-reveal>
+        <div class="card-header"><span class="card-title">Ranking de Academias</span></div>
+        <div data-reveal-stagger>
+          ${data.gymStandings.map((s, i) => `
+            <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold" style="color:${i === 0 ? 'var(--gold)' : 'var(--text-muted)'}">#${i + 1}</span>
+                <span class="text-sm ${s.isPlayer ? 'font-bold' : ''}">${s.name}</span>
+                ${s.isPlayer ? '<span class="badge badge-info" style="font-size:0.6rem">VOCÊ</span>' : ''}
+              </div>
+              <span class="text-xs text-muted">${s.reputation} rep</span>
+            </div>
+          `).join('')}
+        </div>
+        <div class="text-xs text-muted mt-2">Academias rivais disputam os mesmos agentes livres e podem seduzir atletas com moral baixa. Mantenha o time motivado.</div>
+      </div>
+    ` : '';
+
     // ===== Objetivos =====
     const pendingMilestones = (milestones || []).filter(m => !m.unlocked).slice(0, 3);
     const milestonesHtml = pendingMilestones.length > 0 ? `
@@ -264,6 +285,7 @@ export class DashboardView {
       </div>
 
       ${worldHtml}
+      ${standingsHtml}
       ${milestonesHtml}
       ${resultsHtml}
     `;

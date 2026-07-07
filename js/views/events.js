@@ -329,7 +329,7 @@ export class EventsView {
   // ===== Resumo de período (simular meses/anos de uma vez) =====
 
   static renderPeriodSummary(result) {
-    const { weeksSimulated, cashDelta, repDelta, winsDelta, lossesDelta, fightResults, milestonesUnlocked } = result;
+    const { weeksSimulated, offersAccepted, rivalSignings, poachedFighters, cashDelta, repDelta, winsDelta, lossesDelta, fightResults, milestonesUnlocked } = result;
 
     const fightsHtml = fightResults.length === 0
       ? '<div class="empty-state"><p>Nenhuma luta da sua equipe durante o período — só o tempo passou.</p></div>'
@@ -350,10 +350,20 @@ export class EventsView {
       </div>
     `;
 
+    const rivalHtml = (rivalSignings > 0 || (poachedFighters && poachedFighters.length > 0)) ? `
+      <div class="section-label" data-reveal>Movimentação das Academias Rivais</div>
+      <div class="card mb-4" data-reveal>
+        ${poachedFighters && poachedFighters.length > 0 ? poachedFighters.map(p => `
+          <div class="text-sm" style="padding:0.4rem 0;color:var(--danger)">💔 ${p.fighterName} foi seduzido pela ${p.gymName}</div>
+        `).join('') : ''}
+        ${rivalSignings > 0 ? `<div class="text-sm text-muted" style="padding:0.4rem 0">As academias rivais fecharam ${rivalSignings} contratação${rivalSignings === 1 ? '' : 'ões'} no mercado de agentes livres.</div>` : ''}
+      </div>
+    ` : '';
+
     return `
       <div class="page-header">
         <h2>Resumo do Período</h2>
-        <p>${weeksSimulated} semana${weeksSimulated === 1 ? '' : 's'} simulada${weeksSimulated === 1 ? '' : 's'}</p>
+        <p>${weeksSimulated} semana${weeksSimulated === 1 ? '' : 's'} simulada${weeksSimulated === 1 ? '' : 's'} · ${offersAccepted} oferta${offersAccepted === 1 ? '' : 's'} de luta aceita${offersAccepted === 1 ? '' : 's'} automaticamente</p>
       </div>
 
       <div class="grid grid-cols-4 mb-4" data-reveal-stagger>
@@ -376,6 +386,7 @@ export class EventsView {
       </div>
 
       ${milestonesHtml}
+      ${rivalHtml}
 
       <div class="section-label" data-reveal>Lutas da Equipe no Período</div>
       <div class="card mb-4" data-reveal>

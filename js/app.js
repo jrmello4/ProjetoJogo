@@ -24,7 +24,7 @@ import { SaveService } from './services/save-service.js';
 import { ThreeArena } from './three-arena.js';
 import { ThreeBackground } from './three-background.js';
 import { motion } from './motion/motion-engine.js';
-import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, absWeekToLabel } from './config/game-config.js';
+import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, absWeekToLabel } from './config/game-config.js';
 
 class App {
   constructor() {
@@ -333,37 +333,64 @@ class App {
     modal.className = 'modal-overlay';
     modal.id = 'simulatePeriodModal';
     modal.innerHTML = `
-      <div class="modal" style="max-width:480px">
+      <div class="modal" style="max-width:520px">
         <div class="modal-header">
           <h3>Simular Período</h3>
           <button class="modal-close" data-close="simulatePeriodModal">&times;</button>
         </div>
         <p class="text-sm" style="color:var(--text-secondary)">
-          Avance várias semanas de uma vez. Lutas já aceitas acontecem normalmente, sem instruções de córner;
-          ofertas não respondidas podem expirar.
+          Avance várias semanas de uma vez, sem instruções de córner. Ofertas de luta compatíveis são
+          <strong>aceitas automaticamente</strong> — a academia não fica parada enquanto você está fora.
         </p>
-        <div class="difficulty-grid" style="grid-template-columns:repeat(2,1fr)">
-          ${SIMULATE_PERIOD_PRESETS.map(p => `
-            <div class="difficulty-option" data-weeks="${p.weeks}">
-              <div class="difficulty-name">${p.label}</div>
-              <div class="difficulty-cash">${p.weeks} semanas</div>
-            </div>
-          `).join('')}
+
+        <div class="form-group">
+          <label class="form-label">Foco de Treino da Equipe no Período</label>
+          <div class="flex gap-2" style="flex-wrap:wrap">
+            <button class="btn btn-sm btn-primary sim-focus-option" data-focus="">Manter escolhas individuais</button>
+            ${Object.entries(TRAINING_FOCUS_META).map(([key, meta]) => `
+              <button class="btn btn-sm btn-secondary sim-focus-option" data-focus="${key}">${meta.icon} ${meta.label}</button>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Duração</label>
+          <div class="difficulty-grid" style="grid-template-columns:repeat(2,1fr)">
+            ${SIMULATE_PERIOD_PRESETS.map(p => `
+              <div class="difficulty-option" data-weeks="${p.weeks}">
+                <div class="difficulty-name">${p.label}</div>
+                <div class="difficulty-cash">${p.weeks} semanas</div>
+              </div>
+            `).join('')}
+          </div>
         </div>
       </div>
     `;
     document.body.appendChild(modal);
 
+    let selectedFocus = '';
+    modal.querySelectorAll('.sim-focus-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedFocus = btn.dataset.focus;
+        modal.querySelectorAll('.sim-focus-option').forEach(b => {
+          b.classList.remove('btn-primary');
+          b.classList.add('btn-secondary');
+        });
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-primary');
+      });
+    });
+
     modal.querySelectorAll('.difficulty-option').forEach(opt => {
       opt.addEventListener('click', async () => {
         const weeks = parseInt(opt.dataset.weeks);
         modal.remove();
-        await this.runSimulatePeriod(weeks);
+        await this.runSimulatePeriod(weeks, selectedFocus || null);
       });
     });
   }
 
-  async runSimulatePeriod(weeks) {
+  async runSimulatePeriod(weeks, trainingFocus) {
     await LayoutView.render(`
       <div class="page-header">
         <h2>Simulando...</h2>
@@ -372,7 +399,7 @@ class App {
       <div class="empty-state"><p>O tempo está passando — isso pode levar alguns segundos.</p></div>
     `, false);
 
-    const result = await this.game.simulateWeeks(weeks);
+    const result = await this.game.simulateWeeks(weeks, { trainingFocus });
 
     const html = EventsView.renderPeriodSummary(result);
     await LayoutView.render(html);

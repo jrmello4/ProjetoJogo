@@ -82,7 +82,9 @@ export class WorldService {
       const fighter = await this.fighterCtrl.getFighter(booking.fighterId);
       let opponent = await this.fighterCtrl.getFighter(booking.opponentId);
 
-      if (!fighter || fighter.status === 'injured' || fighter.status === 'retired') {
+      // gymId !== GYM_CONFIG.ID cobre o caso de o atleta ter sido roubado
+      // por uma academia rival (ou dispensado) depois de aceitar a luta
+      if (!fighter || fighter.gymId !== GYM_CONFIG.ID || fighter.status === 'injured' || fighter.status === 'retired') {
         booking.status = OFFER_STATUS.CANCELLED;
         await this.db.put('offers', booking);
         await this.notifService.add('warning', 'Luta Cancelada', `${booking.opponentName ? 'A luta contra ' + booking.opponentName : 'Uma luta'} foi cancelada — seu atleta não pôde competir.`);

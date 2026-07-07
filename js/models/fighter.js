@@ -34,6 +34,7 @@ export class Fighter {
     this.status = data.status;
     this.organizationId = data.organizationId;
     this.gymId = data.gymId || null; // academia que treina o lutador
+    this.gymJoinedAbsWeek = data.gymJoinedAbsWeek || 0; // carência anti-assédio de rivais
     this.injury = data.injury || null; // { untilAbsWeek, description }
     this.trainingFocus = data.trainingFocus || 'striking'; // foco individual de treino semanal
     this.availableFromAbsWeek = data.availableFromAbsWeek || 0; // suspensão médica pós-luta

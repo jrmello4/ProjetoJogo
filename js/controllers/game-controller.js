@@ -9,10 +9,13 @@ import { SeasonService } from '../services/season-service.js';
 import { NotificationService } from '../services/notification-service.js';
 import { WorldService } from '../services/world-service.js';
 import { OfferService } from '../services/offer-service.js';
+import { RivalGymService } from '../services/rival-gym-service.js';
+import { RivalGym } from '../models/rival-gym.js';
 import { generateId, clamp } from '../utils/helpers.js';
 import {
   GYM_CONFIG,
   PROMOTIONS,
+  RIVAL_GYMS,
   CORE_WEIGHT_CLASSES,
   WORLD_CONFIG,
   COACH_CONFIG,
@@ -35,6 +38,7 @@ export class GameController {
     this.notifService = null;
     this.worldService = null;
     this.offerService = null;
+    this.rivalGymService = null;
   }
 
   async init() {
@@ -46,6 +50,7 @@ export class GameController {
     this.notifService = new NotificationService(this.db);
     this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService);
     this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService);
+    this.rivalGymService = new RivalGymService(this.db, this.fighterCtrl, this.notifService);
 
     const meta = await this.db.get('gameState', 'meta');
     if (!meta || meta.mode !== WORLD_MODE || meta.schemaVersion !== WORLD_SCHEMA) {
@@ -89,6 +94,13 @@ export class GameController {
       }
     }
 
+    // Academias rivais — competem pelos mesmos agentes livres e podem
+    // seduzir atletas insatisfeitos da sua equipe
+    for (const cfg of RIVAL_GYMS) {
+      const rival = new RivalGym({ ...cfg });
+      await this.db.put('organization', rival);
+    }
+
     // Agentes livres recrutáveis
     for (let i = 0; i < WORLD_CONFIG.FREE_AGENT_POOL; i++) {
       const weightClass = CORE_WEIGHT_CLASSES[i % CORE_WEIGHT_CLASSES.length];
@@ -103,6 +115,7 @@ export class GameController {
       const prospect = DataGenerator.generateProspect(weightClass);
       prospect.id = generateId();
       prospect.gymId = GYM_CONFIG.ID;
+      prospect.gymJoinedAbsWeek = 1;
       prospect.status = 'gym';
       await this.db.put('fighters', prospect);
     }
@@ -161,7 +174,7 @@ export class GameController {
     const state = await this.seasonService.getState();
     gym.addTransaction(absWeek(state), `Recrutamento — ${fighter.name}`, -fee);
     await this.updateGym(gym);
-    await this.fighterCtrl.recruitToGym(fighterId, GYM_CONFIG.ID);
+    await this.fighterCtrl.recruitToGym(fighterId, GYM_CONFIG.ID, absWeek(state));
 
     return { ok: true, fee, fighter };
   }
@@ -185,6 +198,11 @@ export class GameController {
     const economy = this._applyWeeklyEconomy(gym, team, now);
     await this._applyWeeklyTraining(team, gym);
 
+    // Academias rivais disputam o mercado e podem seduzir atletas seus —
+    // roda depois do treino pra refletir moral já atualizado da semana
+    const teamAfterTraining = await this.getTeam();
+    const rivalActivity = await this.rivalGymService.processWeek(now, gym, teamAfterTraining);
+
     const milestonesUnlocked = await this._checkMilestones(world.playerEvents, gym);
 
     await this.updateGym(gym);
@@ -193,13 +211,26 @@ export class GameController {
       await this.notifService.add('warning', '⚠️ Caixa Negativo', 'A academia está no vermelho. Aceite lutas ou reduza a equipe antes que as portas fechem.');
     }
 
-    return { state, now, world, offersCreated, economy, milestonesUnlocked };
+    return { state, now, world, offersCreated, economy, milestonesUnlocked, rivalActivity };
   }
 
   // ===== Simulação de período (fast-forward) =====
   // Roda N semanas em automático (sem instruções de córner) e devolve um
   // resumo agregado em vez de centenas de notificações individuais.
-  async simulateWeeks(count) {
+  // options.trainingFocus: se definido, aplica o mesmo foco a toda a equipe
+  // durante o período (senão mantém o foco individual já escolhido de cada um).
+  // Ofertas de luta são aceitas automaticamente — o jogador está "fora".
+  async simulateWeeks(count, options = {}) {
+    const { trainingFocus = null } = options;
+
+    if (trainingFocus) {
+      const team = await this.getTeam();
+      for (const fighter of team) {
+        fighter.trainingFocus = trainingFocus;
+        await this.fighterCtrl.updateFighter(fighter);
+      }
+    }
+
     const startGym = await this.getGym();
     const startCash = startGym.cash;
     const startRep = startGym.reputation;
@@ -209,12 +240,23 @@ export class GameController {
     this.notifService.muted = true;
     const fightResults = [];
     const milestonesUnlocked = [];
+    const poachedFighters = [];
     let weeksSimulated = 0;
+    let offersAccepted = 0;
+    let rivalSignings = 0;
 
     try {
       for (let i = 0; i < count; i++) {
         const summary = await this.processWeek();
         weeksSimulated++;
+
+        // Aceita automaticamente as ofertas da semana — sem o jogador por
+        // perto para decidir, a academia fecha o que aparecer.
+        const pendingOffers = await this.offerService.getPending();
+        for (const offer of pendingOffers) {
+          await this.offerService.accept(offer.id, summary.now);
+          offersAccepted++;
+        }
 
         for (const evt of summary.world.playerEvents) {
           for (const r of evt.playerResults) {
@@ -231,6 +273,11 @@ export class GameController {
           }
         }
         milestonesUnlocked.push(...summary.milestonesUnlocked);
+
+        rivalSignings += summary.rivalActivity.signings.length;
+        if (summary.rivalActivity.poached) {
+          poachedFighters.push({ ...summary.rivalActivity.poached, absWeek: summary.now });
+        }
       }
     } finally {
       this.notifService.muted = false;
@@ -240,6 +287,9 @@ export class GameController {
 
     return {
       weeksSimulated,
+      offersAccepted,
+      rivalSignings,
+      poachedFighters,
       cashDelta: endGym.cash - startCash,
       repDelta: endGym.reputation - startRep,
       winsDelta: endGym.wins - startWins,
@@ -362,6 +412,7 @@ export class GameController {
       { id: 'firstTier2', label: 'Palco Nacional', desc: 'Lutar em uma promoção nacional', max: 1 },
       { id: 'firstTier1', label: 'Elite Mundial', desc: 'Lutar na Apex Fighting Championship', max: 1 },
       { id: 'rep50', label: 'Academia Respeitada', desc: 'Alcançar reputação 50', max: 50 },
+      { id: 'topGym', label: 'Academia Nº1', desc: 'Superar todas as academias rivais em reputação', max: 1 },
     ];
 
     return defs.map(d => ({
@@ -403,6 +454,11 @@ export class GameController {
     bump('tenWins', Math.min(gym.wins, 10), 10);
     bump('rep50', Math.min(gym.reputation, 50), 50);
 
+    const rivalGyms = await this.rivalGymService.getAll();
+    if (rivalGyms.length > 0 && rivalGyms.every(r => gym.reputation > r.reputation)) {
+      bump('topGym', 1, 1);
+    }
+
     await this.db.put('gameState', state);
     return unlocked;
   }
@@ -417,11 +473,17 @@ export class GameController {
     const pastEvents = (await this.eventCtrl.getAllEvents()).slice(0, 6);
     const milestones = await this.getMilestones();
     const state = await this.seasonService.getState();
+    const rivalGyms = await this.rivalGymService.getAll();
 
     const allFighters = await this.fighterCtrl.getAllFighters();
     const active = allFighters.filter(f => f.status !== 'retired');
     const rankings = RankingService.calculateRankings(active);
     const champions = RankingService.getChampions(rankings);
+
+    const gymStandings = [
+      { name: gym.name, reputation: gym.reputation, isPlayer: true },
+      ...rivalGyms.map(r => ({ name: r.name, reputation: r.reputation, isPlayer: false })),
+    ].sort((a, b) => b.reputation - a.reputation);
 
     return {
       gym,
@@ -433,6 +495,7 @@ export class GameController {
       milestones,
       champions,
       rankings,
+      gymStandings,
       state,
       now: absWeek(state),
     };

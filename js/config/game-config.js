@@ -194,6 +194,33 @@ export const MILESTONE_LABELS = {
   firstTier2: '📺 Palco Nacional!',
   firstTier1: '⭐ Elite Mundial!',
   rep50: '🏛️ Academia Respeitada!',
+  topGym: '👑 Academia Nº1 do Ranking!',
+};
+
+// Academias rivais — o verdadeiro antagonista do treinador: competem pelos
+// mesmos agentes livres e podem seduzir atletas insatisfeitos da sua equipe.
+export const RIVAL_GYMS = [
+  { id: 'rivalgym-fortaleza', name: 'Fortaleza MMA', reputation: 45 },
+  { id: 'rivalgym-elite', name: 'Elite Combat Team', reputation: 55 },
+  { id: 'rivalgym-blacktiger', name: 'Black Tiger Academy', reputation: 30 },
+];
+
+export const RIVAL_GYM_CONFIG = {
+  // Chance semanal de CADA academia rival tentar recrutar um agente livre
+  RECRUIT_CHANCE_PER_GYM: 0.35,
+  REP_PER_SIGNING: 1,
+  REP_PER_POACH: 3,
+
+  // Assédio a atletas da sua equipe: só um rival tenta por atleta por
+  // semana (não soma chance de todas as academias), chance-base pequena,
+  // amplificada por moral baixa e por reputação do rival acima da sua
+  // (com teto pra não punir demais o início de jogo, quando o gap é maior).
+  MIN_TENURE_WEEKS: 8, // carência antes de um atleta poder ser assediado
+  POACH_BASE_CHANCE: 0.008,
+  POACH_MORALE_WEIGHT: 0.10, // moral 0 soma até +10%
+  POACH_REP_WEIGHT: 0.05, // vantagem de reputação (capada em 40) soma até +2%
+  POACH_REP_EDGE_CAP: 40,
+  MAX_POACH_PER_WEEK: 1,
 };
 
 // Presets de simulação de período (fast-forward)

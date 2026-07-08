@@ -8,6 +8,7 @@ export class SimulationEngine {
   static _planEdge(plan, opponent) {
     if (!plan.strongVs && !plan.weakVs) return 0;
 
+    const a = opponent.attributes;
     const striking = opponent.strikingScore;
     const grappling = opponent.grapplingScore;
     const gap = striking - grappling;
@@ -15,10 +16,16 @@ export class SimulationEngine {
     const traits = new Set();
     if (gap > 6) traits.add('striker');
     else if (gap < -6) traits.add('grappler');
-    if (opponent.attributes.cardio >= 60) traits.add('highCardio');
-    else if (opponent.attributes.cardio <= 45) traits.add('lowCardio');
-    if (opponent.attributes.fightIQ >= 60) traits.add('highIq');
-    else if (opponent.attributes.fightIQ <= 45) traits.add('lowIq');
+    if (a.cardio >= 60) traits.add('highCardio');
+    else if (a.cardio <= 45) traits.add('lowCardio');
+    if (a.fightIQ >= 60) traits.add('highIq');
+    else if (a.fightIQ <= 45) traits.add('lowIq');
+    // Épico C: novos traits baseados em atributos expandidos
+    if ((a.power ?? 50) >= 65) traits.add('powerful');
+    if ((a.takedowns ?? 50) >= 65) traits.add('wrestler');
+    if ((a.submissionOffense ?? 50) >= 65) traits.add('submission');
+    if ((a.speed ?? 50) >= 65) traits.add('fast');
+    if ((a.composure ?? 50) <= 40) traits.add('nervous');
 
     if (plan.strongVs && traits.has(plan.strongVs)) return GAME_PLAN_EDGE.strong;
     if (plan.weakVs && traits.has(plan.weakVs)) return GAME_PLAN_EDGE.weak;
@@ -190,33 +197,74 @@ export class SimulationEngine {
     // Stamina decays over rounds
     const staminaEffect = staminaFactor / 100;
 
+    // Épico C: novos atributos expandidos
+    const a = fighter.attributes;
+
+    // Fôlego: recovery ajuda a manter stamina entre rounds
+    const recoveryBonus = 1 + (a.recovery ?? 50) / 200;
+    const adjustedStamina = staminaEffect * recoveryBonus;
+
     // Plano de jogo (a luta inteira) × instrução de córner (este round)
-    const technique = fighter.techniqueScore * fatiguePenalty * staminaEffect;
-    const cardio = fighter.attributes.cardio * fatiguePenalty * moraleFactor * staminaEffect * game.cardioMod;
-    const iq = fighter.attributes.fightIQ * determinationFactor;
-    const chin = fighter.attributes.chin;
-    const striking = fighter.strikingScore * fatiguePenalty * staminaEffect * corner.strikingMod * game.strikingMod;
-    const grappling = fighter.grapplingScore * fatiguePenalty * staminaEffect * corner.grapplingMod * game.grapplingMod;
+    const technique = fighter.techniqueScore * fatiguePenalty * adjustedStamina;
+    const cardio = a.cardio * fatiguePenalty * moraleFactor * adjustedStamina * game.cardioMod;
+    const iq = a.fightIQ * determinationFactor;
+
+    // Striking: boxing/kickboxing/muayThai + power, footwork, headMovement, clinch, speed, aggression
+    const strikingPower = 1 + (a.power ?? 50) / 200;
+    const strikingDefense = 1 + ((a.footwork ?? 50) + (a.headMovement ?? 50)) / 400;
+    const strikingSpeed = 1 + (a.speed ?? 50) / 200;
+    const aggressionMod = 1 + ((a.aggression ?? 50) - 50) / 200;
+    const clinchFactor = 1 + (a.clinch ?? 50) / 300;
+
+    const striking = fighter.strikingScore * fatiguePenalty * adjustedStamina
+      * corner.strikingMod * game.strikingMod
+      * strikingPower * strikingSpeed * aggressionMod;
+
+    // Grappling: wrestling/bjj + takedowns, takedownDefense, groundControl, submissionOffense, strength
+    const tdPower = 1 + (a.takedowns ?? 50) / 200;
+    const tdDefense = 1 + (a.takedownDefense ?? 50) / 300;
+    const groundBonus = 1 + (a.groundControl ?? 50) / 300;
+    const strengthMod = 1 + (a.strength ?? 50) / 300;
+    const subOff = (a.submissionOffense ?? 50) / 100;
+    const subDef = (a.submissionDefense ?? 50) / 100;
+
+    const grappling = fighter.grapplingScore * fatiguePenalty * adjustedStamina
+      * corner.grapplingMod * game.grapplingMod
+      * tdPower * groundBonus * strengthMod;
+
+    // Chin + durability (novo): resistência a nocautes
+    const chin = a.chin * (1 + ((a.durability ?? 50) - 50) / 200);
+
+    // Adaptability: melhora o plano de jogo quanto mais dura a luta
+    const adaptBonus = 1 + ((a.adaptability ?? 50) - 50) / 300;
+
+    // Composure: ajuda em big events e decisões apertadas
+    const composureFactor = 1 + ((a.composure ?? 50) - 50) / 200;
 
     const styleAdvantage = this._styleMatchup(fighter, opponent);
 
     const baseScore =
-      technique * 0.25 +
+      technique * 0.2 +
       striking * 0.2 +
       grappling * 0.15 +
-      cardio * 0.15 +
-      iq * 0.15 +
+      cardio * 0.1 +
+      iq * 0.1 +
       chin * 0.05 +
-      styleAdvantage * 5;
+      styleAdvantage * 5 +
+      // Novos atributos contribuem para o score base
+      (a.power ?? 50) * 0.02 +
+      (a.speed ?? 50) * 0.02 +
+      (a.strength ?? 50) * 0.01;
 
     const noise = Gaussian.random(0, 6);
     // A leitura do adversário: acertar o plano paga, errar cobra.
-    let finalScore = (baseScore + noise) * (1 + planEdge);
+    let finalScore = (baseScore + noise) * (1 + planEdge * adaptBonus);
 
-    // DNA traits for big events
+    // DNA traits + composure para big events
     if (isBigEvent) {
       if (fighter.dna.pressurePerformer) finalScore *= 1.10;
       if (fighter.dna.bigEventNervous) finalScore *= 0.90;
+      finalScore *= composureFactor;
     }
 
     return {
@@ -227,28 +275,57 @@ export class SimulationEngine {
       iq,
       chin,
       technique,
+      // Novos para _genRoundStats
+      power: a.power ?? 50,
+      footwork: a.footwork ?? 50,
+      headMovement: a.headMovement ?? 50,
+      takedowns: a.takedowns ?? 50,
+      submissionOffense: a.submissionOffense ?? 50,
+      submissionDefense: a.submissionDefense ?? 50,
+      speed: a.speed ?? 50,
+      aggression: a.aggression ?? 50,
+      durability: a.durability ?? 50,
+      groundControl: a.groundControl ?? 50,
+      strength: a.strength ?? 50,
+      composure: a.composure ?? 50,
     };
   }
 
   static _genRoundStats(fighterA, fighterB, perfA, perfB, round) {
     // Generate realistic-looking MMA stats per round
-    const strikeBaseA = Math.max(5, perfA.striking * 1.5 + Gaussian.random(0, 5));
-    const strikeBaseB = Math.max(5, perfB.striking * 1.5 + Gaussian.random(0, 5));
+    // Épico C: agressão aumenta volume, footwork/headMovement reduzem acertos sofridos
+    const aggressionModA = 0.8 + (perfA.aggression / 100) * 0.4;
+    const aggressionModB = 0.8 + (perfB.aggression / 100) * 0.4;
+    const defenseModA = 1 - ((perfA.footwork + perfA.headMovement) / 2) / 400;
+    const defenseModB = 1 - ((perfB.footwork + perfB.headMovement) / 2) / 400;
+
+    const strikeBaseA = Math.max(3, perfA.striking * 1.5 * aggressionModA * defenseModB + Gaussian.random(0, 5));
+    const strikeBaseB = Math.max(3, perfB.striking * 1.5 * aggressionModB * defenseModA + Gaussian.random(0, 5));
 
     const sigStrikesA = Math.round(strikeBaseA * (0.5 + Math.random() * 0.5));
     const sigStrikesB = Math.round(strikeBaseB * (0.5 + Math.random() * 0.5));
 
-    // Knockdowns: rare, based on striking differential
-    const kdChanceA = Math.max(0, (perfA.striking - perfB.striking) * 0.02 - 0.1 + Math.random() * 0.08);
-    const kdChanceB = Math.max(0, (perfB.striking - perfA.striking) * 0.02 - 0.1 + Math.random() * 0.08);
+    // Knockdowns: power + striking differential
+    const powerFactorA = perfA.power / 100;
+    const powerFactorB = perfB.power / 100;
+    const kdChanceA = Math.max(0, (perfA.striking - perfB.striking) * 0.02 * powerFactorA - 0.1 + Math.random() * 0.08);
+    const kdChanceB = Math.max(0, (perfB.striking - perfA.striking) * 0.02 * powerFactorB - 0.1 + Math.random() * 0.08);
 
-    // Takedowns: based on grappling score
-    const tdChanceA = Math.max(0, (perfA.grappling - perfB.grappling) * 0.01 + Math.random() * 0.08);
-    const tdChanceB = Math.max(0, (perfB.grappling - perfA.grappling) * 0.01 + Math.random() * 0.08);
+    // Takedowns: takedowns skill + strength + grappling differential
+    const tdSkillA = perfA.takedowns / 100;
+    const tdSkillB = perfB.takedowns / 100;
+    const strengthFactorA = perfA.strength / 100;
+    const strengthFactorB = perfB.strength / 100;
+    const tdChanceA = Math.max(0, (perfA.grappling - perfB.grappling) * 0.01 * tdSkillA * strengthFactorA + Math.random() * 0.08);
+    const tdChanceB = Math.max(0, (perfB.grappling - perfA.grappling) * 0.01 * tdSkillB * strengthFactorB + Math.random() * 0.08);
 
-    // Submission attempts: based on BJJ/grappling
-    const subChanceA = tdChanceA * 0.3;
-    const subChanceB = tdChanceB * 0.3;
+    // Submission attempts: submissionOffense + groundControl
+    const subOffA = perfA.submissionOffense / 100;
+    const subOffB = perfB.submissionOffense / 100;
+    const gcA = perfA.groundControl / 100;
+    const gcB = perfB.groundControl / 100;
+    const subChanceA = tdChanceA * 0.3 * subOffA * gcA;
+    const subChanceB = tdChanceB * 0.3 * subOffB * gcB;
 
     return {
       sigStrikesA,
@@ -275,29 +352,37 @@ export class SimulationEngine {
 
     const strikeDiff = winnerPerf.striking - loserPerf.striking;
     const grappleDiff = winnerPerf.grappling - loserPerf.grappling;
-    let chinFactor = loser.attributes.chin / 100;
-    // Plano de jogo e instrução de córner mudam o quanto o SEU atleta expõe
-    // o queixo. O adversário luta no automático.
+
+    // Épico C: chin + durability determinam resistência a nocautes
+    let chinFactor = (loser.attributes.chin / 100) * (1 + ((loserPerf.durability ?? 50) - 50) / 200);
     if (loser === fighterA) {
       if (cornerModA) chinFactor *= cornerModA.chinMod;
       if (plan) chinFactor *= plan.chinMod;
     }
 
+    // Submissão: subOffense do vencedor vs subDefense do perdedor
+    const subAdvantage = (winnerPerf.submissionOffense / 100) - (loserPerf.submissionDefense / 100);
+
+    // Power do vencedor aumenta KO chance
+    const powerMod = 1 + (winnerPerf.power - 50) / 200;
+
     const methods = [];
 
-    // KO: high striking diff and low chin
-    if (strikeDiff > 3 && chinFactor < 0.7) {
-      methods.push({ method: 'KO', weight: 30 });
-      methods.push({ method: 'TKO', weight: 40 });
+    // KO: high striking diff and low chin, amplified by power
+    if (strikeDiff > 3 * (1 / powerMod) && chinFactor < 0.7) {
+      methods.push({ method: 'KO', weight: Math.round(30 * powerMod) });
+      methods.push({ method: 'TKO', weight: Math.round(40 * powerMod) });
     }
 
-    // Submission: high grappling diff
-    if (grappleDiff > 3) {
-      methods.push({ method: 'Submission', weight: 35 });
+    // Submission: high grappling diff + sub advantage
+    if (grappleDiff > 3 && subAdvantage > 0) {
+      methods.push({ method: 'Submission', weight: Math.round(35 * (1 + subAdvantage)) });
     }
 
-    // TKO by strikes
-    methods.push({ method: 'TKO', weight: 20 });
+    // TKO by strikes (sempre possível com strikingDiff alto)
+    if (strikeDiff > 2) {
+      methods.push({ method: 'TKO', weight: 20 });
+    }
 
     if (methods.length === 0) return null;
 

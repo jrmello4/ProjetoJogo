@@ -100,16 +100,28 @@ export class ScoutingService {
   static readTendencies(fighter, level) {
     if (level < 1) return null;
 
+    const a = fighter.attributes;
     const striking = fighter.strikingScore;
     const grappling = fighter.grapplingScore;
     const gap = striking - grappling;
 
-    return {
+    const r = {
       archetype: gap > 6 ? 'striker' : gap < -6 ? 'grappler' : 'mixed',
-      cardio: fighter.attributes.cardio >= 60 ? 'highCardio' : fighter.attributes.cardio <= 45 ? 'lowCardio' : 'midCardio',
-      iq: fighter.attributes.fightIQ >= 60 ? 'highIq' : fighter.attributes.fightIQ <= 45 ? 'lowIq' : 'midIq',
-      chin: fighter.attributes.chin,
+      cardio: a.cardio >= 60 ? 'highCardio' : a.cardio <= 45 ? 'lowCardio' : 'midCardio',
+      iq: a.fightIQ >= 60 ? 'highIq' : a.fightIQ <= 45 ? 'lowIq' : 'midIq',
+      chin: a.chin,
     };
+
+    // Épico C: atributos expandidos revelados em níveis mais altos
+    if (level >= 2) {
+      r.power = (a.power ?? 50) >= 65 ? 'powerful' : (a.power ?? 50) <= 35 ? 'weak' : 'average';
+      r.takedowns = (a.takedowns ?? 50) >= 65 ? 'wrestler' : (a.takedowns ?? 50) <= 35 ? 'poorTakedowns' : 'average';
+      r.submissionOffense = (a.submissionOffense ?? 50) >= 65 ? 'submission' : 'average';
+      r.speed = (a.speed ?? 50) >= 65 ? 'fast' : 'average';
+      r.composure = (a.composure ?? 50) >= 65 ? 'composed' : (a.composure ?? 50) <= 35 ? 'nervous' : 'average';
+    }
+
+    return r;
   }
 
   static levelLabel(level) {

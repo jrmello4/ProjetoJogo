@@ -103,17 +103,57 @@ export class FighterProfileView {
       <div class="grid grid-cols-2 mb-4">
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Atributos</span>
+            <span class="card-title">🥊 Em Pé</span>
           </div>
           <div class="attr-grid">
-            ${attrBars(fighter.attributes.boxing, 'Boxing', fighter.attributes.boxing >= 70 ? 'high' : fighter.attributes.boxing >= 40 ? 'medium' : 'low')}
-            ${attrBars(fighter.attributes.kickboxing, 'Kickboxing', fighter.attributes.kickboxing >= 70 ? 'high' : fighter.attributes.kickboxing >= 40 ? 'medium' : 'low')}
-            ${attrBars(fighter.attributes.muayThai, 'Muay Thai', fighter.attributes.muayThai >= 70 ? 'high' : fighter.attributes.muayThai >= 40 ? 'medium' : 'low')}
-            ${attrBars(fighter.attributes.wrestling, 'Wrestling', fighter.attributes.wrestling >= 70 ? 'high' : fighter.attributes.wrestling >= 40 ? 'medium' : 'low')}
-            ${attrBars(fighter.attributes.bjj, 'BJJ', fighter.attributes.bjj >= 70 ? 'high' : fighter.attributes.bjj >= 40 ? 'medium' : 'low')}
+            ${fighter.attributes.boxing !== undefined ? attrBars(fighter.attributes.boxing, 'Boxing', fighter.attributes.boxing >= 70 ? 'high' : fighter.attributes.boxing >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.kickboxing !== undefined ? attrBars(fighter.attributes.kickboxing, 'Kickboxing', fighter.attributes.kickboxing >= 70 ? 'high' : fighter.attributes.kickboxing >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.muayThai !== undefined ? attrBars(fighter.attributes.muayThai, 'Muay Thai', fighter.attributes.muayThai >= 70 ? 'high' : fighter.attributes.muayThai >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.power !== undefined ? attrBars(fighter.attributes.power, 'Power', fighter.attributes.power >= 70 ? 'high' : fighter.attributes.power >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.footwork !== undefined ? attrBars(fighter.attributes.footwork, 'Footwork', fighter.attributes.footwork >= 70 ? 'high' : fighter.attributes.footwork >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.headMovement !== undefined ? attrBars(fighter.attributes.headMovement, 'Head Movement', fighter.attributes.headMovement >= 70 ? 'high' : fighter.attributes.headMovement >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.clinch !== undefined ? attrBars(fighter.attributes.clinch, 'Clinch', fighter.attributes.clinch >= 70 ? 'high' : fighter.attributes.clinch >= 40 ? 'medium' : 'low') : ''}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">🤼 Chão</span>
+          </div>
+          <div class="attr-grid">
+            ${fighter.attributes.wrestling !== undefined ? attrBars(fighter.attributes.wrestling, 'Wrestling', fighter.attributes.wrestling >= 70 ? 'high' : fighter.attributes.wrestling >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.bjj !== undefined ? attrBars(fighter.attributes.bjj, 'BJJ', fighter.attributes.bjj >= 70 ? 'high' : fighter.attributes.bjj >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.takedowns !== undefined ? attrBars(fighter.attributes.takedowns, 'Takedowns', fighter.attributes.takedowns >= 70 ? 'high' : fighter.attributes.takedowns >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.takedownDefense !== undefined ? attrBars(fighter.attributes.takedownDefense, 'TD Defense', fighter.attributes.takedownDefense >= 70 ? 'high' : fighter.attributes.takedownDefense >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.groundControl !== undefined ? attrBars(fighter.attributes.groundControl, 'Ground Control', fighter.attributes.groundControl >= 70 ? 'high' : fighter.attributes.groundControl >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.submissionOffense !== undefined ? attrBars(fighter.attributes.submissionOffense, 'Sub Offense', fighter.attributes.submissionOffense >= 70 ? 'high' : fighter.attributes.submissionOffense >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.submissionDefense !== undefined ? attrBars(fighter.attributes.submissionDefense, 'Sub Defense', fighter.attributes.submissionDefense >= 70 ? 'high' : fighter.attributes.submissionDefense >= 40 ? 'medium' : 'low') : ''}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">💪 Físico</span>
+          </div>
+          <div class="attr-grid">
             ${attrBars(fighter.attributes.cardio, 'Cardio', fighter.attributes.cardio >= 70 ? 'high' : fighter.attributes.cardio >= 40 ? 'medium' : 'low')}
             ${attrBars(fighter.attributes.chin, 'Chin', fighter.attributes.chin >= 70 ? 'high' : fighter.attributes.chin >= 40 ? 'medium' : 'low')}
+            ${fighter.attributes.strength !== undefined ? attrBars(fighter.attributes.strength, 'Strength', fighter.attributes.strength >= 70 ? 'high' : fighter.attributes.strength >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.speed !== undefined ? attrBars(fighter.attributes.speed, 'Speed', fighter.attributes.speed >= 70 ? 'high' : fighter.attributes.speed >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.durability !== undefined ? attrBars(fighter.attributes.durability, 'Durability', fighter.attributes.durability >= 70 ? 'high' : fighter.attributes.durability >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.recovery !== undefined ? attrBars(fighter.attributes.recovery, 'Recovery', fighter.attributes.recovery >= 70 ? 'high' : fighter.attributes.recovery >= 40 ? 'medium' : 'low') : ''}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">🧠 Mental</span>
+          </div>
+          <div class="attr-grid">
             ${attrBars(fighter.attributes.fightIQ, 'Fight IQ', fighter.attributes.fightIQ >= 70 ? 'high' : fighter.attributes.fightIQ >= 40 ? 'medium' : 'low')}
+            ${fighter.attributes.composure !== undefined ? attrBars(fighter.attributes.composure, 'Composure', fighter.attributes.composure >= 70 ? 'high' : fighter.attributes.composure >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.aggression !== undefined ? attrBars(fighter.attributes.aggression, 'Aggression', fighter.attributes.aggression >= 70 ? 'high' : fighter.attributes.aggression >= 40 ? 'medium' : 'low') : ''}
+            ${fighter.attributes.adaptability !== undefined ? attrBars(fighter.attributes.adaptability, 'Adaptability', fighter.attributes.adaptability >= 70 ? 'high' : fighter.attributes.adaptability >= 40 ? 'medium' : 'low') : ''}
           </div>
         </div>
 

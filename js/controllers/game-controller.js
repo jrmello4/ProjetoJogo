@@ -17,6 +17,7 @@ import { ContractService } from '../services/contract-service.js';
 import { RetentionService } from '../services/retention-service.js';
 import { RivalGym } from '../models/rival-gym.js';
 import { FightOffer } from '../models/fight-offer.js';
+import { Fighter } from '../models/fighter.js';
 import { generateId, clamp } from '../utils/helpers.js';
 import {
   GYM_CONFIG,
@@ -118,6 +119,19 @@ export class GameController {
         await this.updateGym(gym);
       }
       applied.add('retention');
+    }
+
+    // Épico C: expandir atributos de 8 para 24 em saves existentes
+    if (!applied.has('expandedAttributes')) {
+      const team = await this.getTeam();
+      for (const fighter of team) {
+        const oldLen = Object.keys(fighter.attributes).length;
+        fighter.attributes = Fighter.expandAttributes(fighter.attributes);
+        if (Object.keys(fighter.attributes).length !== oldLen) {
+          await this.fighterCtrl.updateFighter(fighter);
+        }
+      }
+      applied.add('expandedAttributes');
     }
 
     if (applied.size !== (meta.patches || []).length) {

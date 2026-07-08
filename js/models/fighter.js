@@ -26,7 +26,7 @@ export class Fighter {
     this.weightClass = data.weightClass;
     this.fightingStyle = data.fightingStyle;
     this.record = { ...data.record };
-    this.attributes = { ...data.attributes };
+    this.attributes = Fighter.expandAttributes(data.attributes || {});
     this.hidden = { ...data.hidden };
     this.dna = data.dna || this._defaultDNA();
     this.popularity = data.popularity ?? Math.floor(Math.random() * 30) + 15;
@@ -121,27 +121,47 @@ export class Fighter {
   }
 
   get strikingScore() {
-    return (
+    const primary = (
       this.attributes.boxing * 0.4 +
       this.attributes.kickboxing * 0.3 +
       this.attributes.muayThai * 0.3
     );
+    const secondary = (
+      this.attributes.power * 0.15 +
+      this.attributes.footwork * 0.1 +
+      this.attributes.headMovement * 0.1 +
+      this.attributes.clinch * 0.05 +
+      this.attributes.speed * 0.15 +
+      this.attributes.aggression * 0.05
+    );
+    return primary * 0.7 + secondary * 0.3;
   }
 
   get grapplingScore() {
-    return (
+    const primary = (
       this.attributes.wrestling * 0.5 +
       this.attributes.bjj * 0.5
     );
+    const secondary = (
+      this.attributes.takedowns * 0.15 +
+      this.attributes.takedownDefense * 0.1 +
+      this.attributes.groundControl * 0.15 +
+      this.attributes.submissionOffense * 0.1 +
+      this.attributes.submissionDefense * 0.1 +
+      this.attributes.strength * 0.1
+    );
+    return primary * 0.7 + secondary * 0.3;
   }
 
   get overallRating() {
-    const skill = this.averageSkill * 0.6;
-    const iq = this.attributes.fightIQ * 0.15;
-    const cardio = this.attributes.cardio * 0.1;
+    const skill = this.averageSkill * 0.5;
+    const iq = this.attributes.fightIQ * 0.1;
+    const cardio = this.attributes.cardio * 0.05;
     const chin = this.attributes.chin * 0.05;
-    const exp = Math.min(10, this.totalFights * 0.5) * 0.1;
-    return Math.round(skill + iq + cardio + chin + exp);
+    const phys = (this.attributes.strength + this.attributes.speed + this.attributes.durability + this.attributes.recovery) / 4 * 0.1;
+    const ment = (this.attributes.composure + this.attributes.aggression + this.attributes.adaptability) / 3 * 0.05;
+    const exp = Math.min(10, this.totalFights * 0.5) * 0.05;
+    return Math.round(skill + iq + cardio + chin + phys + ment + exp);
   }
 
   get dnaTraits() {
@@ -155,6 +175,51 @@ export class Fighter {
       if (this.popularity >= tier.min) return tier.label;
     }
     return POPULARITY_TIERS[POPULARITY_TIERS.length - 1].label;
+  }
+
+  static expandAttributes(attrs) {
+    const avg = (Object.values(attrs).length > 0)
+      ? Object.values(attrs).reduce((a, b) => a + b, 0) / Object.values(attrs).length
+      : 50;
+
+    const jitter = () => Math.round(clamp(avg + (Math.random() * 20 - 10), 1, 99));
+    const spread = (base, maxOff = 15) => Math.round(clamp(base + (Math.random() * maxOff * 2 - maxOff), 1, 99));
+
+    return {
+      // === Existentes (8) ===
+      boxing: attrs.boxing ?? jitter(),
+      kickboxing: attrs.kickboxing ?? jitter(),
+      muayThai: attrs.muayThai ?? jitter(),
+      wrestling: attrs.wrestling ?? jitter(),
+      bjj: attrs.bjj ?? jitter(),
+      cardio: attrs.cardio ?? jitter(),
+      chin: attrs.chin ?? jitter(),
+      fightIQ: attrs.fightIQ ?? jitter(),
+
+      // === Novos — Em pé (4) ===
+      power: attrs.power ?? spread(attrs.boxing || avg, 12),
+      footwork: attrs.footwork ?? spread(attrs.kickboxing || avg, 12),
+      headMovement: attrs.headMovement ?? spread(attrs.boxing || avg, 10),
+      clinch: attrs.clinch ?? spread(attrs.muayThai || avg, 12),
+
+      // === Novos — Chão (5) ===
+      takedowns: attrs.takedowns ?? spread(attrs.wrestling || avg, 12),
+      takedownDefense: attrs.takedownDefense ?? spread(attrs.wrestling || avg, 12),
+      groundControl: attrs.groundControl ?? spread(attrs.wrestling || avg, 12),
+      submissionOffense: attrs.submissionOffense ?? spread(attrs.bjj || avg, 12),
+      submissionDefense: attrs.submissionDefense ?? spread(attrs.bjj || avg, 12),
+
+      // === Novos — Físico (4) ===
+      strength: attrs.strength ?? spread(attrs.wrestling || avg, 14),
+      speed: attrs.speed ?? spread(attrs.kickboxing || avg, 12),
+      durability: attrs.durability ?? spread(attrs.chin || avg, 10),
+      recovery: attrs.recovery ?? spread(attrs.cardio || avg, 12),
+
+      // === Novos — Mental (3) ===
+      composure: attrs.composure ?? spread(attrs.fightIQ || avg, 12),
+      aggression: attrs.aggression ?? jitter(),
+      adaptability: attrs.adaptability ?? spread(attrs.fightIQ || avg, 12),
+    };
   }
 
   hasDNA(trait) {

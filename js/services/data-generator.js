@@ -113,16 +113,46 @@ export class DataGenerator {
     const [skillMin, skillMax] = opts.skillRange || [30, 60];
     const baseSkill = skillMin + Math.floor(Math.random() * (skillMax - skillMin + 1));
 
-    const primary = Math.floor(Math.random() * 5);
+    const primary = Math.floor(Math.random() * 9); // 0-4 striking, 5-6 grappling, 7-8 physical
+    const r = (min = -10, max = 10) => Math.floor(Math.random() * (max - min + 1)) + min;
+    const base = (v) => Math.min(99, Math.max(1, baseSkill + v));
+
+    const boxing = base(r(-10, 10) + (primary === 0 ? 15 : 0));
+    const kickboxing = base(r(-10, 10) + (primary === 1 ? 15 : 0));
+    const muayThai = base(r(-10, 10) + (primary === 2 ? 15 : 0));
+    const wrestling = base(r(-10, 10) + (primary === 3 ? 15 : 0));
+    const bjj = base(r(-10, 10) + (primary === 4 ? 15 : 0));
+    const cardio = base(r(-10, 10));
+    const chin = base(r(-10, 10));
+    const fightIQ = base(r(-10, 10));
+
     const attributes = {
-      boxing: Math.min(99, baseSkill + Math.floor(Math.random() * 20) - 10 + (primary === 0 ? 15 : 0)),
-      kickboxing: Math.min(99, baseSkill + Math.floor(Math.random() * 20) - 10 + (primary === 1 ? 15 : 0)),
-      muayThai: Math.min(99, baseSkill + Math.floor(Math.random() * 20) - 10 + (primary === 2 ? 15 : 0)),
-      wrestling: Math.min(99, baseSkill + Math.floor(Math.random() * 20) - 10 + (primary === 3 ? 15 : 0)),
-      bjj: Math.min(99, baseSkill + Math.floor(Math.random() * 20) - 10 + (primary === 4 ? 15 : 0)),
-      cardio: Math.min(99, baseSkill + Math.floor(Math.random() * 20) - 10),
-      chin: Math.min(99, baseSkill + Math.floor(Math.random() * 20) - 10),
-      fightIQ: Math.min(99, baseSkill + Math.floor(Math.random() * 20) - 10),
+      // Existentes (8)
+      boxing, kickboxing, muayThai, wrestling, bjj, cardio, chin, fightIQ,
+
+      // -- Em pé (4) --
+      power: base(r(-12, 12) + Math.round((boxing + kickboxing) / 2 * 0.3)),
+      footwork: base(r(-12, 12) + Math.round(kickboxing * 0.3)),
+      headMovement: base(r(-12, 12) + Math.round(boxing * 0.3)),
+      clinch: base(r(-12, 12) + Math.round((muayThai + wrestling) / 2 * 0.3)),
+
+      // -- Chão (5) --
+      takedowns: base(r(-12, 12) + Math.round(wrestling * 0.3)),
+      takedownDefense: base(r(-12, 12) + Math.round(wrestling * 0.3)),
+      groundControl: base(r(-12, 12) + Math.round((wrestling + bjj) / 2 * 0.3)),
+      submissionOffense: base(r(-12, 12) + Math.round(bjj * 0.3)),
+      submissionDefense: base(r(-12, 12) + Math.round(bjj * 0.3)),
+
+      // -- Físico (4) --
+      strength: base(r(-14, 14) + Math.round(wrestling * 0.2)),
+      speed: base(r(-12, 12) + Math.round(kickboxing * 0.2)),
+      durability: base(r(-12, 12) + Math.round(chin * 0.3)),
+      recovery: base(r(-14, 14) + Math.round(cardio * 0.3)),
+
+      // -- Mental (3) --
+      composure: base(r(-12, 12) + Math.round(fightIQ * 0.25)),
+      aggression: base(r(-14, 14) + Math.round((boxing + muayThai) / 2 * 0.2)),
+      adaptability: base(r(-12, 12) + Math.round(fightIQ * 0.25)),
     };
 
     const hidden = {

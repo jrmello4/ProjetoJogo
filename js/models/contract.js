@@ -1,3 +1,6 @@
+// Código do antigo modo organização. Será reaproveitado como PromotionContract
+// no Épico B (contrato exclusivo com promoção) — manter.
+
 export class Contract {
   constructor(data) {
     this.pursePerFight = data.pursePerFight || 10000;

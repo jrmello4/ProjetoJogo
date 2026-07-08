@@ -1,3 +1,7 @@
+import { clamp } from '../utils/helpers.js';
+
+const RESUME_WINDOW = 6; // últimas lutas que a comissão realmente olha
+
 export class RankingService {
   static calculateRankings(fighters) {
     const ranked = fighters
@@ -14,33 +18,40 @@ export class RankingService {
     }));
   }
 
+  // Um ranking de MMA responde "contra quem você venceu", não "quantas vezes".
+  //
+  // A versão anterior dava +30 por estar invicto (winRate * 0.3) e no máximo
+  // +8 pela qualidade dos adversários — então um 4-0 contra ninguém passava
+  // à frente de um campeão 12-3. Aqui o overall (habilidade real) domina,
+  // e o que separa lutadores de nível parecido é o currículo: bater alguém
+  // acima de você sobe muito; perder recentemente derruba.
   static _rankingScore(fighter) {
-    const overall = fighter.overallRating || fighter.averageSkill;
+    const overall = fighter.overallRating || fighter.averageSkill || 0;
+    const recent = (fighter.fights || []).slice(0, RESUME_WINDOW);
+    const wins = recent.filter(f => f.won);
 
-    // Quality of victory: média do rating dos oponentes vencidos
-    const wins = fighter.fights.filter(f => f.won);
-    const qualityOfVictory = wins.length > 0
-      ? wins.reduce((sum, f) => sum + (f.opponentRating || 50), 0) / wins.length * 0.1
+    // Currículo: média do nível de quem você venceu, medida contra a linha
+    // d'água (50). Vencer um cara de 80 vale +15; vencer um de 25, −12.
+    const resume = wins.length > 0
+      ? (wins.reduce((s, f) => s + (f.opponentRating ?? 50), 0) / wins.length - 50) * 0.5
       : 0;
 
-    // Streak bonus: até +15
     let streak = 0;
-    for (const f of fighter.fights) {
-      if (f.won) streak++;
-      else break;
+    for (const f of fighter.fights || []) {
+      if (!f.won) break;
+      streak++;
     }
-    const streakBonus = Math.min(15, streak * 3);
+    const streakBonus = Math.min(streak, 5) * 2;
 
-    // Popularity factor
-    const popFactor = (fighter.popularity || 0) * 0.05;
+    // Cartel geral importa, mas com teto — não dá para acumular indefinidamente.
+    const recordBonus = clamp((fighter.record?.wins || 0) - (fighter.record?.losses || 0), -10, 10);
 
-    // Win rate bonus
-    const winRateBonus = fighter.winRate * 0.3;
+    // Derrota recente derruba, e é isso que tira você da fila do cinturão.
+    const formPenalty = recent.filter(f => !f.won).length * 4;
 
-    // Experience bonus
-    const expBonus = Math.min(15, fighter.totalFights * 0.75);
+    const popFactor = (fighter.popularity || 0) * 0.03;
 
-    return overall + qualityOfVictory + streakBonus + popFactor + winRateBonus + expBonus;
+    return overall + resume + streakBonus + recordBonus - formPenalty + popFactor;
   }
 
   static getChampions(rankings) {

@@ -30,6 +30,15 @@ export class FightOffer {
     this.status = data.status || OFFER_STATUS.PENDING;
     this.resultId = data.resultId || null;
     this.negotiated = data.negotiated || false; // negociação de bolsa é uma tentativa única
+
+    // Disputa de cinturão. titleRole diz de que lado você está:
+    // 'challenge' (desafia), 'defense' (defende), 'vacant' (cinturão vago).
+    this.isTitleFight = data.isTitleFight || false;
+    this.titleRole = data.titleRole || null;
+
+    // Plano de jogo escolhido durante o camp. Vale por toda a luta.
+    this.gamePlan = data.gamePlan || 'balanced';
+
     this.createdAtAbsWeek = data.createdAtAbsWeek ?? 1;
     this.createdAt = data.createdAt || new Date().toISOString();
   }

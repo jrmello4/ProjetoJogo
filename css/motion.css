@@ -1,396 +1,469 @@
-/* ========================================
-   Motion Layer — Lenis + GSAP + Rive
-   Webflow-style scroll & vector animations
-   ======================================== */
+/* ==========================================================================
+   Motion & signature layer
+   --------------------------------------------------------------------------
+   The signature: the dashboard opens on a FIGHT POSTER for your next booked
+   bout. Red corner is always yours. The 3D arena survives, but crushed into
+   a backdrop — atmosphere, not subject. Type carries the page.
+   ========================================================================== */
 
-html.lenis,
-html.lenis body {
-  height: auto;
-}
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }
+.lenis.lenis-stopped { overflow: hidden; }
 
-.lenis.lenis-smooth {
-  scroll-behavior: auto !important;
-}
-
-.lenis.lenis-smooth [data-lenis-prevent] {
-  overscroll-behavior: contain;
-}
-
-.lenis.lenis-stopped {
-  overflow: hidden;
-}
-
-/* Scroll progress bar */
 .scroll-progress {
   position: fixed;
-  top: 0;
-  left: 0;
+  top: 0; left: 0;
   height: 2px;
   width: 0%;
-  background: linear-gradient(90deg, var(--accent), var(--gold));
+  background: var(--red);
   z-index: 10000;
   pointer-events: none;
-  transform-origin: left center;
 }
 
-/* Reveal targets — GSAP sets initial state */
-[data-reveal-stagger] > * {
-  will-change: transform, opacity;
-}
+[data-reveal-stagger] > * { will-change: transform, opacity; }
 
-/* Rive containers */
+/* ==========================================================================
+   Rive / icon slots
+   ========================================================================== */
+
 .rive-slot {
-  width: 24px;
-  height: 24px;
-  max-width: 24px;
-  max-height: 24px;
-  flex-shrink: 0;
+  width: 18px; height: 18px;
+  max-width: 18px; max-height: 18px;
+  flex: 0 0 18px;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
   overflow: hidden;
-  flex: 0 0 24px;
+  opacity: 0.75;
 }
 
-.rive-slot--lg {
-  width: 64px;
-  height: 64px;
-  flex: 0 0 64px;
-}
+.rive-slot--lg { width: 40px; height: 40px; max-width: 40px; max-height: 40px; flex: 0 0 40px; opacity: 1; }
+.rive-slot--hero { width: 64px; height: 64px; max-width: 64px; max-height: 64px; flex: 0 0 64px; }
 
-.rive-slot--hero {
-  width: 120px;
-  height: 120px;
-  flex: 0 0 120px;
-}
+.rive-canvas { width: 100% !important; height: 100% !important; object-fit: contain !important; }
+.rive-slot canvas { object-fit: contain !important; display: block; }
 
-.rive-canvas {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: contain !important;
-}
-
-.rive-slot canvas {
-  object-fit: contain !important;
-  display: block;
-}
-
-.rive-slot svg {
-  width: 100% !important;
-  height: 100% !important;
-  max-width: 100% !important;
-  max-height: 100% !important;
-  display: block;
-  shape-rendering: geometricPrecision;
-}
-
+.rive-slot svg,
 .rive-fallback svg {
   width: 100% !important;
   height: 100% !important;
-  max-width: 100% !important;
-  max-height: 100% !important;
   display: block;
   shape-rendering: geometricPrecision;
 }
 
 .rive-fallback {
-  width: 100%;
-  height: 100%;
+  width: 100%; height: 100%;
   color: currentColor;
-  transition: transform 0.35s var(--ease-out-expo), color 0.2s ease;
+  transition: color var(--anim-fast) ease;
 }
 
-.rive-fallback svg {
-  width: 100%;
-  height: 100%;
-}
+.nav-link:hover .rive-slot,
+.nav-link.active .rive-slot { opacity: 1; }
+.nav-link.active .rive-fallback { color: var(--red-ink); }
 
-.nav-link:hover .rive-fallback,
-.nav-link.active .rive-fallback {
-  transform: scale(1.12);
-  color: var(--accent);
-}
-
-.rive-fallback--octagon .rive-pulse-ring {
-  animation: riveOctagonPulse 2.4s ease-in-out infinite;
-  transform-origin: center;
-}
-
+.rive-fallback--octagon .rive-pulse-ring { animation: riveOctagonPulse 3s ease-in-out infinite; transform-origin: center; }
 @keyframes riveOctagonPulse {
-  0%, 100% { transform: scale(1); opacity: 0.5; }
-  50% { transform: scale(1.06); opacity: 1; }
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.9; }
 }
 
-/* Hero section — Fight Night poster block */
-.hero-section {
+/* Red corner bar on the active nav item. */
+.nav-link.active::before {
+  content: '';
+  position: absolute;
+  left: -0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 100%;
+  background: var(--red);
+}
+
+/* ==========================================================================
+   THE FIGHT POSTER — signature element
+   ========================================================================== */
+
+.poster {
   position: relative;
-  margin: -2rem -2.5rem 2.5rem;
-  padding: 0;
-  min-height: 460px;
-  overflow: hidden;
+  margin: -2rem -2.25rem 2.5rem;
   border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  isolation: isolate;
 }
 
-.hero-section::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(8, 9, 14, 0.35) 0%,
-    rgba(8, 9, 14, 0.55) 45%,
-    var(--bg-primary) 100%
-  );
-  z-index: 2;
-  pointer-events: none;
-}
-
-.hero-section::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 70% 60% at 20% 0%, var(--accent-glow), transparent 60%),
-    radial-gradient(ellipse 60% 60% at 100% 30%, var(--blue-glow), transparent 60%);
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0.6;
-  mix-blend-mode: screen;
-}
-
-/* Accent line under the whole hero */
-.hero-section .hero-content::after {
-  content: '';
-  position: absolute;
-  left: 2.5rem;
-  bottom: 0;
-  width: 120px;
-  height: 4px;
-  background: linear-gradient(90deg, var(--accent), var(--blue));
-  border-radius: 2px;
-  box-shadow: 0 0 16px var(--accent-glow);
-}
-
-.hero-content {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 2.5rem 2.5rem 2rem;
-  z-index: 4;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 1.5rem;
-  align-items: end;
-}
-
-.hero-rive {
-  grid-row: span 2;
-}
-
-.hero-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-family: var(--font-display);
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 0.75rem;
-  padding: 0.25rem 0.6rem;
-  border: 1px solid var(--accent-subtle);
-  border-radius: 999px;
-  background: var(--accent-subtle);
-}
-
-.hero-title {
-  font-family: var(--font-black);
-  font-size: clamp(2.75rem, 7vw, 5rem);
-  font-weight: 400;
-  line-height: 0.88;
-  letter-spacing: 0.005em;
-  text-transform: uppercase;
-  color: var(--text-primary);
-  text-shadow: 0 4px 40px rgba(0, 0, 0, 0.6);
-}
-
-.hero-subtitle {
-  font-size: 0.95rem;
-  color: var(--text-secondary);
-  margin-top: 0.9rem;
-  max-width: 500px;
-  line-height: 1.6;
-}
-
-.hero-arena {
+/* The arena, crushed. Texture behind type — the way a real poster works. */
+.poster-arena {
   position: absolute;
   inset: 0;
   z-index: 0;
+  opacity: 0.5;
+  filter: grayscale(0.35) contrast(1.2);
 }
 
-.hero-arena .arena-container {
+.poster-arena .arena-container {
   height: 100%;
   margin: 0;
   border: none;
   border-radius: 0;
+  background: transparent;
 }
 
-.hero-actions {
+.poster-arena .arena-hint { display: none; }
+
+/* Vignette: dark enough that type always has ground, open enough at centre
+   that the cage still reads as texture. It only goes fully opaque at the
+   very bottom, where the poster hands off to the page. */
+.poster::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(20, 17, 15, 0.30) 0%, rgba(20, 17, 15, 0.10) 40%, rgba(20, 17, 15, 0.80) 90%, var(--canvas) 100%),
+    radial-gradient(ellipse 85% 70% at 50% 42%, transparent 42%, rgba(20, 17, 15, 0.68) 100%);
+}
+
+/* Dark is the arena at night. Light is the poster printed on paper — so the
+   cage is struck, and paper, rules and type do the work. */
+[data-theme="light"] .poster::after { background: none; }
+[data-theme="light"] .poster-arena { display: none; }
+
+[data-theme="light"] .poster {
+  background: var(--mat);
+  border-bottom-color: var(--border-light);
+}
+
+.poster-body {
+  position: relative;
+  z-index: 2;
+  padding: 1rem 2.25rem 2.5rem;
+}
+
+/* ---- Status strip: where you are, at a glance. Mono, like a scoreboard. ---- */
+.poster-status {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.875rem;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.poster-status-gym { color: var(--text-secondary); }
+
+/* ---- Billing block: promotion, tier, date. Expanded width axis. ---- */
+.poster-billing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   gap: 0.75rem;
   flex-wrap: wrap;
-  margin-top: 1.25rem;
-  grid-column: 1 / -1;
+  margin-top: 2.5rem;
+  text-align: center;
 }
 
-/* Stat cards — Webflow bento grid */
+.poster-promo {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 118, 'wght' 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.poster-when {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+/* ---- The bout. Two corners facing each other across a VS. ---- */
+.poster-bout {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 2rem;
+  margin: 2rem 0 2.25rem;
+}
+
+.poster-fighter { min-width: 0; }
+.poster-fighter--red { text-align: right; }
+.poster-fighter--blue { text-align: left; }
+
+.poster-corner {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  padding-bottom: 0.3rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 2px solid currentColor;
+}
+
+.poster-fighter--red .poster-corner { color: var(--red-ink); }
+.poster-fighter--blue .poster-corner { color: var(--blue-bright); }
+[data-theme="light"] .poster-fighter--blue .poster-corner { color: var(--blue); }
+
+/* The name is the loudest thing on the page. Condensed, heavy, tight. */
+.poster-name {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 76, 'wght' 900;
+  font-size: clamp(1.75rem, 4.4vw, 3.75rem);
+  line-height: 0.86;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  color: var(--chalk);
+  overflow-wrap: anywhere;
+}
+
+.poster-record {
+  display: block;
+  margin-top: 0.625rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  color: var(--ash);
+}
+
+.poster-vs {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 62, 'wght' 900;
+  font-size: clamp(1.25rem, 2.4vw, 2rem);
+  line-height: 1;
+  color: var(--ash);
+  padding: 0 0.25rem;
+  position: relative;
+}
+
+.poster-vs::before,
+.poster-vs::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 1px;
+  height: 1.75rem;
+  background: var(--rule);
+  transform: translateX(-50%);
+}
+
+.poster-vs::before { bottom: 100%; }
+.poster-vs::after { top: 100%; }
+
+/* ---- Purse row: the reason you take the fight. ---- */
+.poster-terms {
+  display: flex;
+  justify-content: center;
+  gap: 2.5rem;
+  flex-wrap: wrap;
+  padding: 0.875rem 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+.poster-term { text-align: center; }
+
+.poster-term-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ash);
+  margin-bottom: 0.3rem;
+}
+
+.poster-term-value {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--chalk);
+}
+
+.poster-term-value.is-money { color: var(--money); }
+
+/* ---- No fight booked: the poster stays, the slot is empty. ---- */
+.poster--empty .poster-headline {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 80, 'wght' 900;
+  font-size: clamp(2rem, 6vw, 4.5rem);
+  line-height: 0.88;
+  letter-spacing: -0.015em;
+  text-transform: uppercase;
+  color: var(--chalk);
+  text-align: center;
+  margin: 2rem 0 0.75rem;
+}
+
+.poster--empty .poster-sub {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ash);
+  margin-bottom: 1.75rem;
+}
+
+.poster-gymname {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 105, 'wght' 500;
+  font-size: 0.8125rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--red-ink);
+  text-align: center;
+  display: block;
+  margin-top: 1.75rem;
+}
+
+/* ---- Actions ---- */
+.poster-actions {
+  display: flex;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+/* Poster load sequence: billing, then names, then terms. One orchestrated
+   moment on entry — nothing else on the page animates in. */
+@media (prefers-reduced-motion: no-preference) {
+  .poster-billing,
+  .poster-fighter--red,
+  .poster-vs,
+  .poster-fighter--blue,
+  .poster-terms,
+  .poster-actions,
+  .poster--empty .poster-headline,
+  .poster--empty .poster-sub {
+    animation: posterIn 0.55s var(--ease-out-expo) both;
+  }
+
+  .poster-billing        { animation-delay: 0.05s; }
+  .poster-fighter--red   { animation-delay: 0.14s; }
+  .poster-vs             { animation-delay: 0.26s; }
+  .poster-fighter--blue  { animation-delay: 0.20s; }
+  .poster-terms          { animation-delay: 0.32s; }
+  .poster-actions        { animation-delay: 0.38s; }
+  .poster--empty .poster-headline { animation-delay: 0.08s; }
+  .poster--empty .poster-sub      { animation-delay: 0.18s; }
+}
+
+@keyframes posterIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ==========================================================================
+   Bento grid + stat cards
+   ========================================================================== */
+
 .bento-grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .stat-card {
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  padding: 1.5rem;
+  background: var(--mat);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.125rem;
   position: relative;
-  overflow: hidden;
-  transition: border-color 0.3s ease, transform 0.3s var(--ease-out-expo), box-shadow 0.3s ease;
+  transition: border-color var(--anim-fast) ease;
 }
 
-.stat-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, var(--accent), transparent 60%);
-  opacity: 0.7;
-}
+.stat-card .card-header { margin-bottom: 0.625rem; }
+.stat-card .stat-label { margin-top: 0.375rem; }
 
-.stat-card:hover {
-  border-color: var(--border-light);
-  transform: translateY(-3px);
-  box-shadow: var(--shadow), 0 0 0 1px var(--accent-subtle);
-}
+.stat-card:hover { border-color: var(--border-light); }
 
 .stat-card--span-3 { grid-column: span 3; }
 .stat-card--span-4 { grid-column: span 4; }
 .stat-card--span-6 { grid-column: span 6; }
 .stat-card--span-12 { grid-column: span 12; }
 
-.stat-card-icon {
-  width: 36px;
-  height: 36px;
-  margin-bottom: 1rem;
-  color: var(--accent);
-}
+.stat-card-icon { width: 28px; height: 28px; margin-bottom: 0.75rem; color: var(--red); }
+.stat-card .stat-value { font-size: clamp(1.5rem, 2.2vw, 1.875rem); }
 
-.stat-card .stat-value {
-  font-size: clamp(1.75rem, 3vw, 2.5rem);
-}
+/* ==========================================================================
+   Section labels — an eyebrow and a rule. Nothing else.
+   ========================================================================== */
 
-/* Section labels */
 .section-label {
-  font-family: var(--font-display);
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  margin-bottom: 1.25rem;
-  margin-top: 0.5rem;
   display: flex;
   align-items: center;
-  gap: 0.9rem;
-}
-
-.section-label::before {
-  content: '';
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
-  transform: rotate(45deg);
-  box-shadow: 0 0 12px var(--accent-glow);
+  gap: 0.875rem;
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ash);
+  margin: 2rem 0 0.875rem;
 }
 
 .section-label::after {
   content: '';
   flex: 1;
   height: 1px;
-  background: linear-gradient(90deg, var(--border-light), transparent);
+  background: var(--rule);
 }
 
-/* Floating nav indicator */
-.nav-link.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 60%;
-  background: var(--accent);
-  border-radius: 0 2px 2px 0;
-  box-shadow: 0 0 12px var(--accent-glow);
-}
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
 
 @media (max-width: 1024px) {
-  .bento-grid {
-    grid-template-columns: repeat(6, 1fr);
-  }
-  .stat-card--span-3,
-  .stat-card--span-4 {
-    grid-column: span 3;
-  }
-  .stat-card--span-6 {
-    grid-column: span 6;
-  }
+  .bento-grid { grid-template-columns: repeat(6, 1fr); }
+  .stat-card--span-3, .stat-card--span-4 { grid-column: span 3; }
+  .stat-card--span-6 { grid-column: span 6; }
 }
 
-@media (max-width: 768px) {
-  .hero-section {
-    margin: -1rem -1rem 2rem;
-    min-height: 340px;
-  }
+@media (max-width: 900px) {
+  .poster { margin: -1.25rem -1rem 2rem; }
+  .poster-body { padding: 0.875rem 1rem 1.75rem; }
 
-  .hero-content {
-    padding: 1.5rem;
+  /* Keep the status strip clear of the hamburger. */
+  .poster-status { padding-right: 3rem; }
+  .poster-billing { margin-top: 1.75rem; }
+  .poster-bout { margin: 1.5rem 0 1.75rem; }
+
+  .poster-bout {
     grid-template-columns: 1fr;
+    gap: 1rem;
+    text-align: center;
   }
 
-  .hero-rive {
-    display: none;
-  }
+  .poster-fighter--red,
+  .poster-fighter--blue { text-align: center; }
 
-  .bento-grid {
-    grid-template-columns: 1fr;
-  }
+  .poster-vs::before, .poster-vs::after { display: none; }
 
+  .poster-terms { gap: 1.5rem; }
+
+  .bento-grid { grid-template-columns: 1fr; }
   .stat-card--span-3,
   .stat-card--span-4,
   .stat-card--span-6,
-  .stat-card--span-12 {
-    grid-column: span 1;
-  }
+  .stat-card--span-12 { grid-column: span 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-reveal],
-  [data-reveal-stagger] > * {
-    opacity: 1;
-  }
-
-  .scroll-progress {
-    display: none;
-  }
+  [data-reveal], [data-reveal-stagger] > * { opacity: 1 !important; transform: none !important; }
+  .scroll-progress { display: none; }
 }

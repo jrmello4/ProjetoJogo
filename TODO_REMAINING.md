@@ -1,3 +1,15 @@
+> ⚠️ **DOCUMENTO SUPERADO — NÃO USE COMO REFERÊNCIA.**
+>
+> Descreve o **modo organização** (o jogador comandava uma promoção), abandonado
+> no pivot de jul/2026 para o **modo treinador** (dono de academia). Vários itens
+> marcados aqui como "IMPLEMENTADO ✅" não funcionam — o Acampamento, por exemplo,
+> não lista nenhum atleta e produz lesão permanente.
+>
+> A fonte de verdade é **[docs/PRD.md](docs/PRD.md)**.
+> Mantido apenas por valor histórico.
+
+---
+
 # Pendências - Melhorias MMA Manager
 
 ## Status Atual

@@ -4,13 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="MMA Manager — Simulador de gerenciamento de artes marciais mistas">
-  <meta name="theme-color" content="#08080a">
+  <meta name="theme-color" content="#14110f">
   <title>MMA Manager</title>
   <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/motion.css">
   <link rel="stylesheet" href="css/three-arena.css">
@@ -24,6 +24,7 @@
   </script>
 </head>
 <body>
+  <div class="grain" aria-hidden="true"></div>
   <div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
 
   <button class="hamburger" id="hamburgerBtn" aria-label="Abrir menu">
@@ -38,10 +39,11 @@
           <div class="rive-slot rive-slot--lg" data-rive="octagon"></div>
         </div>
         <h1>MMA Manager</h1>
-        <p>Gym Manager</p>
+        <p>Modo Treinador</p>
       </div>
 
       <nav aria-label="Navegação principal">
+        <p class="nav-group-label">Academia</p>
         <ul class="nav-menu">
           <li class="nav-item">
             <a class="nav-link active" data-view="dashboard" href="#" role="button">
@@ -56,12 +58,6 @@
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" data-view="offers" href="#" role="button">
-              <span class="rive-slot" data-rive="events"></span>
-              <span>Ofertas</span>
-            </a>
-          </li>
-          <li class="nav-item">
             <a class="nav-link" data-view="market" href="#" role="button">
               <span class="rive-slot" data-rive="market"></span>
               <span>Recrutar</span>
@@ -70,7 +66,29 @@
           <li class="nav-item">
             <a class="nav-link" data-view="academy" href="#" role="button">
               <span class="rive-slot" data-rive="training"></span>
-              <span>Academia</span>
+              <span>Estrutura</span>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" data-view="training" href="#" role="button">
+              <span class="rive-slot" data-rive="training"></span>
+              <span>Acampamento</span>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" data-view="finance" href="#" role="button">
+              <span class="rive-slot" data-rive="market"></span>
+              <span>Finanças</span>
+            </a>
+          </li>
+        </ul>
+
+        <p class="nav-group-label">Circuito</p>
+        <ul class="nav-menu">
+          <li class="nav-item">
+            <a class="nav-link" data-view="offers" href="#" role="button">
+              <span class="rive-slot" data-rive="events"></span>
+              <span>Ofertas</span>
             </a>
           </li>
           <li class="nav-item">
@@ -86,23 +104,21 @@
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" data-view="finance" href="#" role="button">
-              <span class="rive-slot" data-rive="market"></span>
-              <span>Finanças</span>
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" data-view="training" href="#" role="button">
-              <span class="rive-slot" data-rive="training"></span>
-              <span>Acampamento</span>
-            </a>
-          </li>
-          <li class="nav-item">
             <a class="nav-link" data-view="rivalries" href="#" role="button">
               <span class="rive-slot" data-rive="rivalries"></span>
               <span>Rivalidades</span>
             </a>
           </li>
+          <li class="nav-item">
+            <a class="nav-link" data-view="press-conference" href="#" role="button">
+              <span class="rive-slot" data-rive="events"></span>
+              <span>Coletiva</span>
+            </a>
+          </li>
+        </ul>
+
+        <p class="nav-group-label">Arquivo</p>
+        <ul class="nav-menu">
           <li class="nav-item">
             <a class="nav-link" data-view="hall-of-fame" href="#" role="button">
               <span class="rive-slot" data-rive="hall"></span>

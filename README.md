@@ -1,66 +1,60 @@
-# MMA Manager — War Room Simulator
+# MMA Manager — Modo Treinador
 
-**Assuma o comando de uma organização de MMA e transforme-a na maior potência do esporte.**
+**Você é o dono e treinador de uma academia de MMA. Três atletas desconhecidos. Nenhum cinturão.**
 
-Contrate lutadores no mercado, negocie contratos, monte cards de tirar o fôlego, promova eventos ao vivo e administre cada dólar — enquanto rivais disputam os mesmos atletas e o mesmo público.
+As promoções são controladas pela IA: elas realizam os próprios eventos, coroam campeões e mandam ofertas de luta para os seus atletas. Você decide quais lutas aceitar, o que cada um treina, quanto investir em estudar o adversário — e, no meio do combate, o que gritar do córner.
 
 ![Jogo em pt-BR](https://img.shields.io/badge/idioma-pt--BR-green) ![PWA](https://img.shields.io/badge/PWA-instal%C3%A1vel-blue) ![Sem backend](https://img.shields.io/badge/backend-nenhum-lightgrey)
 
-## Por que este jogo vende
+> 📋 **O que falta construir está em [`docs/PRD.md`](docs/PRD.md)** — fonte de verdade do roadmap, dos bugs conhecidos e das convenções do projeto.
+>
+> Os arquivos `ROADMAP_FUTURE.md` e `TODO_REMAINING.md` descrevem o antigo *modo organização* e estão **superados**.
 
-- **Loop de jogo viciante**: contratar → treinar → montar card → evento ao vivo → lucrar → expandir. Cada semana traz decisões com consequências reais.
-- **Eventos como espetáculo**: a simulação é apresentada como uma transmissão ao vivo — luta a luta, com estatísticas de golpes, quedas e finalizações reveladas em tempo real.
-- **Profundidade de simulação**: 9 divisões de peso, atributos ocultos (potencial, disciplina), DNA de lutador (cresce sob pressão, medo de grandes eventos), corte de peso, fadiga, moral, aposentadorias e nova safra anual de talentos.
-- **Economia viva**: custos semanais que escalam com a reputação, bolsas e bônus de vitória, receita por público e fôlego de caixa — dá para quebrar.
-- **Mundo reativo**: organizações rivais contratam seus alvos, rivalidades nascem de lutas acirradas, imprensa gera hype, Hall da Fama eterniza lendas.
-- **Zero fricção**: roda em qualquer navegador, funciona offline (PWA instalável), salva automaticamente no dispositivo e exporta/importa saves em JSON. Sem servidor, sem custo de infraestrutura.
+## O loop
 
-## Funcionalidades
+**Preparar → contra-atacar → conquistar.**
 
-| Tela | O que oferece |
+1. Uma promoção oferece uma luta. Você aceita, recusa ou **negocia a bolsa**.
+2. Você **estuda o adversário** — sem isso, os atributos dele são só faixas hachuradas e você escolhe o plano de jogo no escuro.
+3. Você escolhe o **plano de jogo**. Manter em pé contra um grappler vale +10% por round; levá-lo ao chão custa −8%.
+4. Na noite da luta, **você comanda o córner** entre os rounds.
+5. Vencer os caras certos te coloca na **fila do cinturão** — não vencer muitos caras, os caras *certos*.
+
+## O que já existe
+
+| Sistema | O que faz |
 |---|---|
-| **Dashboard** | Arena 3D interativa, visão geral do caixa, reputação, objetivos e ranking de organizações |
-| **Elenco / Mercado** | Contratações com negociação de bolsa, bônus e duração de contrato |
-| **Eventos** | Criação de cards (principal + preliminares) com auto-matchmaking e simulação ao vivo |
-| **Rankings** | Classificação oficial por divisão com campeões destacados |
-| **Finanças** | Gráfico receita × despesa por evento, custos fixos semanais e fôlego de caixa |
-| **Acampamento** | Treinos com intensidade e especialização, com risco de lesão |
-| **Rivalidades** | Rivalidades dinâmicas que aumentam o hype (e a receita) dos confrontos |
-| **Hall da Fama** | Indução automática por mérito: vitórias, streaks, popularidade |
+| **Mundo vivo** | 5 promoções de IA (regional → nacional → elite mundial) com calendário e eventos próprios |
+| **Cinturões** | Campeão por divisão em cada promoção. A chance de título é do **desafiante mandatório**, não de quem empilhou vitórias |
+| **Névoa de guerra** | Você conhece seus atletas por inteiro; de quem está de fora, só o que investigou. Olheiro, scouting pago, e "lutar contra alguém ensina de graça — tarde demais" |
+| **Plano de jogo** | 5 planos que leem o adversário. A leitura pesa mais que a instrução de córner |
+| **Córner ao vivo** | Instrução a cada round: pressionar, recuar, levar pro chão. Cada uma cobra fôlego ou expõe o queixo |
+| **Suspensão médica** | Ninguém luta toda semana. 1 a 16 semanas conforme a violência do desfecho |
+| **Academia** | Instalações (4 níveis), comissão técnica, olheiro, patrocínios, extrato financeiro |
+| **Academias rivais** | Disputam os mesmos agentes livres e seduzem seus atletas insatisfeitos |
+| **Simular período** | 1 mês a 1 ano em automático, com resumo agregado |
 
 ## Como rodar
 
-É um site estático — qualquer servidor HTTP serve:
+Site estático — qualquer servidor HTTP serve:
 
 ```bash
-# Python
-python -m http.server 8341
-
-# ou Node
-npx serve .
+python -m http.server 8341   # ou: npx serve .
 ```
 
-Abra `http://localhost:8341`. Para distribuir, basta hospedar a pasta em qualquer host estático (GitHub Pages, Netlify, Vercel, itch.io como HTML5).
+Abra `http://localhost:8341`.
 
-## Stack técnica
+> ⚠️ O servidor do Python não envia `Cache-Control` e o navegador cacheia módulos ES por heurística. Depois de editar um `.js` já carregado, um reload normal pode servir a versão antiga **sem erro visível**. Use hard-reload.
 
-- **JavaScript puro (ES Modules)** — sem framework, sem build, sem dependência de npm
-- **IndexedDB** para persistência local do save
-- **Three.js** para a arena 3D e ambientação
-- **GSAP + Lenis** para animações e scroll cinematográfico
-- **PWA** com service worker (offline) e manifest (instalável)
+## Stack
 
-## Caminhos de monetização
+- **JavaScript puro (ES Modules)** — sem framework, sem build, sem npm
+- **IndexedDB** para o save (migrações aditivas via `gameState.meta.patches`)
+- **Three.js** na arena do pôster · **GSAP + Lenis** nas animações
+- **PWA** instalável e offline
 
-- **Premium/HTML5 portals**: itch.io, CrazyGames, Poki (jogos de gerenciamento têm público fiel e sessões longas)
-- **Steam via wrapper** (Electron/Tauri) — a categoria "sports management" tem histórico forte de vendas
-- **Mobile (PWA → loja)**: já é instalável; empacotar com Capacitor abre Google Play
-- **Conteúdo**: passes de temporada com novas ligas, editor de lutadores, modos de carreira
+## Design
 
-## Roadmap sugerido
+Tema **"Red Corner / Blue Corner"**: o sistema de informação do próprio esporte vira o da interface. Vermelho é sua academia, azul é o adversário, e ouro é só para cinturões. Tipografia `Archivo` (eixo de largura variável), `IBM Plex Sans` no corpo e `IBM Plex Mono` nos dados — um treinador lê cartéis e scorecards, não marketing.
 
-- [ ] Lutas título explícitas com cinturão em jogo
-- [ ] Negociação de TV/patrocínios como fluxo de receita
-- [ ] Árvore de upgrades da organização (academia, arena própria, olheiros)
-- [ ] Localização en-US/es-ES para ampliar o mercado
-- [ ] Trilha sonora e efeitos de som nos eventos
+Convenções críticas (contraste, animação, tokens) estão documentadas no [PRD](docs/PRD.md#0-como-usar-este-documento).

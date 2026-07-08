@@ -1,15 +1,18 @@
 import { FightOffer, OFFER_STATUS } from '../models/fight-offer.js';
 import { Fighter } from '../models/fighter.js';
 import { generateId, clamp } from '../utils/helpers.js';
-import { OFFER_CONFIG, NEGOTIATION_CONFIG } from '../config/game-config.js';
+import { getWeightClassName } from '../utils/helpers.js';
+import { OFFER_CONFIG, NEGOTIATION_CONFIG, TITLE_CONFIG, TITLE_ROLE } from '../config/game-config.js';
 
 // Ciclo de vida das ofertas de luta: geração semanal pelas promoções,
 // expiração, aceite e recusa.
 export class OfferService {
-  constructor(db, fighterCtrl, notifService) {
+  constructor(db, fighterCtrl, notifService, titleService = null, contractService = null) {
     this.db = db;
     this.fighterCtrl = fighterCtrl;
     this.notifService = notifService;
+    this.titleService = titleService;
+    this.contractService = contractService;
   }
 
   async getAll() {
@@ -125,24 +128,47 @@ export class OfferService {
       if (fighter.fatigue >= 70) continue; // ninguém oferece luta a atleta esgotado
       if (Math.random() > OFFER_CONFIG.WEEKLY_OFFER_CHANCE) continue;
 
+      // Uma chance de cinturão sempre atropela a oferta comum da semana.
+      const titleOffer = await this._tryTitleOffer(fighter, gym, promotions, absWeekNow, targetedOpponentIds);
+      if (titleOffer) {
+        targetedOpponentIds.add(titleOffer.opponentId);
+        busyFighterIds.add(fighter.id);
+        created.push(titleOffer);
+        continue;
+      }
+
+      // Épico B: contrato exclusivo limita ofertas à promoção contratante
+      let availablePromotions;
+      if (fighter.promotionContract?.status === 'active') {
+        const contractPromo = promotions.find(p => p.id === fighter.promotionContract.promotionId);
+        availablePromotions = contractPromo ? [contractPromo] : [];
+      } else {
+        // Sem contrato: só recebe ofertas do circuito regional (tier 3)
+        availablePromotions = promotions.filter(p => p.tier === 3);
+      }
+      if (availablePromotions.length === 0) continue;
+
       const tier = this._pickTier(fighter, gym);
-      const candidates = promotions.filter(p => p.tier === tier);
+      const candidates = availablePromotions.filter(p => p.tier === tier);
       if (candidates.length === 0) continue;
       const promo = candidates[Math.floor(Math.random() * candidates.length)];
 
       const opponent = await this._pickOpponent(promo.id, fighter, targetedOpponentIds, absWeekNow);
       if (!opponent) continue;
 
-      // Agenda no primeiro evento da promoção que respeite o tempo de camp
-      let eventAbsWeek = promo.nextEventAbsWeek;
-      while (eventAbsWeek - absWeekNow < OFFER_CONFIG.MIN_WEEKS_NOTICE) {
-        eventAbsWeek += promo.cadenceWeeks;
-      }
+      const eventAbsWeek = this._nextEventWeek(promo, absWeekNow);
 
-      const purseCfg = OFFER_CONFIG.PURSE[promo.tier];
-      const rawPurse = purseCfg.base + fighter.popularity * purseCfg.perPop;
+      // Épico B: usar bolsa do contrato se tiver contrato ativo
+      let rawPurse, winBonus;
+      if (fighter.promotionContract?.status === 'active') {
+        rawPurse = fighter.promotionContract.basePurse;
+        winBonus = fighter.promotionContract.winBonus;
+      } else {
+        const purseCfg = OFFER_CONFIG.PURSE[promo.tier];
+        rawPurse = purseCfg.base + fighter.popularity * purseCfg.perPop;
+        winBonus = Math.round((rawPurse * OFFER_CONFIG.WIN_BONUS_RATIO) / 50) * 50;
+      }
       const purse = Math.round(rawPurse / 50) * 50;
-      const winBonus = Math.round((purse * OFFER_CONFIG.WIN_BONUS_RATIO) / 50) * 50;
 
       const offer = new FightOffer({
         id: generateId(),
@@ -174,9 +200,17 @@ export class OfferService {
     return created;
   }
 
-  // Tier mais alto que o lutador destrava; com sorte a oferta vem dele,
-  // senão desce um degrau (mantém tier 3 sempre acessível).
-  _pickTier(fighter, gym) {
+  // Primeiro evento da promoção que respeite o tempo mínimo de camp.
+  _nextEventWeek(promo, absWeekNow) {
+    let week = promo.nextEventAbsWeek;
+    while (week - absWeekNow < OFFER_CONFIG.MIN_WEEKS_NOTICE) {
+      week += promo.cadenceWeeks;
+    }
+    return week;
+  }
+
+  // Tiers que o lutador já destravou (3 é sempre acessível).
+  _unlockedTiers(fighter, gym) {
     const gates = OFFER_CONFIG.TIER_GATES;
     const wins = fighter.record.wins;
 
@@ -187,11 +221,81 @@ export class OfferService {
     if ((fighter.popularity >= gates[1].popularity || wins >= gates[1].wins) && gym.reputation >= gates[1].gymRep) {
       unlocked.push(1);
     }
+    return unlocked;
+  }
 
+  // Tier mais alto que o lutador destrava; com sorte a oferta vem dele,
+  // senão desce um degrau (mantém tier 3 sempre acessível).
+  _pickTier(fighter, gym) {
+    const unlocked = this._unlockedTiers(fighter, gym);
     const best = Math.min(...unlocked);
     if (best < 3 && Math.random() < OFFER_CONFIG.TOP_TIER_CHANCE) return best;
     // desce um tier a partir do melhor (nunca abaixo de 3)
     return Math.min(3, best + (Math.random() < 0.5 ? 0 : 1));
+  }
+
+  // Chance de cinturão. Prioriza a promoção mais prestigiada. Defender um
+  // cinturão nunca depende do gate de tier — você já está lá dentro.
+  async _tryTitleOffer(fighter, gym, promotions, absWeekNow, excludeIds) {
+    if (!this.titleService) return null;
+
+    const unlocked = new Set(this._unlockedTiers(fighter, gym));
+    const ordered = [...promotions].sort((a, b) => a.tier - b.tier);
+
+    for (const promo of ordered) {
+      const isDefending = promo.isChampion(fighter.id, fighter.weightClass);
+      if (!isDefending && !unlocked.has(promo.tier)) continue;
+
+      const eventAbsWeek = this._nextEventWeek(promo, absWeekNow);
+      const chance = await this.titleService.findOpportunity(fighter, promo, eventAbsWeek, absWeekNow, excludeIds);
+      if (!chance) continue;
+
+      const { opponent, role, weightClass } = chance;
+      const purseCfg = OFFER_CONFIG.PURSE[promo.tier];
+      const base = purseCfg.base + fighter.popularity * purseCfg.perPop;
+      const purse = Math.round((base * TITLE_CONFIG.PURSE_MULTIPLIER) / 50) * 50;
+      const winBonus = Math.round((purse * OFFER_CONFIG.WIN_BONUS_RATIO * TITLE_CONFIG.WIN_BONUS_MULTIPLIER) / 50) * 50;
+
+      const offer = new FightOffer({
+        id: generateId(),
+        promotionId: promo.id,
+        promotionName: promo.name,
+        tier: promo.tier,
+        fighterId: fighter.id,
+        opponentId: opponent.id,
+        opponentName: opponent.name,
+        opponentRecord: { ...opponent.record },
+        opponentOverall: opponent.overallRating,
+        opponentStyle: opponent.fightingStyle,
+        weightClass,
+        purse,
+        winBonus,
+        eventAbsWeek,
+        expiresAbsWeek: absWeekNow + OFFER_CONFIG.EXPIRY_WEEKS,
+        createdAtAbsWeek: absWeekNow,
+        isTitleFight: true,
+        titleRole: role,
+      });
+
+      await this.db.put('offers', offer);
+
+      const division = getWeightClassName(weightClass);
+      const headline = role === TITLE_ROLE.DEFENSE
+        ? `🛡️ Defesa de Cinturão`
+        : role === TITLE_ROLE.VACANT
+          ? `🏆 Cinturão Vago em Disputa`
+          : `🏆 Chance de Cinturão!`;
+      const body = role === TITLE_ROLE.DEFENSE
+        ? `${promo.name} marcou a defesa do cinturão ${division} de ${fighter.name} contra ${opponent.name}.`
+        : role === TITLE_ROLE.VACANT
+          ? `${fighter.name} disputa o cinturão ${division} vago do ${promo.short} contra ${opponent.name}.`
+          : `${fighter.name} desafia ${opponent.name} pelo cinturão ${division} do ${promo.short}. Bolsa de $${purse.toLocaleString()}.`;
+
+      await this.notifService.add('achievement', headline, body);
+      return offer;
+    }
+
+    return null;
   }
 
   async _pickOpponent(promotionId, fighter, excludeIds, absWeekNow) {

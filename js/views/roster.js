@@ -4,8 +4,35 @@ import { TRAINING_FOCUS_META } from '../config/game-config.js';
 // Minha Equipe: cartão por atleta com atributos legíveis e o seletor de
 // foco de treino individual — o coração da gestão do treinador.
 export class RosterView {
-  static render(fighters, bookings = [], now = 1) {
+  static render(fighters, bookings = [], now = 1, approaches = []) {
     const sorted = [...fighters].sort((a, b) => b.overallRating - a.overallRating);
+    const activeApproaches = approaches.filter(a => !a.resolved);
+
+    // Épico A: card de retenção para atletas sondados
+    const approachHtml = activeApproaches.length === 0 ? '' : `
+      <div class="section-label mt-4" style="color:var(--warning)">🔍 Sondagens de Rivais</div>
+      <p class="text-xs text-muted mb-2">Academias rivais demonstraram interesse nestes atletas. Reaja antes do prazo ou eles podem sair.</p>
+      ${activeApproaches.map(a => {
+        const weeksLeft = Math.max(0, a.deadlineAbsWeek - now);
+        return `
+          <div class="card mb-2" style="border-color:var(--warning)" data-reveal>
+            <div class="flex items-center justify-between mb-2">
+              <div>
+                <span class="font-bold">${a.fighterName}</span>
+                <span class="text-xs text-muted ml-2">Sondado por ${a.rivalGymName}</span>
+              </div>
+              <span class="badge ${weeksLeft <= 1 ? 'badge-danger' : 'badge-warning'}">${weeksLeft} sem${weeksLeft === 1 ? '' : 's'}</span>
+            </div>
+            <div class="flex gap-2" style="flex-wrap:wrap">
+              <button class="btn btn-sm btn-primary retention-respond" data-approach="${a.id}" data-action="renegotiate">Renegociar</button>
+              <button class="btn btn-sm btn-success retention-respond" data-approach="${a.id}" data-action="stay_bonus">Bônus Permanência</button>
+              <button class="btn btn-sm btn-info retention-respond" data-approach="${a.id}" data-action="promise">Fazer Promessa</button>
+              <button class="btn btn-sm btn-secondary retention-respond" data-approach="${a.id}" data-action="let_go">Deixar Ir</button>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    `;
 
     if (sorted.length === 0) {
       return `
@@ -24,6 +51,8 @@ export class RosterView {
         <h2>Minha Equipe</h2>
         <p>${sorted.length} atleta${sorted.length === 1 ? '' : 's'} sob seus cuidados · defina o foco de treino de cada um</p>
       </div>
+
+      ${approachHtml}
 
       <div class="roster-cards" data-reveal-stagger>
         ${sorted.map(f => this._renderCard(f, bookings.find(b => b.fighterId === f.id), now)).join('')}
@@ -105,6 +134,15 @@ export class RosterView {
               </button>
             `).join('')}
           </div>
+        </div>
+
+        <div class="mt-2 text-xs">
+          ${f.promotionContract?.status === 'active'
+            ? `<span class="text-muted">📋 ${f.promotionContract.promotionName} · ${f.promotionContract.fightsRemaining}/${f.promotionContract.fightsTotal} lutas</span>`
+            : f.promotionContract?.status === 'expired'
+              ? `<span class="text-warning">📋 Contato expirado — aguardando renovação</span>`
+              : `<span class="text-muted">📋 Sem contrato exclusivo</span>`
+          }
         </div>
 
         <div class="mt-3">

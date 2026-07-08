@@ -151,6 +151,49 @@ export const TIER_LABELS = {
   3: 'Regional',
 };
 
+// ============================================================
+// CINTURÕES — o cume da escada.
+// Cada promoção tem um campeão por divisão. Vencer dentro de uma
+// promoção te faz desafiante; vencer o campeão te dá o cinturão.
+// ============================================================
+export const TITLE_CONFIG = {
+  // Quem disputa o cinturão não é "quem venceu N lutas" — é o DESAFIANTE
+  // MANDATÓRIO: o melhor colocado no ranking daquela divisão, dentro
+  // daquela promoção, que esteja disponível e que ainda não tenha perdido
+  // para o campeão atual. Vencer 4 seguidas contra ninguém não te leva lá.
+  SHOT_MIN_PROMO_WINS: 2,   // piso de credencial: precisa ter lutado ali
+  SHOT_MIN_STREAK: 1,       // não se pede título vindo de uma derrota
+  SHOT_COOLDOWN_WEEKS: 8,   // após perder um título, espere antes de nova chance
+
+  // Fora do top 5 só se chega ao cinturão sendo um fenômeno em ascensão —
+  // e ainda assim só se todos acima estiverem indisponíveis ou já batidos.
+  CONTENDER_MAX_RANK: 5,
+  LONGSHOT_MIN_STREAK: 4,
+
+  // Um desafiante que perdeu para o campeão atual vai para o fim da fila.
+  // Se não sobrar mais ninguém, a revanche acontece.
+  REMATCH_BLOCK_FIGHTS: 4,
+
+  PURSE_MULTIPLIER: 2.5,
+  WIN_BONUS_MULTIPLIER: 2,
+
+  REP_ON_TITLE_WIN: 12,
+  REP_ON_DEFENSE: 5,
+  REP_ON_TITLE_LOSS: -4,
+
+  POPULARITY_ON_TITLE_WIN: 18,
+  POPULARITY_ON_DEFENSE: 8,
+
+  // A IA disputa um cinturão a cada N eventos de cada promoção
+  AI_TITLE_FIGHT_EVERY: 4,
+};
+
+export const TITLE_ROLE = {
+  CHALLENGE: 'challenge', // você desafia o campeão
+  DEFENSE: 'defense',     // você é o campeão e defende
+  VACANT: 'vacant',       // cinturão vago
+};
+
 // Descanso pós-luta — suspensão médica + recuperação + intervalo natural
 // entre camps. No MMA real um atleta ativo faz no máximo 3-4 lutas por
 // ano; o afastamento cresce com a violência do desfecho (nocaute >
@@ -168,6 +211,73 @@ export function computeSuspensionWeeks(method, won) {
   if (won) return SUSPENSION_CONFIG.FINISH_WIN_WEEKS;
   return method === 'Submission' ? SUSPENSION_CONFIG.SUBMISSION_LOSS_WEEKS : SUSPENSION_CONFIG.KO_TKO_LOSS_WEEKS;
 }
+
+// ============================================================
+// FATIA 2 — A PREPARAÇÃO
+// Névoa de guerra + olheiro + plano de jogo.
+// Você conhece seus próprios atletas (treina com eles todo dia). De quem
+// está do lado de fora, você só sabe o que investigou.
+// ============================================================
+
+// Níveis de conhecimento sobre um lutador de fora.
+// 0 = nada · 1 = observado · 2 = estudado · 3 = dissecado
+export const SCOUTING_LEVELS = [
+  { level: 0, label: 'Desconhecido', spread: 14, revealsDna: false, revealsPotential: false },
+  { level: 1, label: 'Observado',    spread: 8,  revealsDna: false, revealsPotential: false },
+  { level: 2, label: 'Estudado',     spread: 4,  revealsDna: true,  revealsPotential: true },
+  { level: 3, label: 'Dissecado',    spread: 0,  revealsDna: true,  revealsPotential: true },
+];
+
+export const SCOUTING_CONFIG = {
+  // Custo de estudar o adversário, por nível alcançado (1 → 2 → 3)
+  STUDY_COST: [0, 1500, 3500, 7000],
+  // O olheiro contratado (gym.scoutLevel) dá conhecimento de base a todos
+  BASELINE_WITH_SCOUT: 1,
+  // Lutar contra alguém ensina muito sobre ele
+  KNOWLEDGE_AFTER_FIGHTING: 2,
+};
+
+// Planos de jogo — escolhidos ANTES da luta, valem por todos os rounds.
+// A instrução de córner ajusta round a round por cima disto.
+//
+// `counters` é a leitura do adversário: cada plano ganha bônus contra um
+// tipo de lutador e apanha contra outro. Sem estudar o adversário você
+// escolhe no escuro — e é esse o ponto.
+export const GAME_PLANS = {
+  balanced: {
+    label: 'Luta Equilibrada', icon: '⚖️',
+    desc: 'Sem plano específico. Nenhum bônus, nenhum risco.',
+    strikingMod: 1.0, grapplingMod: 1.0, cardioMod: 1.0, chinMod: 1.0,
+    strongVs: null, weakVs: null,
+  },
+  striker: {
+    label: 'Manter em Pé', icon: '🥊',
+    desc: 'Sprawl e trocação. Sufoca quem só sabe lutar no chão.',
+    strikingMod: 1.12, grapplingMod: 0.9, cardioMod: 1.0, chinMod: 1.0,
+    strongVs: 'grappler', weakVs: 'striker',
+  },
+  grappler: {
+    label: 'Levar para o Chão', icon: '🤼',
+    desc: 'Quedas e controle. Tira o pé de quem só sabe bater.',
+    strikingMod: 0.9, grapplingMod: 1.2, cardioMod: 0.95, chinMod: 1.05,
+    strongVs: 'striker', weakVs: 'grappler',
+  },
+  pressure: {
+    label: 'Sufocar no Ritmo', icon: '🔥',
+    desc: 'Pressão constante. Quebra quem tem cardio fraco, morre contra quem não cansa.',
+    strikingMod: 1.08, grapplingMod: 1.05, cardioMod: 0.85, chinMod: 0.95,
+    strongVs: 'lowCardio', weakVs: 'highCardio',
+  },
+  patient: {
+    label: 'Contragolpear', icon: '🛡️',
+    desc: 'Espera o erro. Devora quem é impulsivo, se perde contra quem lê a luta.',
+    strikingMod: 0.95, grapplingMod: 0.95, cardioMod: 1.15, chinMod: 1.12,
+    strongVs: 'lowIq', weakVs: 'highIq',
+  },
+};
+
+// Quanto o acerto (ou o erro) de leitura vale na performance de cada round
+export const GAME_PLAN_EDGE = { strong: 0.10, weak: -0.08 };
 
 // Instruções de córner — escolhidas pelo jogador entre rounds na luta ao
 // vivo. Afetam apenas o lutador da academia (córner A); o adversário luta
@@ -202,6 +312,10 @@ export const MILESTONE_LABELS = {
   firstTier1: '⭐ Elite Mundial!',
   rep50: '🏛️ Academia Respeitada!',
   topGym: '👑 Academia Nº1 do Ranking!',
+  firstTitleShot: '🎯 Primeira Disputa de Cinturão!',
+  firstBelt: '🏆 CAMPEÃO! Primeiro Cinturão da Academia!',
+  firstDefense: '🛡️ Primeira Defesa de Cinturão!',
+  worldChampion: '🌍 Campeão Mundial! Cinturão da Elite!',
 };
 
 // Academias rivais — o verdadeiro antagonista do treinador: competem pelos

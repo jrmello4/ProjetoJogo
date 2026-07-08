@@ -64,37 +64,26 @@ export class MotionEngine {
   animatePageEnter(container) {
     if (!container) return;
 
-    const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+    // Never animate the container's own opacity. A render that overlaps this
+    // one calls gsap.killTweensOf(container) and would strand it at opacity 0
+    // — a blank page with the HTML sitting right there. The children carry the
+    // entrance; the container just stays visible.
+    gsap.set(container, { opacity: 1, y: 0 });
 
-    tl.fromTo(
-      container,
-      { opacity: 0, y: 24 },
-      { opacity: 1, y: 0, duration: 0.55 }
-    );
+    const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
 
     const header = container.querySelector('.page-header');
     if (header) {
       tl.fromTo(
         header.querySelector('h2'),
         { opacity: 0, y: 40, skewY: 2 },
-        { opacity: 1, y: 0, skewY: 0, duration: 0.7 },
-        '-=0.3'
+        { opacity: 1, y: 0, skewY: 0, duration: 0.7 }
       );
       tl.fromTo(
         header.querySelector('p'),
         { opacity: 0, y: 20 },
         { opacity: 1, y: 0, duration: 0.5 },
         '-=0.45'
-      );
-    }
-
-    const hero = container.querySelector('.hero-section');
-    if (hero) {
-      tl.fromTo(
-        hero,
-        { opacity: 0, scale: 0.97 },
-        { opacity: 1, scale: 1, duration: 0.8 },
-        '-=0.5'
       );
     }
 

@@ -38,6 +38,17 @@ export class Fighter {
     this.injury = data.injury || null; // { untilAbsWeek, description }
     this.trainingFocus = data.trainingFocus || 'striking'; // foco individual de treino semanal
     this.availableFromAbsWeek = data.availableFromAbsWeek || 0; // suspensão médica pós-luta
+    this.lastTrainedAbsWeek = data.lastTrainedAbsWeek || 0; // cooldown semanal do acampamento
+    this.promotionContract = data.promotionContract || null; // contrato exclusivo com promoção (Épico B)
+    this.loyalty = data.loyalty ?? 50; // 0-100, Épico A — retenção
+    this.purseShare = data.purseShare ?? 0.8; // fração da bolsa que fica com o atleta (1 - managerCut)
+    this.promises = data.promises || []; // { kind, deadlineAbsWeek, madeAtAbsWeek, kept }
+
+    // Cartel por promoção: { [promoId]: { wins, losses } }. Chance de título
+    // exige vitórias DENTRO da promoção — cartel de outro circuito não conta.
+    this.promoRecord = data.promoRecord || {};
+    this.titlesWon = data.titlesWon ?? 0;
+    this.titleShotCooldownUntil = data.titleShotCooldownUntil ?? 0;
     this.contract = data.contract ? new Contract(data.contract) : null;
     this.fights = [...(data.fights || [])];
     this.ranking = data.ranking || 0;
@@ -70,6 +81,28 @@ export class Fighter {
 
   get winRate() {
     return this.totalFights > 0 ? (this.record.wins / this.totalFights) * 100 : 0;
+  }
+
+  // fights[0] é a luta mais recente (unshift no SimulationEngine)
+  get winStreak() {
+    let streak = 0;
+    for (const f of this.fights) {
+      if (!f.won) break;
+      streak++;
+    }
+    return streak;
+  }
+
+  recordIn(promotionId) {
+    return this.promoRecord[promotionId] || { wins: 0, losses: 0 };
+  }
+
+  registerPromoResult(promotionId, won) {
+    const rec = this.recordIn(promotionId);
+    this.promoRecord[promotionId] = {
+      wins: rec.wins + (won ? 1 : 0),
+      losses: rec.losses + (won ? 0 : 1),
+    };
   }
 
   get averageSkill() {

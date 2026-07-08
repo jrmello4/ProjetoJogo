@@ -10,7 +10,20 @@ export class Event {
     this.revenue = data.revenue || 0;
     this.expenses = data.expenses || 0;
     this.bonuses = data.bonuses || [];
+
+    // Quem promoveu o evento. Sem isto, reidratar um evento do banco perdia
+    // a promoção e a semana — a tela Mundo mostrava "—" e nada era filtrável.
+    this.promotionId = data.promotionId || null;
+    this.promotionName = data.promotionName || null;
+    this.tier = data.tier ?? null;
+    this.absWeek = data.absWeek ?? null;
+
     this.createdAt = data.createdAt || new Date().toISOString();
+  }
+
+  // Cinturão em jogo nesta noite?
+  get titleFight() {
+    return (this.results || []).find(r => r.isTitleFight) || null;
   }
 
   get totalFights() {

@@ -1,10 +1,11 @@
-import { formatCurrency, getWeightClassShort, getWeightClassName, getNationalityFlag, renderAttrBar } from '../utils/helpers.js';
+import { formatCurrency, getWeightClassShort, getWeightClassName, getNationalityFlag, renderAttrRange } from '../utils/helpers.js';
 import { CORE_WEIGHT_CLASSES, POTENTIAL_TIERS } from '../config/game-config.js';
+import { ScoutingService } from '../services/scouting-service.js';
 
 // Recrutamento: agentes livres que podem se juntar à academia do jogador.
 // Cartões em vez de tabela densa — a mesma informação, mais fácil de ler.
 export class MarketView {
-  static render(fighters, gym, teamSize, filter = '', searchTerm = '', feeOf = () => 0) {
+  static render(fighters, gym, teamSize, filter = '', searchTerm = '', feeOf = () => 0, knowledge = {}) {
     let filtered = filter
       ? fighters.filter(f => f.weightClass === filter)
       : fighters;
@@ -42,7 +43,7 @@ export class MarketView {
       ` : ''}
       ${!scouted ? `
         <div class="alert alert-warning mb-4">
-          <strong>Sem olheiro.</strong> O potencial oculto de cada agente livre é desconhecido. Contrate um olheiro na Academia para revelá-lo antes de recrutar.
+          <strong>Sem olheiro.</strong> Você só enxerga faixas grosseiras dos atributos e nenhum potencial. Contrate um olheiro na Academia para enxergar quem vale a pena.
         </div>
       ` : ''}
       ${filterButtons}
@@ -60,14 +61,19 @@ export class MarketView {
     return `
       ${header}
       <div class="roster-cards" data-reveal-stagger>
-        ${sorted.map(f => this._renderCard(f, feeOf(f), gym, scouted, slotsFull)).join('')}
+        ${sorted.map(f => this._renderCard(f, feeOf(f), gym, slotsFull, knowledge[f.id] ?? 0)).join('')}
       </div>
     `;
   }
 
-  static _renderCard(f, fee, gym, scouted, slotsFull) {
+  static _renderCard(f, fee, gym, slotsFull, level) {
     const canAfford = gym.cash >= fee;
-    const potentialHtml = scouted ? this._potentialBadge(f.hidden.potential) : '<span class="badge badge-warning" style="font-size:0.65rem">??? não revelado</span>';
+
+    // Sem olheiro você nem sabe o OVR direito — só uma faixa.
+    const ovr = ScoutingService.blur(f.overallRating, level);
+    const potentialHtml = ScoutingService.revealsPotential(level)
+      ? this._potentialBadge(f.hidden.potential)
+      : '<span class="badge badge-warning" style="font-size:0.65rem">??? não revelado</span>';
 
     return `
       <div class="card roster-card" data-reveal>
@@ -80,7 +86,7 @@ export class MarketView {
             <div class="text-xs text-muted mt-1">${f.age} anos · ${getWeightClassShort(f.weightClass)} · ${f.fightingStyle}</div>
           </div>
           <div class="text-right">
-            <div class="stat-value" style="font-size:1.75rem">${f.overallRating}</div>
+            <div class="stat-value ${ovr.exact ? '' : 'stat-value--fuzzy'}" style="font-size:${ovr.exact ? '1.75rem' : '1.1rem'}">${ovr.exact ? ovr.value : `${ovr.min}–${ovr.max}`}</div>
             <div class="text-xs text-muted">OVR</div>
           </div>
         </div>
@@ -92,10 +98,10 @@ export class MarketView {
         </div>
 
         <div class="attr-grid mt-2">
-          ${renderAttrBar('Striking', f.strikingScore)}
-          ${renderAttrBar('Grappling', f.grapplingScore)}
-          ${renderAttrBar('Cardio', f.attributes.cardio)}
-          ${renderAttrBar('Fight IQ', f.attributes.fightIQ)}
+          ${renderAttrRange('Striking', ScoutingService.blur(f.strikingScore, level))}
+          ${renderAttrRange('Grappling', ScoutingService.blur(f.grapplingScore, level))}
+          ${renderAttrRange('Cardio', ScoutingService.blur(f.attributes.cardio, level))}
+          ${renderAttrRange('Fight IQ', ScoutingService.blur(f.attributes.fightIQ, level))}
         </div>
 
         <div class="cost-row mt-3" style="border-top:1px solid var(--border);padding-top:0.75rem">

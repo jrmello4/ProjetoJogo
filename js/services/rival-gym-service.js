@@ -1,14 +1,17 @@
 import { RivalGym } from '../models/rival-gym.js';
 import { Fighter } from '../models/fighter.js';
+import { getWeightClassName } from '../utils/helpers.js';
 import { GYM_CONFIG, RIVAL_GYM_CONFIG } from '../config/game-config.js';
 
 // Competição do mercado: academias rivais disputam os mesmos agentes livres
 // e, ocasionalmente, seduzem atletas insatisfeitos da sua própria equipe.
 export class RivalGymService {
-  constructor(db, fighterCtrl, notifService) {
+  constructor(db, fighterCtrl, notifService, titleService = null, retentionService = null) {
     this.db = db;
     this.fighterCtrl = fighterCtrl;
     this.notifService = notifService;
+    this.titleService = titleService;
+    this.retentionService = retentionService;
   }
 
   async getAll() {
@@ -53,42 +56,16 @@ export class RivalGymService {
       await this.notifService.add('info', 'Mercado Concorrido', `${headline.gymName} contratou ${headline.fighterName} (OVR ${headline.overall}) — ${signings.length > 1 ? `e mais ${signings.length - 1} agente${signings.length - 1 === 1 ? '' : 's'} livre${signings.length - 1 === 1 ? '' : 's'}` : 'de olho nos mesmos prospectos que você'}.`);
     }
 
-    // 2) Assédio a atletas da sua equipe — só UM rival tenta por atleta por
-    // semana (não soma chance de todas as academias), respeitando carência
-    // de tenure e limitando a no máximo 1 sucesso por semana no total.
-    if (rivalGyms.length > 0) {
-      const order = [...team].sort(() => Math.random() - 0.5);
-      let poachCount = 0;
-
-      for (const fighter of order) {
-        if (poachCount >= RIVAL_GYM_CONFIG.MAX_POACH_PER_WEEK) break;
-        if (fighter.status === 'injured' || fighter.status === 'retired') continue;
-
-        const tenureWeeks = absWeekNow - (fighter.gymJoinedAbsWeek || absWeekNow);
-        if (tenureWeeks < RIVAL_GYM_CONFIG.MIN_TENURE_WEEKS) continue;
-
-        const rival = rivalGyms[Math.floor(Math.random() * rivalGyms.length)];
-        const repEdge = Math.min(RIVAL_GYM_CONFIG.POACH_REP_EDGE_CAP, Math.max(0, rival.reputation - gym.reputation));
-        const chance = RIVAL_GYM_CONFIG.POACH_BASE_CHANCE
-          + ((100 - fighter.morale) / 100) * RIVAL_GYM_CONFIG.POACH_MORALE_WEIGHT
-          + (repEdge / 100) * RIVAL_GYM_CONFIG.POACH_REP_WEIGHT;
-
-        if (Math.random() >= chance) continue;
-
-        fighter.status = 'rival';
-        fighter.gymId = rival.id;
-        await this.fighterCtrl.updateFighter(fighter);
-
-        rival.poachedFromPlayer++;
-        rival.updateReputation(RIVAL_GYM_CONFIG.REP_PER_POACH);
-        await this.db.put('organization', rival);
-
-        gym.updateReputation(-1);
-
-        poached = { gymName: rival.name, fighterName: fighter.name };
-        await this.notifService.add('warning', '💔 Atleta Perdido', `${fighter.name} foi seduzido pela ${rival.name} — moral baixa e uma proposta irrecusável selaram a saída.`);
-
-        poachCount++;
+    // 2) Épico A — Sondagem: em vez de assédio direto, rivais geram
+    //    sondagens que o jogador tem 2 semanas para responder.
+    if (this.retentionService && team.length > 0) {
+      const activeApproaches = await this.retentionService.generateApproaches(absWeekNow, gym, team);
+      if (activeApproaches.length > 0) {
+        poached = {
+          gymName: activeApproaches[0].rivalGymName,
+          fighterName: activeApproaches[0].fighterName,
+          isApproach: true,
+        };
       }
     }
 

@@ -1,4 +1,4 @@
-import { formatCurrency, formatDate, formatDateShort } from '../utils/helpers.js';
+import { formatCurrency, formatDate, formatDateShort, getWeightClassName } from '../utils/helpers.js';
 import { TIER_LABELS, CORNER_INSTRUCTIONS, MILESTONE_LABELS } from '../config/game-config.js';
 
 // Visão do mundo: calendário das promoções de IA e resultados dos eventos.
@@ -104,10 +104,12 @@ export class EventsView {
       const [subA, subB] = lead(r.stats.subAttemptsA, r.stats.subAttemptsB);
 
       return `
-        <div class="card mb-2 live-fight ${aIsPlayer || bIsPlayer ? 'live-fight--player' : ''}" data-live-index="${i}" ${aIsPlayer || bIsPlayer ? 'style="border-left:3px solid var(--gold,#d4a843)"' : ''}>
+        <div class="card mb-2 live-fight ${aIsPlayer || bIsPlayer ? 'live-fight--player' : ''} ${r.isTitleFight ? 'live-fight--title' : ''}" data-live-index="${i}">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <span class="badge ${r.card === 'main' ? 'badge-info' : 'badge-warning'}">${r.card === 'main' ? 'Card Principal' : 'Preliminar'}</span>
+              ${r.isTitleFight
+                ? `<span class="badge badge-warning"><span class="belt-mark">🏆</span> Cinturão ${getWeightClassName(r.titleWeightClass)}</span>`
+                : `<span class="badge ${r.card === 'main' ? 'badge-info' : 'badge-warning'}">${r.card === 'main' ? 'Card Principal' : 'Preliminar'}</span>`}
               ${aIsPlayer || bIsPlayer ? '<span class="badge badge-success" style="font-size:0.6rem">SUA ACADEMIA</span>' : ''}
             </div>
             <span class="text-xs text-muted">Luta ${i + 1} de ${results.length}</span>
@@ -300,20 +302,45 @@ export class EventsView {
         ? `${fighterName} está na frente nos cartões`
         : `${opponentName} está na frente nos cartões`;
 
+    // Whoever won the stat takes it in chalk. A blank column lost it.
+    const row = (label, a, b) => {
+      const lead = (x, y) => (x > y ? 'tot-lead' : '');
+      return `<tr>
+        <td class="${lead(a, b)}">${a}</td>
+        <td>${label}</td>
+        <td class="${lead(b, a)}">${b}</td>
+      </tr>`;
+    };
+
     return `
+      <div class="live-banner">
+        <span class="live-dot"></span>
+        <span class="live-label">Ao Vivo</span>
+        <span class="live-status">Round ${round} encerrado · ${leading}</span>
+      </div>
+
       <div class="page-header">
         <h2>Fim do Round ${round}</h2>
-        <p>${leading}</p>
+        <p>Cartões parciais: ${totalScoreA} — ${totalScoreB}</p>
       </div>
 
       <table class="tale-of-tape mb-4">
-        <tr><td>${roundResult.sigStrikesA}</td><td>Golpes significativos</td><td>${roundResult.sigStrikesB}</td></tr>
-        <tr><td>${roundResult.takedownsA}</td><td>Quedas</td><td>${roundResult.takedownsB}</td></tr>
-        <tr><td>${roundResult.knockdownsA}</td><td>Knockdowns</td><td>${roundResult.knockdownsB}</td></tr>
-        <tr><td>${roundResult.subAttemptsA}</td><td>Tentativas de finalização</td><td>${roundResult.subAttemptsB}</td></tr>
+        <thead>
+          <tr>
+            <th class="tot-red">${fighterName}</th>
+            <th>Round ${round}</th>
+            <th class="tot-blue">${opponentName}</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${row('Golpes significativos', roundResult.sigStrikesA, roundResult.sigStrikesB)}
+          ${row('Quedas', roundResult.takedownsA, roundResult.takedownsB)}
+          ${row('Knockdowns', roundResult.knockdownsA, roundResult.knockdownsB)}
+          ${row('Tentativas de finalização', roundResult.subAttemptsA, roundResult.subAttemptsB)}
+        </tbody>
       </table>
 
-      <div class="section-label">Instruções de Córner para o Round ${round + 1}</div>
+      <div class="section-label">Instruções de córner para o round ${round + 1}</div>
       <div class="corner-choice-grid">
         ${Object.entries(CORNER_INSTRUCTIONS).map(([key, meta]) => `
           <button class="card corner-choice" data-instruction="${key}">

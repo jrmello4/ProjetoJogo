@@ -1,107 +1,143 @@
-/* ========================================
-   MMA Manager — "FIGHT NIGHT" Theme
-   Electric broadcast energy · Octagon vs. corners
-   Stack: bold sports type + GSAP + Three.js
-   ======================================== */
+/* ==========================================================================
+   MMA MANAGER — "RED CORNER / BLUE CORNER"
+   --------------------------------------------------------------------------
+   The sport's own information system, used as the interface's.
+   Every fight has a red corner and a blue corner. That is not decoration —
+   it is how MMA encodes identity. So it encodes identity here too:
+
+       RED   = your gym, your athlete, your money at risk
+       BLUE  = the opponent, the rival, the outside world
+       BELT  = champions and bonuses only. Never anything else.
+
+   Ground is worn canvas (warm graphite), not black. Panels are flat with
+   hairline rules and a 2px corner-colored top stripe. Numbers are mono,
+   because a manager reads records, purses and scorecards — not marketing.
+   ========================================================================== */
 
 :root {
-  /* Core palette — deep arena blacks with a cold blue undertone */
-  --bg-primary: #08090e;
-  --bg-secondary: #0d0e15;
-  --bg-tertiary: #14151e;
-  --bg-card: rgba(20, 21, 30, 0.72);
-  --bg-hover: rgba(255, 255, 255, 0.05);
+  color-scheme: dark;
 
-  /* Glass morphism */
-  --glass-bg: rgba(15, 16, 24, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-blur: 18px;
+  /* ---- Canvas: the mat, under low light. Warm, never blue-black. ---- */
+  --canvas:      #14110f;
+  --mat:         #1c1815;
+  --mat-high:    #262019;
+  --chalk:       #f3efe9;
+  --ash:         #8e857c;
 
-  /* Text */
-  --text-primary: #f6f6f9;
-  --text-secondary: #a7a9b6;
-  --text-muted: #63646f;
+  /* ---- The corners ----
+     --red is the fill (banners, buttons, rules). --red-ink is the same
+     corner spoken as small type: lifted until it clears 4.5:1 on every
+     surface we set it on. Never use --red for text under ~18px. */
+  --red:         #c8202f;
+  --red-ink:     #ef5f6b;
+  --red-bright:  #e23a48;
+  --red-deep:    #8e1220;
+  --blue:        #2f6bbf;
+  --blue-bright: #4a8ae0;
+  --belt:        #c9a227;   /* fill */
+  --belt-ink:    #c9a227;   /* same corner as type; dark ground needs no lift */
+  --money:       #4f9a63;
 
-  /* RED CORNER — primary accent (electric crimson) */
-  --accent: #ff2b4e;
-  --accent-hover: #ff4d6a;
-  --accent-deep: #c40f30;
-  --accent-glow: rgba(255, 43, 78, 0.42);
-  --accent-subtle: rgba(255, 43, 78, 0.12);
+  /* ---- Legacy token map — views reference these inline. Keep them. ---- */
+  --bg-primary:    var(--canvas);
+  --bg-secondary:  var(--mat);
+  --bg-tertiary:   var(--mat-high);
+  --bg-card:       var(--mat);
+  --bg-hover:      rgba(243, 239, 233, 0.045);
 
-  /* BLUE CORNER — secondary accent (electric ice) */
-  --blue: #29e0ff;
-  --blue-glow: rgba(41, 224, 255, 0.35);
-  --blue-subtle: rgba(41, 224, 255, 0.1);
+  --glass-bg:      var(--mat);
+  --glass-border:  var(--border);
+  --glass-blur:    0px;
 
-  /* Champion gold */
-  --gold: #ffc93c;
-  --gold-glow: rgba(255, 201, 60, 0.3);
+  --text-primary:   var(--chalk);
+  --text-secondary: #b3a99f;
+  --text-muted:     var(--ash);
 
-  /* Functional */
-  --success: #2fd07a;
-  --warning: #ffb020;
-  --danger: #ff2b4e;
+  /* Views set `color: var(--accent)` inline, so --accent must be ink-safe. */
+  --accent:         var(--red-ink);
+  --accent-hover:   var(--red-bright);
+  --accent-deep:    var(--red-deep);
+  --accent-glow:    rgba(200, 32, 47, 0.30);
+  --accent-subtle:  rgba(200, 32, 47, 0.10);
 
-  /* Borders */
-  --border: rgba(255, 255, 255, 0.08);
-  --border-light: rgba(255, 255, 255, 0.15);
+  --blue-glow:      rgba(47, 107, 191, 0.30);
+  --blue-subtle:    rgba(47, 107, 191, 0.10);
 
-  /* Shadows */
-  --shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.65);
+  --gold:           var(--belt-ink);
+  --gold-glow:      rgba(201, 162, 39, 0.22);
 
-  /* Radii — sharper, cage-like */
-  --radius: 8px;
-  --radius-lg: 14px;
-  --radius-xl: 22px;
+  --success: var(--money);
+  --warning: var(--belt);
+  --danger:  var(--red-ink);
 
-  /* Transitions */
-  --transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  --border:       rgba(243, 239, 233, 0.09);
+  --border-light: rgba(243, 239, 233, 0.18);
+  --rule:         rgba(243, 239, 233, 0.09);
 
-  /* Animation timings */
+  --shadow:    0 2px 0 rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.55);
+
+  /* Fight cards are not rounded. */
+  --radius:    2px;
+  --radius-lg: 3px;
+  --radius-xl: 4px;
+
+  --transition:     all 0.18s cubic-bezier(0.2, 0, 0, 1);
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --anim-fast: 0.2s;
-  --anim-normal: 0.4s;
-  --anim-slow: 0.7s;
-  --anim-slower: 1s;
+  --ease-out-expo:  cubic-bezier(0.16, 1, 0.3, 1);
+  --anim-fast: 0.18s;
+  --anim-normal: 0.34s;
+  --anim-slow: 0.6s;
+  --anim-slower: 0.9s;
 
-  /* Typography — Anton (poster) + Oswald (athletic UI) + Inter (body) */
-  --font-black: 'Anton', 'Oswald', sans-serif;
-  --font-display: 'Oswald', 'Anton', sans-serif;
-  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  /* Archivo carries a width axis. We spend it: condensed-heavy for poster
+     names, expanded for eyebrows. One family, two personalities. */
+  --font-display: 'Archivo', 'Arial Narrow', sans-serif;
+  --font-black:   'Archivo', 'Arial Narrow', sans-serif;
+  --font-body:    'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono:    'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
 
-  /* Layout */
-  --sidebar-width: 264px;
+  --sidebar-width: 250px;
 }
 
 [data-theme="light"] {
-  --bg-primary: #eceef3;
-  --bg-secondary: #e2e5ec;
-  --bg-tertiary: #d6dae3;
-  --bg-card: rgba(255, 255, 255, 0.88);
-  --bg-hover: rgba(0, 0, 0, 0.04);
-  --glass-bg: rgba(255, 255, 255, 0.8);
-  --glass-border: rgba(0, 0, 0, 0.08);
-  --text-primary: #101219;
-  --text-secondary: #454a58;
-  --text-muted: #83879a;
-  --border: rgba(0, 0, 0, 0.09);
-  --border-light: rgba(0, 0, 0, 0.16);
-  --shadow: 0 8px 30px rgba(20, 25, 50, 0.1);
-  --shadow-lg: 0 24px 60px rgba(20, 25, 50, 0.16);
+  color-scheme: light;
+
+  --canvas:   #e9e5dd;
+  --mat:      #f8f6f2;
+  --mat-high: #efebe3;
+  --chalk:    #171310;
+  --ash:      #6e655c;
+
+  --red:     #ab1926;
+  --red-ink: #a3121f; /* on paper the deep red already clears 6.7:1 */
+  --blue:    #24589e;
+  --blue-bright: #24589e;
+  --belt:    #b8930f;   /* fill: keeps dark label on .btn-warning at 6.4:1 */
+  --belt-ink: #7a5f08;  /* type: gold has to go dark to survive on paper */
+  --money:   #3d7c4c;
+
+  --bg-hover:       rgba(23, 19, 16, 0.045);
+  --text-secondary: #4a423b;
+
+  --border:       rgba(23, 19, 16, 0.13);
+  --border-light: rgba(23, 19, 16, 0.24);
+  --rule:         rgba(23, 19, 16, 0.13);
+
+  --accent-glow:   rgba(171, 25, 38, 0.18);
+  --accent-subtle: rgba(171, 25, 38, 0.08);
+  --blue-subtle:   rgba(36, 88, 158, 0.08);
+  --gold-glow:     rgba(150, 118, 15, 0.16);
+
+  --shadow:    0 1px 0 rgba(23, 19, 16, 0.10);
+  --shadow-lg: 0 24px 60px rgba(23, 19, 16, 0.16);
 }
 
-/* ========================================
-   Reset & Base
-   ======================================== */
+/* ==========================================================================
+   Reset & base
+   ========================================================================== */
 
-*, *::before, *::after {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 html {
   font-size: 16px;
@@ -111,139 +147,135 @@ html {
 
 body {
   font-family: var(--font-body);
-  background: var(--bg-primary);
-  color: var(--text-primary);
+  font-size: 0.875rem;
+  background: var(--canvas);
+  color: var(--chalk);
   min-height: 100vh;
-  line-height: 1.6;
+  line-height: 1.55;
   overflow-x: hidden;
-
-  /* Arena spotlight mesh — red corner top, blue corner side */
-  background-image:
-    radial-gradient(ellipse 130% 70% at 50% -20%, rgba(255, 43, 78, 0.12), transparent 55%),
-    radial-gradient(ellipse 70% 50% at 100% 40%, rgba(41, 224, 255, 0.06), transparent 55%),
-    radial-gradient(ellipse 60% 50% at 0% 90%, rgba(255, 43, 78, 0.05), transparent 55%);
-  background-attachment: fixed;
 }
 
-/* ========================================
-   App Layout
-   ======================================== */
-
-.app-container {
-  display: flex;
-  min-height: 100vh;
+/* Film grain over the canvas. The only atmosphere the page gets. */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* ========================================
-   Sidebar — Fight Card lineup
-   ======================================== */
+[data-theme="light"] .grain { opacity: 0.05; mix-blend-mode: multiply; }
 
+::selection { background: var(--red); color: #fff; }
+
+:focus-visible {
+  outline: 2px solid var(--blue-bright);
+  outline-offset: 2px;
+  border-radius: 1px;
+}
+
+/* Tabular figures everywhere numbers are compared down a column. */
+.num, td, th, .stat-value, .badge, .attr-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Layout shell
+   ========================================================================== */
+
+.app-container { display: flex; min-height: 100vh; }
+
+/* ---- Sidebar: a corner-man's clipboard. Hard right rule, no blur. ---- */
 .sidebar {
   width: var(--sidebar-width);
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border-right: 1px solid var(--glass-border);
-  padding: 0;
+  background: var(--mat);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
+  top: 0; left: 0; bottom: 0;
   z-index: 200;
-  transition: transform 0.45s var(--ease-out-expo);
-}
-
-/* Red corner stripe down the sidebar edge */
-.sidebar::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: -1px;
-  bottom: 0;
-  width: 2px;
-  background: linear-gradient(180deg, var(--accent), transparent 40%, transparent 70%, var(--blue));
-  opacity: 0.55;
-  pointer-events: none;
+  overflow-y: auto;
+  transition: transform 0.34s var(--ease-out-expo);
 }
 
 .sidebar-header {
-  padding: 1.75rem 1.5rem 1.5rem;
+  padding: 1.5rem 1.25rem 1.25rem;
   border-bottom: 1px solid var(--border);
+  position: relative;
 }
 
-.brand-mark {
-  margin-bottom: 1rem;
-  color: var(--accent);
-  filter: drop-shadow(0 0 14px var(--accent-glow));
+/* Red corner stripe. The gym is always the red corner. */
+.sidebar-header::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 2px;
+  background: var(--red);
 }
+
+.brand-mark { margin-bottom: 0.75rem; color: var(--red); }
 
 .sidebar-header h1 {
-  font-family: var(--font-black);
-  font-size: 1.7rem;
-  font-weight: 400;
-  color: var(--text-primary);
-  letter-spacing: 0.01em;
-  line-height: 0.95;
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 88, 'wght' 800;
+  font-size: 1.375rem;
+  line-height: 1;
+  letter-spacing: -0.01em;
   text-transform: uppercase;
+  color: var(--chalk);
 }
 
 .sidebar-header p {
+  font-family: var(--font-mono);
   font-size: 0.625rem;
-  color: var(--accent);
-  margin-top: 0.5rem;
+  color: var(--ash);
+  margin-top: 0.4rem;
   text-transform: uppercase;
-  letter-spacing: 0.28em;
-  font-weight: 600;
-  font-family: var(--font-display);
+  letter-spacing: 0.18em;
 }
 
-/* Nav — styled like a fight card lineup */
-.nav-menu {
-  list-style: none;
-  flex: 1;
-  padding: 0.75rem 0;
-  overflow-y: auto;
+/* Nav groups encode what part of the game you're in, not decoration. */
+.nav-group-label {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ash);
+  padding: 1.25rem 1.5rem 0.5rem;
 }
 
-.nav-item {
-  margin: 0;
-  padding: 0 0.75rem;
-}
+.nav-menu { list-style: none; }
+.nav-item { padding: 0 0.75rem; }
 
 .nav-link {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 0.875rem;
-  padding: 0.7rem 1rem;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
   color: var(--text-secondary);
   text-decoration: none;
   border-radius: var(--radius);
-  font-family: var(--font-display);
-  font-size: 0.9rem;
+  font-size: 0.8125rem;
   font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   transition: var(--transition);
   cursor: pointer;
-  margin-bottom: 2px;
 }
 
-.nav-link:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  transform: translateX(3px);
-}
+.nav-link:hover { background: var(--bg-hover); color: var(--chalk); }
 
 .nav-link.active {
-  background: linear-gradient(90deg, var(--accent-subtle), transparent 85%);
-  color: var(--text-primary);
+  background: var(--accent-subtle);
+  color: var(--chalk);
+  font-weight: 600;
 }
 
-/* Sidebar footer */
 .sidebar-footer {
+  margin-top: auto;
   padding: 1rem 1.25rem;
   border-top: 1px solid var(--border);
 }
@@ -251,189 +283,148 @@ body {
 .theme-toggle {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  color: var(--text-muted);
-  font-size: 0.7rem;
-  font-family: var(--font-display);
-  font-weight: 500;
-  cursor: pointer;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  margin-bottom: 0.375rem;
   background: none;
   border: 1px solid var(--border);
-  width: 100%;
-  padding: 0.55rem 0.75rem;
   border-radius: var(--radius);
-  transition: var(--transition);
-  letter-spacing: 0.08em;
+  color: var(--ash);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: var(--transition);
 }
 
-.theme-toggle:hover {
-  background: var(--bg-hover);
-  color: var(--text-secondary);
-  border-color: var(--border-light);
-}
-
-.theme-toggle--danger:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  box-shadow: 0 0 20px var(--accent-subtle);
-}
+.theme-toggle:hover { color: var(--chalk); border-color: var(--border-light); background: var(--bg-hover); }
+.theme-toggle--danger:hover { color: var(--red-ink); border-color: var(--red); }
 
 .theme-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), var(--blue));
+  width: 7px; height: 7px;
   flex-shrink: 0;
-  box-shadow: 0 0 8px var(--accent-glow);
+  background: var(--red);
+  transform: rotate(45deg);
 }
 
-/* ========================================
-   Main Content
-   ======================================== */
-
+/* ---- Main ---- */
 .main-content {
   flex: 1;
   margin-left: var(--sidebar-width);
-  padding: 2rem 2.5rem 4rem;
+  padding: 2rem 2.25rem 5rem;
   max-width: 100%;
   overflow-x: hidden;
   position: relative;
   z-index: 1;
 }
 
-/* Page header — editorial poster style */
+/* Page headers: expanded eyebrow-weight rule above a condensed slab. */
 .page-header {
-  position: relative;
-  margin-bottom: 2.5rem;
-  padding-bottom: 0;
-  border-bottom: none;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
 }
 
 .page-header h2 {
-  font-family: var(--font-black);
-  font-size: clamp(2rem, 5vw, 3.25rem);
-  font-weight: 400;
-  letter-spacing: 0.005em;
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 92, 'wght' 800;
+  font-size: clamp(1.875rem, 3.4vw, 2.75rem);
   line-height: 0.95;
-  color: var(--text-primary);
+  letter-spacing: -0.015em;
   text-transform: uppercase;
+  color: var(--chalk);
 }
 
 .page-header p {
-  font-size: 0.9375rem;
-  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ash);
   margin-top: 0.625rem;
-  font-weight: 400;
-  letter-spacing: 0;
+  letter-spacing: 0.02em;
 }
 
-/* ========================================
-   Grid System
-   ======================================== */
+/* ==========================================================================
+   Grid
+   ========================================================================== */
 
-.grid {
-  display: grid;
-  gap: 1rem;
-}
-
+.grid { display: grid; gap: 1rem; }
 .grid-cols-1 { grid-template-columns: 1fr; }
 .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
 .grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
 .grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
 
-/* ========================================
-   Cards — cage-inspired panels
-   ======================================== */
+/* ==========================================================================
+   Card — a flat stat block off a fight card. Hairline, corner stripe.
+   ========================================================================== */
 
 .card {
   position: relative;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  padding: 1.5rem;
-  overflow: hidden;
-  transition: border-color 0.3s ease, transform 0.35s var(--ease-out-expo), box-shadow 0.3s ease;
+  background: var(--mat);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  transition: border-color var(--anim-fast) ease, transform var(--anim-fast) ease;
 }
 
-/* Top hairline accent */
-.card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-}
-
-.card:hover {
-  border-color: var(--border-light);
-  transform: translateY(-3px);
-  box-shadow: var(--shadow), 0 0 0 1px var(--accent-subtle);
-}
+.card:hover { border-color: var(--border-light); }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
   gap: 0.75rem;
+  margin-bottom: 0.875rem;
 }
 
+/* Card titles read like form-field labels on a commission document. */
 .card-title {
-  font-family: var(--font-display);
-  font-size: 0.8125rem;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 500;
+  color: var(--ash);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  white-space: nowrap;
+}
+
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 1.875rem;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--chalk);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.stat-label {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  color: var(--ash);
+  margin-top: 0.5rem;
   text-transform: uppercase;
   letter-spacing: 0.14em;
 }
 
-/* Stat display — big condensed numbers */
-.stat-value {
-  font-family: var(--font-black);
-  font-size: 2.5rem;
-  font-weight: 400;
-  color: var(--text-primary);
-  line-height: 0.95;
-  letter-spacing: 0.01em;
-  font-variant-numeric: tabular-nums;
-}
+.stat-icon { font-size: 1.25rem; opacity: 0.45; }
 
-.stat-label {
-  font-size: 0.6875rem;
-  color: var(--text-muted);
-  margin-top: 0.5rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-weight: 600;
-  font-family: var(--font-display);
-}
-
-.stat-icon {
-  font-size: 1.5rem;
-  opacity: 0.4;
-}
-
-/* ========================================
-   Buttons — fight card CTAs
-   ======================================== */
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
 
 .btn {
   position: relative;
   overflow: hidden;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  padding: 0.7rem 1.35rem;
-  border: none;
+  padding: 0.625rem 1.125rem;
+  border: 1px solid transparent;
   border-radius: var(--radius);
-  font-family: var(--font-display);
-  font-size: 0.85rem;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -443,1134 +434,540 @@ body {
   white-space: nowrap;
 }
 
-.btn-primary {
-  background: linear-gradient(135deg, var(--accent), var(--accent-deep));
-  color: #fff;
-  box-shadow: 0 6px 20px rgba(255, 43, 78, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.18);
-}
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
-.btn-primary:hover {
-  background: linear-gradient(135deg, var(--accent-hover), var(--accent));
-  box-shadow: 0 10px 34px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.25);
-  transform: translateY(-2px);
-}
+.btn-primary { background: var(--red); color: #fff; border-color: var(--red); }
+.btn-primary:hover:not(:disabled) { background: var(--red-bright); border-color: var(--red-bright); }
 
 .btn-secondary {
-  background: var(--bg-tertiary);
+  background: transparent;
   color: var(--text-secondary);
-  border: 1px solid var(--border);
-}
-
-.btn-secondary:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
   border-color: var(--border-light);
-  transform: translateY(-2px);
+}
+.btn-secondary:hover:not(:disabled) { color: var(--chalk); border-color: var(--chalk); background: var(--bg-hover); }
+
+.btn-success { background: var(--money); color: #fff; border-color: var(--money); }
+.btn-success:hover:not(:disabled) { filter: brightness(1.12); }
+
+.btn-danger { background: transparent; color: var(--red-ink); border-color: var(--red-deep); }
+.btn-danger:hover:not(:disabled) { background: var(--red); color: #fff; border-color: var(--red); }
+
+.btn-warning { background: var(--belt); color: #14110f; border-color: var(--belt); }
+.btn-warning:hover:not(:disabled) { filter: brightness(1.12); }
+
+.btn-sm { padding: 0.4rem 0.75rem; font-size: 0.6875rem; letter-spacing: 0.05em; }
+.btn-lg { padding: 0.875rem 1.75rem; font-size: 0.8125rem; }
+
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0);
+  background: rgba(255, 255, 255, 0.28);
+  animation: ripple 0.6s linear;
+  pointer-events: none;
 }
 
-.btn-success {
-  background: linear-gradient(135deg, var(--success), #1ea862);
-  color: #04150c;
-}
+@keyframes ripple { to { transform: scale(3); opacity: 0; } }
 
-.btn-success:hover { filter: brightness(1.1); transform: translateY(-2px); }
-
-.btn-danger {
-  background: linear-gradient(135deg, var(--danger), var(--accent-deep));
-  color: #fff;
-}
-
-.btn-danger:hover { filter: brightness(1.08); transform: translateY(-2px); }
-
-.btn-warning {
-  background: linear-gradient(135deg, var(--warning), #d98600);
-  color: #1a1200;
-}
-
-.btn-warning:hover { filter: brightness(1.08); transform: translateY(-2px); }
-
-.btn-sm {
-  padding: 0.35rem 0.7rem;
-  font-size: 0.7rem;
-  letter-spacing: 0.05em;
-}
-
-.btn-lg {
-  padding: 0.85rem 1.75rem;
-  font-size: 0.95rem;
-}
-
-/* ========================================
-   Tables — Roster sheets
-   ======================================== */
+/* ==========================================================================
+   Tables — the roster sheet
+   ========================================================================== */
 
 .table-container {
   overflow-x: auto;
-  background: var(--bg-card);
+  background: var(--mat);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
+table { width: 100%; border-collapse: collapse; }
 
 th {
   text-align: left;
-  padding: 0.7rem 1rem;
-  font-family: var(--font-display);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  color: var(--text-muted);
+  padding: 0.75rem 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  font-weight: 500;
+  color: var(--ash);
   text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.16em;
   border-bottom: 1px solid var(--border-light);
-  background: var(--bg-tertiary);
+  background: var(--mat-high);
+  white-space: nowrap;
 }
 
 td {
-  padding: 0.7rem 1rem;
-  font-size: 0.8375rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
 
-tr:last-child td {
-  border-bottom: none;
-}
+tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--bg-hover); }
 
-tr:hover td {
-  background: var(--bg-hover);
-}
-
-/* ========================================
-   Badges — Division tags
-   ======================================== */
+/* ==========================================================================
+   Badges — typed, not tinted blobs. Mono, because they carry data.
+   ========================================================================== */
 
 .badge {
   display: inline-block;
-  padding: 0.2rem 0.55rem;
-  border-radius: var(--radius);
-  font-family: var(--font-display);
-  font-size: 0.6875rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 1px;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   border: 1px solid transparent;
+  white-space: nowrap;
 }
 
-.badge-success {
-  background: rgba(47, 208, 122, 0.14);
-  color: #4fe093;
-  border-color: rgba(47, 208, 122, 0.25);
+.badge-success { background: rgba(79, 154, 99, 0.12); color: var(--money); border-color: rgba(79, 154, 99, 0.35); }
+.badge-warning { background: rgba(201, 162, 39, 0.12); color: var(--belt-ink); border-color: rgba(201, 162, 39, 0.35); }
+.badge-danger  { background: var(--accent-subtle);      color: var(--red-ink); border-color: rgba(200, 32, 47, 0.4); }
+.badge-info    { background: var(--blue-subtle);        color: var(--blue-bright); border-color: rgba(47, 107, 191, 0.35); }
+
+[data-theme="light"] .badge-info { color: var(--blue); }
+
+.dna-badge {
+  display: inline-block;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--border-light);
+  border-radius: 1px;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
-.badge-warning {
-  background: rgba(255, 176, 32, 0.14);
-  color: #ffc154;
-  border-color: rgba(255, 176, 32, 0.25);
+.rivalry-badge {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--red-ink);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
-.badge-danger {
-  background: rgba(255, 43, 78, 0.14);
-  color: #ff6981;
-  border-color: rgba(255, 43, 78, 0.28);
-}
-
-.badge-info {
-  background: rgba(41, 224, 255, 0.12);
-  color: var(--blue);
-  border-color: rgba(41, 224, 255, 0.25);
-}
-
-/* ========================================
-   Alerts
-   ======================================== */
+/* ==========================================================================
+   Alerts — an official notice, not a mood.
+   ========================================================================== */
 
 .alert {
-  padding: 1rem;
-  border-radius: var(--radius-lg);
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border);
+  border-left-width: 2px;
+  border-radius: var(--radius);
   margin-bottom: 1rem;
-  border: 1px solid transparent;
-  border-left-width: 3px;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  background: var(--mat);
 }
 
-.alert-warning {
-  background: rgba(255, 176, 32, 0.1);
-  border-color: var(--warning);
-  color: #ffc154;
-}
+.alert strong { color: var(--chalk); font-weight: 600; }
+.alert-warning { border-left-color: var(--belt); }
+.alert-success { border-left-color: var(--money); }
+.alert-danger  { border-left-color: var(--red); }
 
-.alert-success {
-  background: rgba(47, 208, 122, 0.1);
-  border-color: var(--success);
-  color: #4fe093;
-}
-
-.alert-danger {
-  background: rgba(255, 43, 78, 0.1);
-  border-color: var(--danger);
-  color: #ff6981;
-}
-
-/* ========================================
+/* ==========================================================================
    Forms
-   ======================================== */
+   ========================================================================== */
 
-.form-group {
-  margin-bottom: 1rem;
-}
+.form-group { margin-bottom: 1rem; }
 
 .form-label {
   display: block;
-  font-family: var(--font-display);
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 500;
+  color: var(--ash);
+  margin-bottom: 0.5rem;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.16em;
 }
 
 .form-input,
 .form-select {
   width: 100%;
-  padding: 0.6rem 0.85rem;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
+  padding: 0.625rem 0.75rem;
+  background: var(--canvas);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius);
-  color: var(--text-primary);
+  color: var(--chalk);
   font-family: var(--font-body);
-  font-size: 0.85rem;
+  font-size: 0.8125rem;
   transition: var(--transition);
 }
+
+.form-input::placeholder { color: var(--ash); }
 
 .form-input:focus,
 .form-select:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-subtle);
+  border-color: var(--red);
+  box-shadow: inset 0 -2px 0 var(--red);
 }
 
-.form-select {
-  appearance: none;
-  cursor: pointer;
-}
+.form-select { appearance: none; cursor: pointer; }
 
-/* ========================================
-   Progress Bars
-   ======================================== */
+/* ==========================================================================
+   Progress — a strip of tape, not a pill.
+   ========================================================================== */
 
 .progress-bar {
-  height: 5px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 3px;
+  height: 4px;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: 1px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  border-radius: 3px;
-  transition: width 0.4s ease;
-  position: relative;
-  overflow: hidden;
+  transition: width 0.5s var(--ease-out-expo);
+  background: var(--text-secondary);
 }
 
-.progress-fill.high { background: linear-gradient(90deg, #1ea862, var(--success)); }
-.progress-fill.medium { background: linear-gradient(90deg, #d98600, var(--warning)); }
-.progress-fill.low { background: linear-gradient(90deg, var(--accent-deep), var(--accent)); }
+.progress-fill.high   { background: var(--money); }
+.progress-fill.medium { background: var(--belt); }
+.progress-fill.low    { background: var(--red); }
 
-/* ========================================
-   Modals
-   ======================================== */
+/* ==========================================================================
+   Modal
+   ========================================================================== */
 
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(4, 4, 8, 0.82);
+  inset: 0;
+  background: rgba(10, 8, 7, 0.82);
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 1.5rem;
   z-index: 1000;
-  padding: 1rem;
+  animation: fadeIn 0.2s ease;
 }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 .modal {
-  position: relative;
-  background: var(--bg-secondary);
+  background: var(--mat);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  padding: 2rem;
-  max-width: 600px;
-  width: 90%;
-  max-height: 85vh;
+  border-top: 2px solid var(--red);
+  border-radius: var(--radius);
+  padding: 1.75rem;
+  width: 100%;
+  max-width: 520px;
+  max-height: 88vh;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
-}
-
-/* Red-corner top bar on modals */
-.modal::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--accent), var(--gold) 50%, var(--blue));
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
 }
 
 .modal-header h3 {
-  font-family: var(--font-black);
-  font-size: 1.6rem;
-  font-weight: 400;
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 92, 'wght' 700;
+  font-size: 1.5rem;
+  line-height: 1;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.01em;
 }
 
 .modal-close {
   background: none;
   border: none;
-  color: var(--text-muted);
+  color: var(--ash);
   font-size: 1.5rem;
-  cursor: pointer;
-  padding: 0.25rem;
   line-height: 1;
+  cursor: pointer;
   transition: var(--transition);
 }
 
-.modal-close:hover {
-  color: var(--accent);
-  transform: rotate(90deg);
-}
+.modal-close:hover { color: var(--chalk); }
 
 .modal-actions {
   display: flex;
+  gap: 0.625rem;
   justify-content: flex-end;
-  gap: 0.75rem;
   margin-top: 1.5rem;
 }
 
-/* ========================================
-   Fighter Cards
-   ======================================== */
+/* ==========================================================================
+   Fighter card / attributes / timeline
+   ========================================================================== */
 
 .fighter-card {
-  position: relative;
-  background: var(--bg-card);
+  background: var(--mat);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-top: 2px solid var(--border-light);
+  border-radius: var(--radius);
   padding: 1rem;
   cursor: pointer;
-  overflow: hidden;
   transition: var(--transition);
 }
 
-.fighter-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 3px;
-  height: 100%;
-  background: var(--border-light);
-  transition: background 0.25s ease;
-}
-
-.fighter-card:hover::before { background: var(--accent); }
+.fighter-card:hover { border-color: var(--border-light); }
 
 .fighter-name {
   font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1.05rem;
-  letter-spacing: 0.02em;
+  font-variation-settings: 'wdth' 90, 'wght' 700;
+  font-size: 1.0625rem;
+  line-height: 1.05;
   text-transform: uppercase;
+  letter-spacing: -0.005em;
   margin-bottom: 0.25rem;
 }
 
-.fighter-record {
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-}
+.fighter-record { font-family: var(--font-mono); font-size: 0.8125rem; color: var(--text-secondary); }
 
 .fighter-meta {
   display: flex;
   gap: 0.75rem;
   margin-top: 0.5rem;
-  font-size: 0.6875rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-/* ========================================
-   Attribute Grid
-   ======================================== */
-
-.attr-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.5rem;
-}
-
-.attr-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.attr-label {
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--font-display);
-  font-size: 0.6875rem;
-  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--ash);
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
 
-.attr-value {
-  font-weight: 600;
-  color: var(--text-primary);
+.attr-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.625rem 1rem; }
+
+.attr-item { display: flex; flex-direction: column; gap: 0.3rem; }
+
+.attr-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  color: var(--ash);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
 }
 
-/* ========================================
-   Timeline — Fight history
-   ======================================== */
+.attr-value { font-weight: 600; color: var(--chalk); font-size: 0.75rem; }
 
-.timeline {
-  position: relative;
-  padding-left: 1.5rem;
-}
+/* Timeline — a fight record, newest first. */
+.timeline { position: relative; padding-left: 1.25rem; }
 
 .timeline::before {
   content: '';
   position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
+  left: 0; top: 0.4rem; bottom: 0.4rem;
+  width: 1px;
   background: var(--border);
 }
 
-.timeline-item {
-  position: relative;
-  padding-bottom: 1rem;
-}
+.timeline-item { position: relative; padding-bottom: 0.875rem; }
 
 .timeline-item::before {
   content: '';
   position: absolute;
-  left: -1.5rem;
-  top: 0.35rem;
-  width: 7px;
-  height: 7px;
-  border-radius: 0;
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent-glow);
-  margin-left: 2px;
+  left: -1.25rem;
+  top: 0.45rem;
+  width: 5px; height: 5px;
+  margin-left: -2px;
+  background: var(--red);
   transform: rotate(45deg);
 }
 
 .timeline-date {
-  font-size: 0.6875rem;
-  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  color: var(--ash);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.14em;
 }
 
-.timeline-content {
-  font-size: 0.8375rem;
-  margin-top: 0.25rem;
-}
+.timeline-content { margin-top: 0.2rem; }
 
-/* ========================================
-   Empty State
-   ======================================== */
+/* ==========================================================================
+   Empty / loading
+   ========================================================================== */
 
 .empty-state {
+  padding: 3rem 1.5rem;
   text-align: center;
-  padding: 3rem;
-  color: var(--text-muted);
   border: 1px dashed var(--border-light);
-  border-radius: var(--radius-lg);
-  animation: emptyPulse 3s var(--ease-out-quint) infinite;
-}
-
-.empty-state p {
-  margin-top: 0.5rem;
-  font-size: 0.875rem;
-}
-
-/* ========================================
-   Utility Classes
-   ======================================== */
-
-.flex { display: flex; }
-.flex-col { flex-direction: column; }
-.items-center { align-items: center; }
-.justify-between { justify-content: space-between; }
-.gap-1 { gap: 0.25rem; }
-.gap-2 { gap: 0.5rem; }
-.gap-3 { gap: 0.75rem; }
-.gap-4 { gap: 1rem; }
-.mt-2 { margin-top: 0.5rem; }
-.mt-4 { margin-top: 1rem; }
-.mb-2 { margin-bottom: 0.5rem; }
-.mb-4 { margin-bottom: 1rem; }
-.text-center { text-align: center; }
-.text-sm { font-size: 0.875rem; }
-.text-xs { font-size: 0.75rem; }
-.text-muted { color: var(--text-muted); }
-.text-success { color: var(--success); }
-.text-danger { color: var(--danger); }
-.font-bold { font-weight: 700; }
-.w-full { width: 100%; }
-
-/* ========================================
-   Hamburger (mobile)
-   ======================================== */
-
-.hamburger {
-  display: none;
-  position: fixed;
-  top: 1rem;
-  left: 1rem;
-  z-index: 300;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
-  color: var(--text-primary);
-  padding: 0.75rem;
   border-radius: var(--radius);
-  cursor: pointer;
-  flex-direction: column;
-  gap: 5px;
-  width: 44px;
-  height: 44px;
-  align-items: center;
-  justify-content: center;
+  background: var(--mat);
 }
 
-.hamburger-line {
-  display: block;
-  width: 18px;
-  height: 2px;
-  background: var(--text-primary);
-  border-radius: 1px;
-  transition: transform 0.3s var(--ease-out-expo);
-}
+.empty-state p { color: var(--ash); font-size: 0.8125rem; max-width: 46ch; margin: 0 auto; }
 
-/* ========================================
-   Responsive
-   ======================================== */
-
-@media (max-width: 768px) {
-  .hamburger { display: flex; }
-
-  .sidebar {
-    transform: translateX(-100%);
-  }
-
-  .sidebar.open {
-    transform: translateX(0);
-  }
-
-  .main-content {
-    margin-left: 0;
-    padding: 1rem 1rem 3rem;
-    padding-top: 4rem;
-  }
-
-  .grid-cols-2,
-  .grid-cols-3,
-  .grid-cols-4 {
-    grid-template-columns: 1fr;
-  }
-
-  .stat-value {
-    font-size: 2rem;
-  }
-
-  .attr-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .page-header h2 {
-    font-size: 1.85rem;
-  }
-}
-
-/* ========================================
-   Hall of Fame — Champion Gold
-   ======================================== */
-
-.hof-card {
-  border: 1px solid rgba(255, 201, 60, 0.32);
-  background: linear-gradient(
-    160deg,
-    var(--bg-card) 0%,
-    rgba(255, 201, 60, 0.05) 100%
-  );
-}
-
-.hof-card::before {
-  background: linear-gradient(90deg, transparent, var(--gold), transparent);
-}
-
-.hof-card .card-title {
-  color: var(--gold);
-}
-
-/* ========================================
-   DNA Badge — Hidden traits
-   ======================================== */
-
-.dna-badge {
-  background: linear-gradient(
-    135deg,
-    rgba(139, 92, 246, 0.14),
-    rgba(41, 224, 255, 0.14)
-  );
-  color: #b79bff;
-  border: 1px solid rgba(139, 92, 246, 0.25);
-}
-
-/* ========================================
-   Rivalry Badge — Active tension
-   ======================================== */
-
-.rivalry-badge {
-  background: linear-gradient(
-    135deg,
-    rgba(255, 43, 78, 0.18),
-    rgba(255, 201, 60, 0.12)
-  );
-  color: #ff6981;
-  border: 1px solid rgba(255, 43, 78, 0.3);
-  animation: rivalryPulse 2s ease-in-out infinite;
-}
-
-@keyframes rivalryPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-/* ========================================
-   Training Camp
-   ======================================== */
-
-.training-intensity,
-.training-spec {
-  text-align: left;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.training-intensity:hover,
-.training-spec:hover {
-  border-color: var(--accent);
-  color: var(--text-primary);
-  background: var(--bg-hover);
-}
-
-/* ========================================
-   Press Conference
-   ======================================== */
-
-.pc-question {
-  border-left: 3px solid var(--accent);
-  padding-left: 1rem;
-}
-
-.pc-answer {
-  text-align: left;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.pc-answer:hover {
-  background: var(--bg-hover);
-  border-color: var(--accent);
-  color: var(--text-primary);
-}
-
-/* ========================================
-   Extra Utilities
-   ======================================== */
-
-.flex-wrap { flex-wrap: wrap; }
-.ml-1 { margin-left: 0.25rem; }
-.ml-2 { margin-left: 0.5rem; }
-.flex-1 { flex: 1; }
-.block { display: block; }
-.text-xl { font-size: 1.25rem; }
-.text-lg { font-size: 1.125rem; }
-
-/* ========================================
-   Focus States (accessibility)
-   ======================================== */
-
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* ========================================
-   ANIMATIONS — Octagon War Room Energy
-   ======================================== */
-
-/* --- Page Transition --- */
-.page-enter {
-  animation: pageSlideIn var(--anim-slow) var(--ease-out-quint) forwards;
-}
-
-@keyframes pageSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* --- Stagger children --- */
-.stagger-in > * {
-  opacity: 0;
-  animation: staggerFadeIn var(--anim-slow) var(--ease-out-quint) forwards;
-}
-
-.stagger-in > *:nth-child(1) { animation-delay: 0ms; }
-.stagger-in > *:nth-child(2) { animation-delay: 60ms; }
-.stagger-in > *:nth-child(3) { animation-delay: 120ms; }
-.stagger-in > *:nth-child(4) { animation-delay: 180ms; }
-.stagger-in > *:nth-child(5) { animation-delay: 240ms; }
-.stagger-in > *:nth-child(6) { animation-delay: 300ms; }
-.stagger-in > *:nth-child(7) { animation-delay: 360ms; }
-.stagger-in > *:nth-child(8) { animation-delay: 420ms; }
-.stagger-in > *:nth-child(9) { animation-delay: 480ms; }
-.stagger-in > *:nth-child(10) { animation-delay: 540ms; }
-.stagger-in > *:nth-child(11) { animation-delay: 600ms; }
-.stagger-in > *:nth-child(12) { animation-delay: 660ms; }
-
-@keyframes staggerFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* --- Card entrance --- */
-.card-enter {
-  animation: cardReveal var(--anim-slow) var(--ease-out-quint) forwards;
-}
-
-@keyframes cardReveal {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.97);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-/* --- Stat count-up trigger --- */
-.stat-count {
-  display: inline-block;
-}
-
-.stat-count.animating {
-  animation: statPop var(--anim-normal) var(--ease-out-expo);
-}
-
-@keyframes statPop {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.08); }
-  100% { transform: scale(1); }
-}
-
-/* --- Sidebar nav link hover — fight card underline sweep --- */
-.nav-link::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: 4px;
-  width: 0;
-  height: 2px;
-  background: var(--accent);
-  transition: width var(--anim-normal) var(--ease-out-quint);
-}
-
-.nav-link:hover::after {
-  width: 30%;
-}
-
-.nav-link.active::after {
-  width: 30%;
-}
-
-/* --- Sidebar header accent bar — subtle pulse --- */
-.sidebar-header h1::after {
-  content: '';
-  display: block;
-  width: 40px;
-  height: 4px;
-  background: linear-gradient(90deg, var(--accent), var(--blue));
-  margin-top: 0.6rem;
-  border-radius: 2px;
-  animation: accentPulse 3s var(--ease-out-quint) infinite;
-}
-
-@keyframes accentPulse {
-  0%, 100% {
-    opacity: 1;
-    box-shadow: 0 0 12px var(--accent-glow);
-  }
-  50% {
-    opacity: 0.6;
-    box-shadow: 0 0 2px var(--accent-glow);
-  }
-}
-
-/* --- Active nav indicator glow --- */
-.nav-link.active {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-/* --- Button impact — press effect --- */
-.btn:active {
-  transform: scale(0.96);
-  transition: transform 0.1s ease;
-}
-
-/* Button ripple effect */
-.btn .ripple {
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.22);
-  transform: scale(0);
-  animation: rippleExpand 0.6s var(--ease-out-quint) forwards;
-  pointer-events: none;
-}
-
-@keyframes rippleExpand {
-  to {
-    transform: scale(4);
-    opacity: 0;
-  }
-}
-
-.btn-primary:active {
-  transform: translateY(0) scale(0.96);
-}
-
-/* --- Progress bar fill shimmer --- */
-.progress-fill::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.22),
-    transparent
-  );
-  animation: progressShimmer 2s var(--ease-out-quint) infinite;
-}
-
-@keyframes progressShimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-/* --- Table row entrance --- */
-.table-row-enter {
-  animation: rowSlideIn var(--anim-normal) var(--ease-out-quint) forwards;
-}
-
-@keyframes rowSlideIn {
-  from {
-    opacity: 0;
-    transform: translateX(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-tr.table-row-enter:hover td {
-  background: var(--bg-hover);
-  transition: background var(--anim-fast) ease;
-}
-
-/* --- Fighter card hover — enhanced --- */
-.fighter-card:hover {
-  border-color: var(--border-light);
-  box-shadow: 0 0 28px var(--accent-subtle), 0 12px 28px rgba(0, 0, 0, 0.45);
-  transform: translateY(-3px);
-  transition: all var(--anim-normal) var(--ease-out-quint);
-}
-
-/* --- Modal entrance --- */
-.modal-overlay {
-  animation: overlayFadeIn var(--anim-normal) var(--ease-out-quint) forwards;
-}
-
-@keyframes overlayFadeIn {
-  from {
-    backdrop-filter: blur(0px);
-    -webkit-backdrop-filter: blur(0px);
-  }
-  to {
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-  }
-}
-
-.modal {
-  animation: modalScaleIn var(--anim-slow) var(--ease-out-quint) forwards;
-}
-
-@keyframes modalScaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.92) translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-/* --- Champion gold pulse --- */
-.gold-pulse {
-  animation: goldPulse 3s var(--ease-out-quint) infinite;
-}
-
-@keyframes goldPulse {
-  0%, 100% {
-    box-shadow: 0 0 8px var(--gold-glow);
-  }
-  50% {
-    box-shadow: 0 0 24px var(--gold-glow), 0 0 48px rgba(255, 201, 60, 0.12);
-  }
-}
-
-/* --- Arena dust — floating particles --- */
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(1px 1px at 20% 30%, rgba(255, 43, 78, 0.1), transparent),
-    radial-gradient(1px 1px at 80% 70%, rgba(41, 224, 255, 0.07), transparent),
-    radial-gradient(1px 1px at 50% 50%, rgba(255, 201, 60, 0.05), transparent),
-    radial-gradient(1px 1px at 10% 80%, rgba(255, 43, 78, 0.08), transparent),
-    radial-gradient(1px 1px at 90% 20%, rgba(41, 224, 255, 0.05), transparent);
-  animation: dustFloat 20s linear infinite;
-  z-index: 0;
-}
-
-@keyframes dustFloat {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(-20px); }
-}
-
-/* --- Page header underline sweep on entrance --- */
-.page-header::after {
-  content: '';
-  position: absolute;
-  bottom: -0.75rem;
-  left: 0;
-  width: 60px;
-  height: 4px;
-  background: linear-gradient(90deg, var(--accent), var(--blue));
-  border-radius: 2px;
-  animation: headerSweep 0.8s var(--ease-out-quint) forwards;
-  opacity: 0;
-}
-
-@keyframes headerSweep {
-  from { width: 0; opacity: 1; }
-  to { width: 60px; opacity: 1; }
-}
-
-/* --- Badge pulse --- */
-.badge-success.pulse {
-  animation: badgePulse 2s var(--ease-out-quint) infinite;
-}
-
-.badge-danger.pulse {
-  animation: badgePulse 1.5s var(--ease-out-quint) infinite;
-}
-
-@keyframes badgePulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-/* --- Scan line effect — broadcast sweep --- */
-.main-content::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 43, 78, 0.06),
-    transparent
-  );
-  animation: scanLine 8s linear infinite;
-  pointer-events: none;
-  z-index: 1;
-}
-
-@keyframes scanLine {
-  0% { top: 0; }
-  100% { top: 100%; }
-}
-
-.main-content {
-  position: relative;
-}
-
-/* --- Loading state --- */
 .loading-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 60vh;
   gap: 1rem;
-  color: var(--text-muted);
+  min-height: 60vh;
+}
+
+.loading-state p {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--ash);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
 }
 
 .loading-spinner {
-  width: 44px;
-  height: 44px;
-  border: 3px solid var(--border);
-  border-top-color: var(--accent);
-  border-right-color: var(--blue);
-  border-radius: 50%;
+  width: 28px; height: 28px;
+  border: 2px solid var(--border);
+  border-top-color: var(--red);
   animation: spin 0.8s linear infinite;
-  box-shadow: 0 0 24px var(--accent-subtle);
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 
-@keyframes hamburgerPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 43, 78, 0); }
-  50% { box-shadow: 0 0 0 4px rgba(255, 43, 78, 0.12); }
-}
+/* ==========================================================================
+   Hall of Fame / press conference / training
+   ========================================================================== */
 
-@keyframes emptyPulse {
-  0%, 100% { border-color: var(--border); }
-  50% { border-color: var(--border-light); }
-}
-
-/* --- Timeline dot entrance --- */
-.timeline-item {
-  animation: timelineReveal var(--anim-slow) var(--ease-out-quint) forwards;
-  opacity: 0;
-}
-
-.timeline-item:nth-child(1) { animation-delay: 0ms; }
-.timeline-item:nth-child(2) { animation-delay: 80ms; }
-.timeline-item:nth-child(3) { animation-delay: 160ms; }
-.timeline-item:nth-child(4) { animation-delay: 240ms; }
-.timeline-item:nth-child(5) { animation-delay: 320ms; }
-.timeline-item:nth-child(6) { animation-delay: 400ms; }
-.timeline-item:nth-child(7) { animation-delay: 480ms; }
-.timeline-item:nth-child(8) { animation-delay: 560ms; }
-
-@keyframes timelineReveal {
-  from {
-    opacity: 0;
-    transform: translateX(-12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-/* --- Hall of Fame gold shimmer --- */
 .hof-card {
-  animation: hofShimmer 4s var(--ease-out-quint) infinite;
+  background: var(--mat);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--belt);
+  border-radius: var(--radius);
+  padding: 1.25rem;
 }
 
-@keyframes hofShimmer {
-  0%, 100% { box-shadow: 0 0 8px var(--gold-glow); }
-  50% { box-shadow: 0 0 20px var(--gold-glow), 0 0 40px rgba(255, 201, 60, 0.1); }
+.pc-question { margin-bottom: 1rem; }
+.pc-answer { display: block; width: 100%; text-align: left; margin-bottom: 0.5rem; }
+
+.training-intensity,
+.training-spec { flex: 1; min-width: max-content; }
+
+/* ==========================================================================
+   Hamburger (mobile)
+   ========================================================================== */
+
+.hamburger {
+  display: none;
+  position: fixed;
+  top: 1rem; right: 1rem;
+  z-index: 300;
+  width: 40px; height: 40px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: var(--mat);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  cursor: pointer;
 }
 
-/* ========================================
-   Reduced Motion
-   ======================================== */
+.hamburger-line { width: 16px; height: 1.5px; background: var(--chalk); }
+
+/* ==========================================================================
+   Utilities
+   ========================================================================== */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.flex { display: flex; }
+.flex-1 { flex: 1; }
+.flex-col { flex-direction: column; }
+.flex-wrap { flex-wrap: wrap; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.block { display: block; }
+.w-full { width: 100%; }
+.text-center { text-align: center; }
+
+.gap-1 { gap: 0.25rem; }
+.gap-2 { gap: 0.5rem; }
+.gap-3 { gap: 0.75rem; }
+.gap-4 { gap: 1rem; }
+
+.mb-1 { margin-bottom: 0.25rem; }
+.mb-2 { margin-bottom: 0.5rem; }
+.mb-3 { margin-bottom: 0.75rem; }
+.mb-4 { margin-bottom: 1.25rem; }
+.mt-1 { margin-top: 0.25rem; }
+.mt-2 { margin-top: 0.5rem; }
+.mt-3 { margin-top: 0.75rem; }
+.mt-4 { margin-top: 1.25rem; }
+.ml-1 { margin-left: 0.25rem; }
+.ml-2 { margin-left: 0.5rem; }
+.my-3 { margin-top: 0.75rem; margin-bottom: 0.75rem; }
+
+.text-xs { font-size: 0.6875rem; }
+.text-sm { font-size: 0.8125rem; }
+.text-lg { font-size: 1.0625rem; }
+.text-xl { font-size: 1.375rem; }
+.text-right { text-align: right; }
+
+.text-muted { color: var(--ash); }
+.text-success { color: var(--money); }
+.text-danger { color: var(--red-ink); }
+.font-bold { font-weight: 700; }
+
+/* Money, records and week counts are data — set them in mono. */
+.stat-value, .runway-badge { font-feature-settings: 'tnum'; }
+
+/* ==========================================================================
+   Animation helpers used by motion-engine
+   ========================================================================== */
+
+.stat-count { font-variant-numeric: tabular-nums; }
+
+.gold-pulse { animation: goldPulse 1.6s ease-in-out infinite; }
+@keyframes goldPulse {
+  0%, 100% { color: var(--belt-ink); }
+  50% { color: var(--chalk); }
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 1024px) {
+  .grid-cols-4 { grid-template-columns: repeat(2, 1fr); }
+  .grid-cols-3 { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 900px) {
+  .hamburger { display: flex; }
+
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); box-shadow: var(--shadow-lg); }
+
+  .main-content { margin-left: 0; padding: 1.25rem 1rem 4rem; }
+
+  .grid-cols-2,
+  .grid-cols-3,
+  .grid-cols-4 { grid-template-columns: 1fr; }
+
+  .attr-grid { grid-template-columns: 1fr; }
+  .modal-actions { flex-direction: column-reverse; }
+  .modal-actions .btn { width: 100%; }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
-  }
-
-  body::after,
-  .main-content::before {
-    display: none !important;
-  }
-
-  .stagger-in > * {
-    opacity: 1;
-    transform: none;
-  }
-
-  .timeline-item {
-    opacity: 1;
-    transform: none;
-  }
-
-  .page-header::after {
-    opacity: 1;
-    width: 60px;
+    scroll-behavior: auto !important;
   }
 }

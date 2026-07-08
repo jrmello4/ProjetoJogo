@@ -36,7 +36,7 @@ export class ThreeArena {
 
     // Scene
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x0c0c0c, 0.035);
+    this.scene.fog = new THREE.FogExp2(0x14110f, 0.035);
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
@@ -128,7 +128,7 @@ export class ThreeArena {
     this.scene.add(ambient);
 
     // Main red spotlight from above
-    const spotRed = new THREE.SpotLight(0xc41e3a, 2, 30, Math.PI / 6, 0.5, 1);
+    const spotRed = new THREE.SpotLight(0xc8202f, 2, 30, Math.PI / 6, 0.5, 1);
     spotRed.position.set(0, 12, 0);
     spotRed.target.position.set(0, 0, 0);
     spotRed.castShadow = true;
@@ -137,14 +137,14 @@ export class ThreeArena {
     this.scene.add(spotRed.target);
 
     // Warm fill from side
-    const spotWarm = new THREE.SpotLight(0xd4a843, 0.5, 20, Math.PI / 8, 0.8, 1);
+    const spotWarm = new THREE.SpotLight(0xc9a227, 0.5, 20, Math.PI / 8, 0.8, 1);
     spotWarm.position.set(5, 8, 5);
     spotWarm.target.position.set(0, 0, 0);
     this.scene.add(spotWarm);
     this.scene.add(spotWarm.target);
 
     // Cool rim light
-    const rim = new THREE.PointLight(0x3a3a5a, 0.3, 15);
+    const rim = new THREE.PointLight(0x2f6bbf, 0.3, 15);
     rim.position.set(-5, 4, -5);
     this.scene.add(rim);
   }
@@ -171,7 +171,7 @@ export class ThreeArena {
     const innerShape = this.createOctagonShape(radius * 0.85);
     const innerGeo = new THREE.ExtrudeGeometry(innerShape, { depth: 0.02, bevelEnabled: false });
     const innerMat = new THREE.MeshStandardMaterial({
-      color: 0x2a0a12,
+      color: 0x24120f,
       roughness: 0.6,
       metalness: 0.05,
     });
@@ -183,10 +183,10 @@ export class ThreeArena {
     // Center circle — logo area
     const circleGeo = new THREE.CircleGeometry(0.8, 32);
     const circleMat = new THREE.MeshStandardMaterial({
-      color: 0xc41e3a,
+      color: 0xc8202f,
       roughness: 0.3,
       metalness: 0.5,
-      emissive: 0xc41e3a,
+      emissive: 0xc8202f,
       emissiveIntensity: 0.15,
     });
     const circle = new THREE.Mesh(circleGeo, circleMat);
@@ -203,7 +203,7 @@ export class ThreeArena {
     edgePoints.push(edgePoints[0]);
     const edgeGeo = new THREE.BufferGeometry().setFromPoints(edgePoints);
     const edgeMat = new THREE.LineBasicMaterial({
-      color: 0xc41e3a,
+      color: 0xc8202f,
       transparent: true,
       opacity: 0.6,
     });
@@ -286,7 +286,7 @@ export class ThreeArena {
     // Arena floor (dark, reflective)
     const floorGeo = new THREE.CircleGeometry(12, 64);
     const floorMat = new THREE.MeshStandardMaterial({
-      color: 0x0c0c0c,
+      color: 0x14110f,
       roughness: 0.9,
       metalness: 0.1,
     });
@@ -342,7 +342,7 @@ export class ThreeArena {
     // Volumetric-like light cones (fake with transparent cones)
     const beamGeo = new THREE.ConeGeometry(1.5, 8, 32, 1, true);
     const beamMat = new THREE.MeshBasicMaterial({
-      color: 0xc41e3a,
+      color: 0xc8202f,
       transparent: true,
       opacity: 0.02,
       side: THREE.DoubleSide,

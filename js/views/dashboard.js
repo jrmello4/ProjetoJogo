@@ -1,14 +1,139 @@
-import { formatCurrency, getWeightClassShort } from '../utils/helpers.js';
-import { TIER_LABELS, TRAINING_FOCUS_META, absWeekToLabel } from '../config/game-config.js';
+import { formatCurrency, getWeightClassShort, getWeightClassName } from '../utils/helpers.js';
+import { TIER_LABELS, TRAINING_FOCUS_META, TITLE_ROLE, absWeekToLabel } from '../config/game-config.js';
+
+const tierBadgeCls = (tier) => (tier === 1 ? 'badge-danger' : tier === 2 ? 'badge-warning' : 'badge-info');
 
 export class DashboardView {
-  static render(data, weekLabel) {
-    const { gym, team, pendingOffers, bookings, promotions, pastEvents, milestones, now } = data;
+  // ===== Signature: the fight poster =====
+  // Your next booked bout, billed like the real thing. Your gym is always
+  // the red corner. With no fight on the books, the poster stays and the
+  // slot sits empty — which is exactly the feeling we want you to fix.
+  static _renderPoster(data, weekLabel) {
+    const { gym, pendingOffers, bookings, team, now } = data;
+    const booking = bookings[0];
 
-    const tierBadge = (tier) => {
-      const cls = tier === 1 ? 'badge-danger' : tier === 2 ? 'badge-warning' : 'badge-info';
-      return `<span class="badge ${cls}">${TIER_LABELS[tier]}</span>`;
-    };
+    const arena = `
+      <div class="poster-arena" aria-hidden="true">
+        <div class="arena-container" id="octagonArena"></div>
+      </div>`;
+
+    const status = `
+      <header class="poster-status">
+        <span class="poster-status-week">${weekLabel}</span>
+        <span class="poster-status-gym">${gym.name} · ${gym.facility.name}</span>
+      </header>`;
+
+    const actions = `
+      <div class="poster-actions">
+        <button class="btn btn-primary week-advance" id="weekAdvanceBtn">Avançar semana</button>
+        <button class="btn btn-secondary" id="simulatePeriodBtn">Simular período</button>
+        <button class="btn btn-secondary save-load" id="saveLoadBtn">Salvar / carregar</button>
+      </div>`;
+
+    if (!booking) {
+      const waiting = pendingOffers.length;
+      return `
+        <section class="poster poster--empty">
+          ${arena}
+          <div class="poster-body">
+            ${status}
+            <h1 class="visually-hidden">${gym.name} — ${weekLabel}</h1>
+            <span class="poster-gymname">${gym.name}</span>
+            <div class="poster-headline">Sem luta<br>marcada</div>
+            <p class="poster-sub">
+              ${waiting > 0
+                ? `${waiting} oferta${waiting === 1 ? '' : 's'} na mesa esperando resposta`
+                : `${team.length} atleta${team.length === 1 ? '' : 's'} em treino · avance a semana para receber propostas`}
+            </p>
+            ${actions}
+          </div>
+        </section>`;
+    }
+
+    const fighter = team.find(f => f.id === booking.fighterId);
+    const weeksOut = booking.eventAbsWeek - now;
+    const orec = booking.opponentRecord;
+
+    const when = weeksOut <= 0
+      ? 'Esta semana'
+      : `Em ${weeksOut} semana${weeksOut === 1 ? '' : 's'}`;
+
+    // Cinturão em jogo: o pôster inteiro muda de tom. É a única coisa que
+    // merece dourado nesta tela.
+    const titleStrap = booking.isTitleFight ? `
+      <div class="poster-title-strap">
+        <span class="poster-belt">🏆</span>
+        <span>${booking.titleRole === TITLE_ROLE.VACANT ? 'Cinturão vago' : 'Cinturão'} ${getWeightClassName(booking.weightClass)} em jogo</span>
+        <span class="poster-belt">🏆</span>
+      </div>` : '';
+
+    return `
+      <section class="poster ${booking.isTitleFight ? 'poster--title' : ''}">
+        ${arena}
+        <div class="poster-body">
+          ${status}
+          <h1 class="visually-hidden">${gym.name} — ${weekLabel}</h1>
+
+          ${titleStrap}
+
+          <div class="poster-billing">
+            <span class="poster-promo">${booking.promotionName}</span>
+            <span class="badge ${tierBadgeCls(booking.tier)}">${TIER_LABELS[booking.tier]}</span>
+            <span class="poster-when">${when}</span>
+          </div>
+
+          <div class="poster-bout">
+            <div class="poster-fighter poster-fighter--red">
+              <span class="poster-corner">Córner vermelho</span>
+              <div class="poster-name">${this._posterName(fighter ? fighter.name : '—')}</div>
+              <span class="poster-record">
+                ${fighter ? `${fighter.record.wins}-${fighter.record.losses}-${fighter.record.draws} · OVR ${fighter.overallRating}` : ''}
+              </span>
+            </div>
+
+            <div class="poster-vs"><span>VS</span></div>
+
+            <div class="poster-fighter poster-fighter--blue">
+              <span class="poster-corner">Córner azul</span>
+              <div class="poster-name">${this._posterName(booking.opponentName)}</div>
+              <span class="poster-record">
+                ${orec ? `${orec.wins}-${orec.losses}-${orec.draws} · ` : ''}OVR ${booking.opponentOverall ?? '?'}
+              </span>
+            </div>
+          </div>
+
+          <div class="poster-terms">
+            <div class="poster-term">
+              <span class="poster-term-label">Bolsa</span>
+              <span class="poster-term-value is-money">${formatCurrency(booking.purse)}</span>
+            </div>
+            <div class="poster-term">
+              <span class="poster-term-label">Bônus de vitória</span>
+              <span class="poster-term-value">${formatCurrency(booking.winBonus)}</span>
+            </div>
+            <div class="poster-term">
+              <span class="poster-term-label">Divisão</span>
+              <span class="poster-term-value">${getWeightClassShort(booking.weightClass)}</span>
+            </div>
+          </div>
+
+          ${actions}
+        </div>
+      </section>`;
+  }
+
+  // Fight posters break the name after the first word: given name up top,
+  // surname below, both flush to the corner.
+  static _posterName(name) {
+    const parts = String(name).trim().split(/\s+/);
+    if (parts.length < 2) return parts[0] || '—';
+    return `${parts[0]}<br>${parts.slice(1).join(' ')}`;
+  }
+
+  static render(data, weekLabel) {
+    const { gym, team, teamBelts = {}, teamContenderStatus = {}, pendingOffers, bookings, promotions, pastEvents, milestones, now } = data;
+
+    const tierBadge = (tier) => `<span class="badge ${tierBadgeCls(tier)}">${TIER_LABELS[tier]}</span>`;
 
     // ===== Ofertas pendentes (a decisão da semana) =====
     let offersHtml = '';
@@ -26,7 +151,9 @@ export class DashboardView {
               return `
                 <div class="flex items-center justify-between" style="padding:0.75rem 0;border-bottom:1px solid var(--border)">
                   <div>
-                    <div class="text-sm font-bold">${fighter ? fighter.name : '—'} vs ${o.opponentName}</div>
+                    <div class="text-sm font-bold">
+                      ${o.isTitleFight ? '<span class="belt-mark">🏆</span> ' : ''}${fighter ? fighter.name : '—'} vs ${o.opponentName}
+                    </div>
                     <div class="text-xs text-muted">${o.promotionName} · Semana ${((o.eventAbsWeek - 1) % 52) + 1} · expira em ${o.expiresAbsWeek - now} sem</div>
                   </div>
                   <div class="flex items-center gap-2">
@@ -124,12 +251,15 @@ export class DashboardView {
           const booking = bookings.find(b => b.fighterId === f.id);
           const injured = f.status === 'injured';
           const focusMeta = TRAINING_FOCUS_META[f.trainingFocus || 'striking'];
+          const belts = teamBelts[f.id] || [];
           return `
-            <div class="card stat-card stat-card--span-4" data-fighter-click="${f.id}" style="cursor:pointer">
+            <div class="card stat-card stat-card--span-4 ${belts.length > 0 ? 'stat-card--champion' : ''}" data-fighter-click="${f.id}" style="cursor:pointer">
               <div class="card-header">
-                <span class="card-title">${f.name}</span>
+                <span class="card-title">${belts.length > 0 ? '<span class="belt-mark">🏆</span> ' : ''}${f.name}</span>
                 <span class="badge badge-info">${getWeightClassShort(f.weightClass)}</span>
               </div>
+              ${belts.map(b => `<div class="belt-line">Campeão ${getWeightClassName(b.weightClass)} · ${b.promotionShort}${b.defenses > 0 ? ` · ${b.defenses} defesa${b.defenses === 1 ? '' : 's'}` : ''}</div>`).join('')}
+              ${belts.length === 0 && teamContenderStatus[f.id] ? `<div class="contender-line">#${teamContenderStatus[f.id].rank} na fila do cinturão · ${teamContenderStatus[f.id].promotionShort}</div>` : ''}
               <div class="flex items-center gap-3 mb-2">
                 <span class="stat-value" style="font-size:1.6rem">${f.overallRating}</span>
                 <div>
@@ -259,32 +389,7 @@ export class DashboardView {
     ` : '';
 
     return `
-      <!-- Cinematic Hero — Three.js Octagon -->
-      <section class="hero-section">
-        <div class="hero-arena">
-          <div class="arena-container" id="octagonArena">
-            <div class="arena-hint">Arraste para rotacionar</div>
-          </div>
-        </div>
-        <div class="hero-content">
-          <div class="hero-rive">
-            <div class="rive-slot rive-slot--hero" data-rive="octagon"></div>
-          </div>
-          <div>
-            <div class="hero-eyebrow">${weekLabel}</div>
-            <h1 class="hero-title">${gym.name}</h1>
-            <p class="hero-subtitle">${team.length} atleta${team.length === 1 ? '' : 's'} sob seus cuidados. Treine, aceite as lutas certas e leve sua academia ao topo do MMA.</p>
-          </div>
-          <div class="hero-actions">
-            <button class="btn btn-primary week-advance" id="weekAdvanceBtn">
-              <span class="rive-slot" data-rive="week"></span>
-              Avançar Semana
-            </button>
-            <button class="btn btn-secondary" id="simulatePeriodBtn">⏩ Simular Período</button>
-            <button class="btn btn-secondary save-load" id="saveLoadBtn">Salvar / Carregar</button>
-          </div>
-        </div>
-      </section>
+      ${this._renderPoster(data, weekLabel)}
 
       <!-- Stats -->
       <div class="section-label" data-reveal>Visão Geral</div>

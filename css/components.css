@@ -1,11 +1,11 @@
-/* ========================================
-   MMA Manager — Novos componentes
-   Toasts · Rankings · Finanças · Live Sim · Onboarding
-   ======================================== */
+/* ==========================================================================
+   MMA MANAGER — game components
+   Corner colors carry meaning. Mono carries data. Nothing carries decoration.
+   ========================================================================== */
 
-/* ========================================
-   Toasts — feedback global de ações
-   ======================================== */
+/* ==========================================================================
+   Toasts
+   ========================================================================== */
 
 .toast-container {
   position: fixed;
@@ -23,224 +23,214 @@
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  padding: 0.875rem 1rem;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
-  border-left: 3px solid var(--accent);
-  border-radius: var(--radius-lg);
+  padding: 0.8rem 0.9rem;
+  background: var(--mat-high);
+  border: 1px solid var(--border-light);
+  border-left: 2px solid var(--ash);
+  border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
   pointer-events: auto;
-  animation: toastIn 0.35s var(--ease-out-expo) both;
+  animation: toastIn 0.3s var(--ease-out-expo) both;
 }
 
-.toast--success { border-left-color: var(--success); }
-.toast--warning { border-left-color: var(--warning); }
-.toast--danger  { border-left-color: var(--danger); }
-.toast--info    { border-left-color: var(--border-light); }
-.toast--gold    { border-left-color: var(--gold); box-shadow: 0 8px 32px var(--gold-glow); }
+.toast--success { border-left-color: var(--money); }
+.toast--warning { border-left-color: var(--belt); }
+.toast--danger  { border-left-color: var(--red); }
+.toast--info    { border-left-color: var(--blue); }
+.toast--gold    { border-left-color: var(--belt); }
 
-.toast--leaving { animation: toastOut 0.3s ease-in both; }
+.toast--leaving { animation: toastOut 0.25s ease-in both; }
 
-.toast-icon { font-size: 1.1rem; line-height: 1.4; }
-
+.toast-icon { font-size: 1rem; line-height: 1.35; }
 .toast-body { flex: 1; min-width: 0; }
 
 .toast-title {
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--chalk);
 }
 
 .toast-message {
   font-size: 0.75rem;
   color: var(--text-secondary);
-  margin-top: 0.125rem;
+  margin-top: 0.2rem;
   line-height: 1.45;
 }
 
 .toast-close {
   background: none;
   border: none;
-  color: var(--text-muted);
+  color: var(--ash);
   font-size: 1rem;
   cursor: pointer;
   padding: 0 0.25rem;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
-.toast-close:hover { color: var(--text-primary); }
+.toast-close:hover { color: var(--chalk); }
 
-@keyframes toastIn {
-  from { opacity: 0; transform: translateX(24px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
+@keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+@keyframes toastOut { from { opacity: 1; } to { opacity: 0; transform: translateX(20px); } }
 
-@keyframes toastOut {
-  from { opacity: 1; transform: translateX(0); }
-  to   { opacity: 0; transform: translateX(24px); }
-}
+/* ==========================================================================
+   Rankings — the divisional ladder
+   ========================================================================== */
 
-/* ========================================
-   Rankings — escada divisional oficial
-   ======================================== */
-
-.rank-division {
-  margin-bottom: 1.5rem;
-}
+.rank-division { margin-bottom: 1.75rem; }
 
 .rank-division-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.625rem;
+  border-bottom: 1px solid var(--rule);
 }
 
 .rank-division-title {
   font-family: var(--font-display);
-  font-size: 1rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  font-variation-settings: 'wdth' 100, 'wght' 700;
+  font-size: 0.9375rem;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
+/* The champion is the only place gold appears. */
 .rank-champion {
   display: flex;
   align-items: center;
   gap: 0.875rem;
-  padding: 0.875rem 1rem;
-  background: linear-gradient(120deg, rgba(232, 184, 74, 0.12), rgba(232, 184, 74, 0.02) 60%);
-  border: 1px solid rgba(232, 184, 74, 0.35);
-  border-radius: var(--radius-lg);
-  margin-bottom: 0.375rem;
+  padding: 0.75rem 0.875rem;
+  background: var(--mat);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--belt);
+  border-radius: var(--radius);
+  margin-bottom: 0.25rem;
   cursor: pointer;
   transition: var(--transition);
 }
 
-.rank-champion:hover {
-  border-color: var(--gold);
-  box-shadow: 0 6px 24px var(--gold-glow);
-}
+.rank-champion:hover { border-color: var(--belt); }
 
-.rank-belt {
-  font-size: 1.375rem;
-  filter: drop-shadow(0 0 8px var(--gold-glow));
-}
+.rank-belt { font-size: 1.125rem; }
 
 .rank-champion-name {
   font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1rem;
-  color: var(--gold);
+  font-variation-settings: 'wdth' 92, 'wght' 700;
+  font-size: 0.9375rem;
+  text-transform: uppercase;
+  color: var(--belt-ink);
 }
 
 .rank-champion-label {
-  font-size: 0.625rem;
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--text-muted);
+  letter-spacing: 0.18em;
+  color: var(--ash);
 }
 
 .rank-row {
   display: flex;
   align-items: center;
   gap: 0.875rem;
-  padding: 0.5rem 1rem;
+  padding: 0.5rem 0.875rem;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   transition: var(--transition);
-  border-radius: var(--radius);
 }
 
 .rank-row:hover { background: var(--bg-hover); }
 
 .rank-number {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 0.8125rem;
-  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: var(--ash);
   width: 1.75rem;
   text-align: right;
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
-.rank-row--mine .rank-number { color: var(--accent); }
+.rank-row--mine { background: var(--accent-subtle); }
+.rank-row--mine .rank-number { color: var(--red-ink); }
 
 .rank-streak {
-  font-size: 0.6875rem;
-  color: var(--success);
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--money);
+  font-weight: 600;
 }
 
-/* ========================================
-   Finanças — gráfico e breakdown
-   ======================================== */
+/* ==========================================================================
+   Finance
+   ========================================================================== */
 
-.finance-chart {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
-.finance-bar { transition: opacity 0.2s ease; cursor: pointer; }
-.finance-bar:hover { opacity: 0.75; }
+.finance-chart { width: 100%; height: auto; display: block; }
+.finance-bar { transition: opacity 0.15s ease; cursor: pointer; }
+.finance-bar:hover { opacity: 0.7; }
 
 .finance-legend {
   display: flex;
   gap: 1.25rem;
   flex-wrap: wrap;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  margin-top: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ash);
+  margin-top: 0.875rem;
 }
 
 .finance-legend-dot {
   display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  margin-right: 0.375rem;
-  vertical-align: -1px;
+  width: 8px; height: 8px;
+  margin-right: 0.4rem;
+  vertical-align: 0;
 }
 
+/* A ledger line. Label left, figure right, hairline between. */
 .cost-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 1rem;
   padding: 0.625rem 0;
   border-bottom: 1px solid var(--border);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 
 .cost-row:last-child { border-bottom: none; }
+.cost-row .font-bold { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 .runway-badge {
-  font-family: var(--font-display);
-  font-size: 2rem;
-  font-weight: 800;
+  font-family: var(--font-mono);
+  font-size: 1.875rem;
+  font-weight: 600;
   line-height: 1;
 }
 
-.runway-badge--ok { color: var(--success); }
-.runway-badge--warn { color: var(--warning); }
-.runway-badge--critical { color: var(--danger); }
+.runway-badge--ok { color: var(--money); }
+.runway-badge--warn { color: var(--belt-ink); }
+.runway-badge--critical { color: var(--red-ink); }
 
-/* ========================================
-   Simulação ao vivo — Fight Night broadcast
-   ======================================== */
+/* ==========================================================================
+   Live broadcast
+   ========================================================================== */
 
 .live-banner {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.75rem 1.125rem;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
+  padding: 0.625rem 1rem;
+  background: var(--mat-high);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
   margin-bottom: 1.25rem;
   position: sticky;
   top: 0.5rem;
@@ -248,44 +238,40 @@
 }
 
 .live-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 12px var(--accent-glow);
-  animation: livePulse 1.2s ease-in-out infinite;
+  width: 7px; height: 7px;
+  background: var(--red);
+  animation: livePulse 1.4s ease-in-out infinite;
   flex-shrink: 0;
 }
 
-@keyframes livePulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.45; transform: scale(0.8); }
-}
+@keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
 
 .live-label {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 0.8125rem;
-  letter-spacing: 0.16em;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.625rem;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--red-ink);
 }
 
-.live-status { flex: 1; font-size: 0.8125rem; color: var(--text-secondary); }
-
-.live-fight {
-  opacity: 0;
-  transform: translateY(16px);
+.live-status {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
 }
 
-.live-fight--shown {
-  animation: liveFightIn 0.5s var(--ease-out-expo) forwards;
-}
+.skip-live { margin-left: auto; }
 
-@keyframes liveFightIn {
-  to { opacity: 1; transform: translateY(0); }
-}
+.live-fight { opacity: 0; transform: translateY(12px); }
+.live-fight--shown { animation: liveFightIn 0.45s var(--ease-out-expo) forwards; }
+@keyframes liveFightIn { to { opacity: 1; transform: none; } }
 
+.live-fight--player { border-left: 2px solid var(--belt); }
+
+/* The bout header, mirroring the poster. */
 .live-vs-card {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -294,141 +280,164 @@
   padding: 1rem 0;
 }
 
-.live-corner { text-align: center; }
+.live-corner { text-align: center; min-width: 0; }
 
 .live-corner-name {
   font-family: var(--font-display);
-  font-weight: 700;
+  font-variation-settings: 'wdth' 88, 'wght' 800;
   font-size: 1.0625rem;
-  line-height: 1.2;
+  line-height: 1.05;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
-.live-corner-record { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }
+.live-corner-record {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ash);
+  margin-top: 0.35rem;
+}
 
-.live-corner--red .live-corner-name { color: var(--accent); }
-.live-corner--blue .live-corner-name { color: #5b8dd6; }
-
-.live-corner--winner .live-corner-name { color: var(--gold); }
+.live-corner--red .live-corner-name { color: var(--red-ink); }
+.live-corner--blue .live-corner-name { color: var(--blue-bright); }
+[data-theme="light"] .live-corner--blue .live-corner-name { color: var(--blue); }
+.live-corner--winner .live-corner-name { color: var(--belt-ink); }
 
 .live-vs {
   font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  letter-spacing: 0.1em;
+  font-variation-settings: 'wdth' 62, 'wght' 900;
+  font-size: 0.9375rem;
+  color: var(--ash);
+  letter-spacing: 0.04em;
 }
 
 .live-method {
   text-align: center;
-  padding: 0.5rem 0 0.25rem;
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
+  padding: 0.625rem 0 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--ash);
+  text-transform: uppercase;
 }
 
-.live-method strong {
-  font-family: var(--font-display);
-  color: var(--text-primary);
-  letter-spacing: 0.04em;
-}
+.live-method strong { color: var(--chalk); font-weight: 600; }
+.live-method--finish strong { color: var(--red-ink); }
 
-.live-method--finish strong { color: var(--accent); }
+/* ==========================================================================
+   Tale of the tape — the sport's own comparison table
+   ========================================================================== */
 
 .tale-of-tape {
   width: 100%;
-  font-size: 0.75rem;
   border-collapse: collapse;
   margin-top: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Column heads name the corners, so a glance tells you which side is yours. */
+.tale-of-tape thead th {
+  background: none;
+  border-bottom: 1px solid var(--border-light);
+  padding: 0 0.5rem 0.5rem;
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 88, 'wght' 700;
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.tale-of-tape thead th.tot-red  { text-align: right; color: var(--red-ink); }
+.tale-of-tape thead th.tot-blue { text-align: left;  color: var(--blue-bright); }
+
+.tale-of-tape thead th:nth-child(2) {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
 }
 
 .tale-of-tape td {
-  padding: 0.3rem 0.5rem;
+  padding: 0.4rem 0.5rem;
   border-bottom: 1px solid var(--border);
+  background: none;
 }
 
-.tale-of-tape td:first-child { text-align: right; width: 40%; }
+.tale-of-tape tbody tr:last-child td { border-bottom: none; }
+.tale-of-tape tbody tr:hover td { background: none; }
+
+.tale-of-tape td:first-child { text-align: right; width: 34%; color: var(--text-secondary); }
+.tale-of-tape td:last-child  { text-align: left;  width: 34%; color: var(--text-secondary); }
+
+/* The centre column is the label spine. */
 .tale-of-tape td:nth-child(2) {
   text-align: center;
-  color: var(--text-muted);
+  width: 32%;
+  color: var(--ash);
   text-transform: uppercase;
-  font-size: 0.625rem;
-  letter-spacing: 0.1em;
-  width: 20%;
+  font-size: 0.5625rem;
+  letter-spacing: 0.16em;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
 }
-.tale-of-tape td:last-child { text-align: left; width: 40%; }
 
-.tale-of-tape .tot-lead { color: var(--success); font-weight: 700; }
+.tale-of-tape .tot-lead { color: var(--chalk); font-weight: 700; }
 
-.skip-live { margin-left: auto; }
+/* ==========================================================================
+   Corner instructions — the one moment you coach live
+   ========================================================================== */
 
-/* ========================================
-   Onboarding — primeiro acesso
-   ======================================== */
-
-.onboarding-steps {
+.corner-choice-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.5rem;
-  margin: 1rem 0;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.625rem;
 }
 
-.onboarding-step {
-  padding: 0.75rem 0.625rem;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  text-align: center;
-}
-
-.onboarding-step-icon { font-size: 1.375rem; }
-
-.onboarding-step-label {
-  font-size: 0.6875rem;
-  color: var(--text-secondary);
-  margin-top: 0.375rem;
-  line-height: 1.3;
-}
-
-.difficulty-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
-}
-
-.difficulty-option {
-  padding: 0.875rem 0.75rem;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  text-align: center;
+.corner-choice {
+  text-align: left;
   cursor: pointer;
+  border-top: 2px solid var(--border-light);
   transition: var(--transition);
+  font-family: inherit;
+  color: inherit;
 }
 
-.difficulty-option:hover { border-color: var(--border-light); }
-
-.difficulty-option.selected {
-  border-color: var(--accent);
-  background: var(--accent-subtle);
+.corner-choice:hover {
+  border-top-color: var(--red);
+  background: var(--mat-high);
 }
 
-.difficulty-name {
+.corner-choice-icon { font-size: 1.375rem; margin-bottom: 0.5rem; }
+
+.corner-choice-label {
   font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 0.8125rem;
+  font-variation-settings: 'wdth' 95, 'wght' 700;
+  font-size: 0.9375rem;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  margin-bottom: 0.3rem;
 }
 
-.difficulty-cash { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem; }
+.corner-choice-desc { line-height: 1.45; }
 
-/* ========================================
-   Roster / Market — cartões de lutador
-   Substituem tabelas densas por informação legível
-   ======================================== */
+/* ==========================================================================
+   Roster / market cards
+   ========================================================================== */
 
 .roster-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 0.75rem;
 }
+
+.roster-card { border-top: 2px solid var(--border-light); }
+.roster-card:hover { border-top-color: var(--red); }
 
 .roster-card-header {
   display: flex;
@@ -439,80 +448,309 @@
 
 .fighter-name-link {
   font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1rem;
+  font-variation-settings: 'wdth' 90, 'wght' 700;
+  font-size: 1.0625rem;
+  line-height: 1.05;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: color 0.2s ease;
+  transition: color var(--anim-fast) ease;
 }
 
-.fighter-name-link:hover {
-  color: var(--accent);
-}
+.fighter-name-link:hover { color: var(--red-ink); }
 
+/* Status is the athlete's availability. Colour tells you at a glance. */
 .roster-status {
-  font-size: 0.75rem;
-  padding: 0.5rem 0.625rem;
-  border-radius: var(--radius);
-  background: var(--bg-tertiary);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  padding: 0.45rem 0.55rem;
+  border-radius: 1px;
+  border-left: 2px solid currentColor;
+  background: var(--canvas);
 }
 
-.roster-status--gold { color: var(--gold); background: rgba(232, 184, 74, 0.08); }
-.roster-status--danger { color: var(--danger); background: rgba(232, 35, 74, 0.08); }
-.roster-status--warning { color: var(--warning); background: rgba(212, 160, 32, 0.08); }
-.roster-status--muted { color: var(--text-muted); }
+.roster-status--gold { color: var(--belt-ink); }
+.roster-status--danger { color: var(--red-ink); }
+.roster-status--warning { color: var(--belt-ink); }
+.roster-status--muted { color: var(--ash); }
 
-.focus-picker {
+
+.focus-picker { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+
+/* ==========================================================================
+   Cinturões — o único lugar onde o ouro aparece
+   ========================================================================== */
+
+.belt-mark { filter: saturate(1.1); }
+
+/* Faixa do pôster quando há cinturão em jogo */
+.poster-title-strap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1.75rem;
+  padding: 0.5rem 1rem;
+  border-top: 1px solid var(--belt);
+  border-bottom: 1px solid var(--belt);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--belt-ink);
+  background: rgba(201, 162, 39, 0.06);
+}
+
+.poster--title .poster-billing { margin-top: 1.25rem; }
+.poster--title .poster-name { color: var(--chalk); }
+
+/* Cartão do atleta campeão */
+.stat-card--champion { border-top: 2px solid var(--belt); }
+
+.belt-line {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--belt-ink);
+  margin-bottom: 0.5rem;
+}
+
+/* Posição na fila do cinturão — a resposta para "por que não me chamam?" */
+.contender-line {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ash);
+  margin-bottom: 0.5rem;
+}
+
+.belt-contender {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ash);
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--rule);
+}
+
+/* Oferta de disputa de título */
+.offer-card--title {
+  border-top: 2px solid var(--belt);
+  background: linear-gradient(180deg, rgba(201, 162, 39, 0.05), transparent 40%);
+}
+
+.offer-title-strap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.625rem;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--belt-ink);
+}
+
+/* Quadro de cinturões na tela de Rankings */
+.belt-board { border-top: 2px solid var(--belt); }
+
+.belt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.5rem;
+}
+
+.belt-slot {
+  position: relative;
+  padding: 0.75rem;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--belt);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.belt-slot:hover { border-color: var(--border-light); border-left-color: var(--belt); }
+
+.belt-slot--vacant { border-left-color: var(--ash); cursor: default; opacity: 0.7; }
+.belt-slot--mine { border-left-color: var(--red); background: var(--accent-subtle); }
+
+.belt-division {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ash);
+  margin-bottom: 0.3rem;
+}
+
+.belt-champion {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 90, 'wght' 700;
+  font-size: 0.9375rem;
+  line-height: 1.1;
+  text-transform: uppercase;
+  color: var(--belt-ink);
+}
+
+.belt-champion--vacant { color: var(--ash); }
+.belt-slot--mine .belt-champion { color: var(--red-ink); }
+
+.belt-meta {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--ash);
+  margin-top: 0.3rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.belt-mine-tag { margin-top: 0.4rem; display: inline-block; font-size: 0.55rem; }
+
+/* Luta de cinturão na transmissão */
+.live-fight--title { border-left: 2px solid var(--belt); }
+
+/* ==========================================================================
+   Névoa de guerra — o que você não sabe sobre quem está do lado de fora
+   ========================================================================== */
+
+/* Faixa hachurada: o valor está em algum lugar aqui dentro. */
+.progress-fuzzy {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 1px;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--ash) 0 2px,
+    transparent 2px 5px
+  );
+  opacity: 0.65;
+}
+
+.progress-bar { position: relative; }
+
+.attr-value--fuzzy,
+.stat-value--fuzzy {
+  color: var(--ash);
+  font-weight: 500;
+}
+
+/* ==========================================================================
+   Dossiê do adversário
+   ========================================================================== */
+
+.dossier {
+  padding: 0.875rem;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--blue);
+  border-radius: var(--radius);
+}
+
+.dossier-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.dossier-title {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--blue-bright);
+}
+
+[data-theme="light"] .dossier-title { color: var(--blue); }
+
+.dossier-reads {
   display: flex;
   gap: 0.375rem;
   flex-wrap: wrap;
 }
 
-/* ========================================
-   Córner ao vivo — instruções entre rounds (Fase 3)
-   ======================================== */
+/* ==========================================================================
+   Plano de jogo — a decisão que ganha a luta antes do primeiro soco
+   ========================================================================== */
 
-.corner-choice-grid {
+.plan-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.75rem;
-}
-
-.corner-choice {
-  text-align: center;
-  cursor: pointer;
-  border-top: 2px solid var(--border-light);
-}
-
-.corner-choice:hover {
-  border-top-color: var(--accent);
-  transform: translateY(-2px);
-}
-
-.corner-choice-icon { font-size: 1.75rem; margin-bottom: 0.375rem; }
-
-.corner-choice-label {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 0.9rem;
-  margin-bottom: 0.25rem;
-}
-
-.corner-choice-desc { line-height: 1.4; }
-
-/* ========================================
-   Negociação de bolsa
-   ======================================== */
-
-.negotiate-panel {
-  display: flex;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 0.5rem;
-  flex-wrap: wrap;
-  margin-top: 0.5rem;
 }
 
-/* ========================================
-   Academia — estrutura, comissão técnica, olheiro
-   ======================================== */
+.plan-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: left;
+  padding: 0.75rem;
+  background: var(--mat);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: inherit;
+  color: inherit;
+}
+
+.plan-option:hover { border-color: var(--border-light); }
+
+.plan-option--active {
+  border-top-color: var(--red);
+  background: var(--accent-subtle);
+}
+
+.plan-icon { font-size: 1.125rem; }
+
+.plan-label {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 95, 'wght' 700;
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+}
+
+.plan-desc {
+  font-size: 0.6875rem;
+  color: var(--ash);
+  line-height: 1.35;
+}
+
+.plan-verdict {
+  margin-top: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.plan-verdict--good { color: var(--money); }
+.plan-verdict--bad { color: var(--red-ink); }
+.plan-verdict--neutral { color: var(--ash); }
+
+/* ==========================================================================
+   Negotiation
+   ========================================================================== */
+
+.negotiate-panel { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+
+/* ==========================================================================
+   Academy
+   ========================================================================== */
 
 .academy-upgrade-row {
   display: flex;
@@ -521,11 +759,82 @@
   gap: 1rem;
 }
 
-@media (max-width: 768px) {
+/* ==========================================================================
+   Onboarding & period presets
+   ========================================================================== */
+
+.onboarding-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.375rem;
+  margin: 1.25rem 0;
+}
+
+.onboarding-step {
+  padding: 0.75rem 0.5rem;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.onboarding-step-icon { font-size: 1.25rem; }
+
+.onboarding-step-label {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ash);
+  margin-top: 0.4rem;
+  line-height: 1.35;
+}
+
+.difficulty-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
+
+.difficulty-option {
+  padding: 0.875rem 0.75rem;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.difficulty-option:hover { border-color: var(--border-light); }
+
+.difficulty-option.selected {
+  border-color: var(--border-light);
+  border-top-color: var(--red);
+  background: var(--accent-subtle);
+}
+
+.difficulty-name {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 95, 'wght' 700;
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+}
+
+.difficulty-cash {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+  margin-top: 0.3rem;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 900px) {
   .onboarding-steps { grid-template-columns: repeat(2, 1fr); }
   .difficulty-grid { grid-template-columns: 1fr; }
-  .toast-container { left: 1.25rem; right: 1.25rem; max-width: none; }
+  .toast-container { left: 1rem; right: 1rem; max-width: none; }
   .roster-cards { grid-template-columns: 1fr; }
+  .live-vs-card { grid-template-columns: 1fr; gap: 0.5rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,8 +1,9 @@
 import { getWeightClassName } from '../utils/helpers.js';
+import { GYM_CONFIG } from '../config/game-config.js';
 
 export class TrainingCampView {
   static render(roster) {
-    const fighters = roster.filter(f => f.status === 'roster');
+    const fighters = roster.filter(f => f.gymId === GYM_CONFIG.ID);
 
     return `
       <div class="page-header">

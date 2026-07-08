@@ -19,6 +19,13 @@ export class LayoutView {
         const commit = () => {
           if (seq !== LayoutView._renderSeq) return resolve();
           LayoutView._renderSeq++; // invalida commits duplicados deste mesmo render
+
+          // O fallback abaixo pode commitar antes do tween de saída terminar
+          // (rAF estrangulado: aba em segundo plano, resize, jank). Sem matar
+          // o tween aqui, ele retoma depois do commit e leva a opacidade de
+          // volta a 0 — tela em branco com o HTML já no DOM.
+          gsap.killTweensOf(mainContent);
+
           mainContent.innerHTML = content;
           gsap.set(mainContent, { opacity: 1, y: 0 });
           motion.scrollToTop();

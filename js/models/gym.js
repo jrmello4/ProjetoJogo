@@ -17,6 +17,7 @@ export class Gym {
     this.losses = data.losses ?? 0;
     this.coaches = data.coaches || { striking: false, grappling: false, cardio: false };
     this.scoutLevel = data.scoutLevel ?? 0; // 0 = sem olheiro, 1 = ativo
+    this.trust = data.trust ?? 50; // 0-100, Épico A — promessas cumpridas vs quebradas
     this.ledger = data.ledger || []; // {absWeek, label, amount}
     this.createdAt = data.createdAt || new Date().toISOString();
   }

@@ -91,6 +91,26 @@ export function renderAttrBar(label, value) {
   `;
 }
 
+// Atributo sob névoa: você não sabe o número, sabe a faixa. A barra mostra
+// um trecho entre o mínimo e o máximo — quanto mais você estuda o adversário,
+// mais estreito ele fica, até virar um número exato.
+export function renderAttrRange(label, blurred) {
+  if (blurred.exact) return renderAttrBar(label, blurred.value);
+
+  const width = Math.max(3, blurred.max - blurred.min);
+  return `
+    <div class="attr-item">
+      <div class="attr-label">
+        <span>${label}</span>
+        <span class="attr-value attr-value--fuzzy">${blurred.min}–${blurred.max}</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fuzzy" style="left:${blurred.min}%;width:${width}%"></div>
+      </div>
+    </div>
+  `;
+}
+
 // Abreviação em português para badges compactos
 export function getWeightClassShort(weight) {
   const shorts = {

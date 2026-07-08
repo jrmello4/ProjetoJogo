@@ -1,5 +1,5 @@
-import { formatCurrency, getWeightClassShort } from '../utils/helpers.js';
-import { TIER_LABELS, NEGOTIATION_CONFIG } from '../config/game-config.js';
+import { formatCurrency, getWeightClassShort, getWeightClassName, renderAttrRange } from '../utils/helpers.js';
+import { TIER_LABELS, NEGOTIATION_CONFIG, TITLE_ROLE, GAME_PLANS } from '../config/game-config.js';
 import { OFFER_STATUS } from '../models/fight-offer.js';
 
 const STATUS_LABELS = {
@@ -9,8 +9,95 @@ const STATUS_LABELS = {
   [OFFER_STATUS.CANCELLED]: { label: 'Cancelada', cls: 'badge-danger' },
 };
 
+const ARCHETYPE_LABELS = {
+  striker: 'Trocador',
+  grappler: 'Grappler',
+  mixed: 'Completo',
+  highCardio: 'Cardio de sobra',
+  lowCardio: 'Cardio frágil',
+  midCardio: 'Cardio mediano',
+  highIq: 'Lê a luta',
+  lowIq: 'Impulsivo',
+  midIq: 'Leitura mediana',
+};
+
 export class OffersView {
-  static render(pending, accepted, history, team, now) {
+  // Dossiê do adversário. Sem estudar, tudo é faixa larga e ninguém sabe
+  // como ele luta — e aí o plano de jogo vira aposta.
+  static _renderDossier(offer, d) {
+    const studyBtn = d.level >= 3
+      ? '<span class="text-xs text-muted">Nada mais a descobrir.</span>'
+      : `<button class="btn btn-sm btn-secondary study-opponent" data-id="${offer.id}" ${d.canAfford ? '' : 'disabled'}>
+           🔍 Estudar — ${formatCurrency(d.nextCost)}
+         </button>`;
+
+    const tendencies = d.tendencies
+      ? `<div class="dossier-reads">
+           <span class="badge badge-info">${ARCHETYPE_LABELS[d.tendencies.archetype]}</span>
+           <span class="badge badge-info">${ARCHETYPE_LABELS[d.tendencies.cardio]}</span>
+           <span class="badge badge-info">${ARCHETYPE_LABELS[d.tendencies.iq]}</span>
+         </div>`
+      : '<div class="text-xs text-muted">Sem informação sobre como ele luta. Estude-o antes de escolher o plano.</div>';
+
+    const dna = d.dna && d.dna.length > 0
+      ? `<div class="dossier-reads mt-2">${d.dna.map(t => `<span class="badge badge-warning">${t.label}</span>`).join('')}</div>`
+      : '';
+
+    return `
+      <div class="dossier">
+        <div class="dossier-header">
+          <span class="dossier-title">Dossiê · ${offer.opponentName}</span>
+          <div class="flex items-center gap-2">
+            <span class="badge ${d.level >= 2 ? 'badge-success' : d.level === 1 ? 'badge-warning' : 'badge-danger'}">${d.levelLabel}</span>
+            ${studyBtn}
+          </div>
+        </div>
+
+        <div class="attr-grid mt-3">
+          ${renderAttrRange('Striking', d.attrs.striking)}
+          ${renderAttrRange('Grappling', d.attrs.grappling)}
+          ${renderAttrRange('Cardio', d.attrs.cardio)}
+          ${renderAttrRange('Queixo', d.attrs.chin)}
+        </div>
+
+        <div class="mt-3">${tendencies}${dna}</div>
+      </div>
+    `;
+  }
+
+  // Plano de jogo. O acerto ou erro de leitura vale mais que qualquer
+  // instrução de córner — e você escolhe sem saber, se não estudou.
+  static _renderGamePlan(offer, d) {
+    const current = offer.gamePlan || 'balanced';
+    const read = d?.tendencies;
+
+    const verdictOf = (plan) => {
+      if (!read || (!plan.strongVs && !plan.weakVs)) return '';
+      const traits = new Set([read.archetype, read.cardio, read.iq]);
+      if (plan.strongVs && traits.has(plan.strongVs)) return '<span class="plan-verdict plan-verdict--good">Boa leitura</span>';
+      if (plan.weakVs && traits.has(plan.weakVs)) return '<span class="plan-verdict plan-verdict--bad">Joga no jogo dele</span>';
+      return '<span class="plan-verdict plan-verdict--neutral">Neutro</span>';
+    };
+
+    return `
+      <div class="mt-3">
+        <div class="text-xs text-muted mb-2" style="text-transform:uppercase;letter-spacing:0.1em">Plano de Jogo</div>
+        <div class="plan-grid">
+          ${Object.entries(GAME_PLANS).map(([key, plan]) => `
+            <button class="plan-option ${current === key ? 'plan-option--active' : ''}" data-offer="${offer.id}" data-plan="${key}">
+              <span class="plan-icon">${plan.icon}</span>
+              <span class="plan-label">${plan.label}</span>
+              <span class="plan-desc">${plan.desc}</span>
+              ${verdictOf(plan)}
+            </button>
+          `).join('')}
+        </div>
+        ${!read ? '<div class="text-xs text-muted mt-2">⚠️ Você não estudou o adversário — está escolhendo no escuro.</div>' : ''}
+      </div>
+    `;
+  }
+
+  static render(pending, accepted, history, team, now, dossiers = {}, contractProposals = []) {
     const fighterOf = (o) => team.find(f => f.id === o.fighterId);
 
     const tierBadge = (tier) => {
@@ -25,8 +112,16 @@ export class OffersView {
           const weeksToFight = o.eventAbsWeek - now;
           const weeksToExpire = o.expiresAbsWeek - now;
           const risky = fighter && o.opponentOverall != null && o.opponentOverall - fighter.overallRating >= 5;
+
+          const titleLabel = o.titleRole === TITLE_ROLE.DEFENSE
+            ? `Defesa de cinturão ${getWeightClassName(o.weightClass)}`
+            : o.titleRole === TITLE_ROLE.VACANT
+              ? `Cinturão ${getWeightClassName(o.weightClass)} vago`
+              : `Disputa de cinturão ${getWeightClassName(o.weightClass)}`;
+
           return `
-            <div class="card mb-2" data-reveal style="border-top-color:${o.tier === 1 ? 'var(--accent)' : o.tier === 2 ? 'var(--gold,#d4a843)' : 'var(--border)'}">
+            <div class="card mb-2 ${o.isTitleFight ? 'offer-card--title' : ''}" data-reveal ${o.isTitleFight ? '' : `style="border-top-color:${o.tier === 1 ? 'var(--accent)' : o.tier === 2 ? 'var(--gold,#d4a843)' : 'var(--border)'}"`}>
+              ${o.isTitleFight ? `<div class="offer-title-strap"><span class="belt-mark">🏆</span> ${titleLabel}</div>` : ''}
               <div class="flex items-center justify-between mb-2">
                 <div class="flex items-center gap-2">
                   ${tierBadge(o.tier)}
@@ -91,20 +186,26 @@ export class OffersView {
           `;
         }).join('');
 
+    // O camp: estudar o adversário e escolher o plano. É aqui que a luta
+    // é ganha, antes de alguém dar o primeiro soco.
     const acceptedHtml = accepted.length === 0 ? '' : `
-      <div class="section-label mt-4">Lutas Confirmadas</div>
+      <div class="section-label mt-4">Camp de Luta</div>
       ${accepted.map(o => {
         const fighter = fighterOf(o);
         const weeksOut = o.eventAbsWeek - now;
+        const d = dossiers[o.id];
         return `
-          <div class="card mb-2" data-reveal>
-            <div class="flex items-center justify-between">
+          <div class="card mb-2 ${o.isTitleFight ? 'offer-card--title' : ''}" data-reveal>
+            <div class="flex items-center justify-between mb-3">
               <div>
-                <div class="text-sm font-bold">${fighter ? fighter.name : '—'} vs ${o.opponentName}</div>
+                <div class="text-sm font-bold">${o.isTitleFight ? '<span class="belt-mark">🏆</span> ' : ''}${fighter ? fighter.name : '—'} vs ${o.opponentName}</div>
                 <div class="text-xs text-muted">${o.promotionName} · ${formatCurrency(o.purse)} + ${formatCurrency(o.winBonus)} por vitória</div>
               </div>
               <span class="badge ${weeksOut <= 1 ? 'badge-danger' : 'badge-warning'}">${weeksOut <= 0 ? 'Esta semana!' : `em ${weeksOut} sem`}</span>
             </div>
+
+            ${d ? this._renderDossier(o, d) : ''}
+            ${this._renderGamePlan(o, d)}
           </div>
         `;
       }).join('')}
@@ -125,12 +226,48 @@ export class OffersView {
       </div>
     `;
 
+    // Épico B: Propostas de contrato exclusivo
+    const contractHtml = contractProposals.length === 0 ? '' : `
+      <div class="section-label mt-4">Propostas de Contrato Exclusivo</div>
+      <p class="text-xs text-muted mb-2">Aceitar um contrato vincula o atleta a uma promoção — ofertas de outras promoções deixam de aparecer.</p>
+      ${contractProposals.map(cp => `
+        <div class="card mb-2 offer-card--contract" data-reveal>
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              ${tierBadge(cp.tier)}
+              <span class="font-bold">${cp.promotionName}</span>
+            </div>
+            <span class="badge badge-info">${cp.fightsTotal} lutas</span>
+          </div>
+          <div class="flex items-center gap-3 mb-2" style="flex-wrap:wrap">
+            <div>
+              <div class="text-xs text-muted">Bolsa por luta</div>
+              <div class="text-sm font-bold" style="color:var(--success)">${formatCurrency(cp.basePurse)}</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted">Bônus de vitória</div>
+              <div class="text-sm font-bold">${formatCurrency(cp.winBonus)}</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted">Cláusula de título</div>
+              <div class="text-sm font-bold">${cp.titleClause ? 'Sim' : 'Não'}</div>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-sm btn-success contract-accept" data-fighter="${cp.fighterId}" data-promo="${cp.promotionId}">Aceitar Contrato</button>
+            <button class="btn btn-sm btn-secondary contract-decline" data-fighter="${cp.fighterId}">Recusar</button>
+          </div>
+        </div>
+      `).join('')}
+    `;
+
     return `
       <div class="page-header">
         <h2>Ofertas de Luta</h2>
         <p>Promoções enviam propostas para seus atletas — escolha as lutas certas</p>
       </div>
 
+      ${contractHtml}
       ${pendingHtml}
       ${acceptedHtml}
       ${historyHtml}

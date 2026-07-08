@@ -24,8 +24,8 @@ import { SaveService } from './services/save-service.js';
 import { ThreeArena } from './three-arena.js';
 import { ThreeBackground } from './three-background.js';
 import { motion } from './motion/motion-engine.js';
-import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, absWeekToLabel } from './config/game-config.js';
-import { getWeightClassName } from './utils/helpers.js';
+import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, absWeekToLabel, GYM_CONFIG } from './config/game-config.js';
+import { getWeightClassName, formatCurrency } from './utils/helpers.js';
 
 class App {
   constructor() {
@@ -433,8 +433,34 @@ class App {
     const history = await this.game.offerService.getHistory();
     const team = await this.game.getTeam();
 
-    const html = OffersView.render(pending, accepted, history, team, now);
+    // Dossiê de cada adversário já contratado — o que você sabe (ou não).
+    const dossiers = {};
+    for (const o of accepted) {
+      const d = await this.game.opponentDossier(o);
+      if (d) dossiers[o.id] = d;
+    }
+
+    // Épico B: carregar propostas de contrato pendentes
+    const contractProposals = await this._loadContractProposals(team);
+
+    const html = OffersView.render(pending, accepted, history, team, now, dossiers, contractProposals);
     await LayoutView.render(html);
+
+    document.querySelectorAll('.study-opponent').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const offer = accepted.find(o => o.id === btn.dataset.id);
+        const result = await this.game.studyOpponent(offer.opponentId);
+        if (!result.ok) this.notificationService.add('warning', 'Scouting', result.reason);
+        this.renderOffers();
+      });
+    });
+
+    document.querySelectorAll('.plan-option').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await this.game.setGamePlan(btn.dataset.offer, btn.dataset.plan);
+        this.renderOffers();
+      });
+    });
 
     document.querySelectorAll('.offer-accept').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -479,6 +505,44 @@ class App {
         this.renderOffers();
       });
     });
+
+    // Épico B: aceitar/recusar proposta de contrato
+    document.querySelectorAll('.contract-accept').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const fighterId = btn.dataset.fighter;
+        const promoId = btn.dataset.promo;
+        const result = await this.game.contractService.accept(fighterId, promoId, now);
+        if (result) {
+          this.notificationService.add('success', 'Contrato Assinado!', `${result.name} agora é exclusivo da promoção.`);
+        }
+        this.renderOffers();
+      });
+    });
+
+    document.querySelectorAll('.contract-decline').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const fighterId = btn.dataset.fighter;
+        await this.game.contractService.decline(fighterId);
+        this.notificationService.add('info', 'Proposta Recusada', 'Ofertas futuras de outras promoções ainda podem aparecer.');
+        this.renderOffers();
+      });
+    });
+  }
+
+  // Épico B: carregar propostas de contrato pendentes do banco
+  async _loadContractProposals(team) {
+    const proposals = [];
+    for (const fighter of team) {
+      try {
+        const doc = await this.game.db.get('gameState', `contract-offer-${fighter.id}`);
+        if (doc && doc.offers) {
+          for (const offer of doc.offers) {
+            proposals.push({ ...offer, fighterId: fighter.id });
+          }
+        }
+      } catch { /* sem propostas para este lutador */ }
+    }
+    return proposals;
   }
 
   // ===== Minha Equipe =====
@@ -488,7 +552,10 @@ class App {
     const state = await this.seasonService.getState();
     const now = (state.year - 1) * 52 + state.week;
 
-    const html = RosterView.render(team, bookings, now);
+    // Épico A: carregar sondagens ativas
+    const approaches = await this._loadRetentionApproaches();
+
+    const html = RosterView.render(team, bookings, now, approaches);
     await LayoutView.render(html);
 
     this._bindFighterClicks();
@@ -508,6 +575,45 @@ class App {
         this.renderRoster();
       });
     });
+
+    // Épico A: responder a sondagem
+    document.querySelectorAll('.retention-respond').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const approachId = btn.dataset.approach;
+        const action = btn.dataset.action;
+        const gym = await this.game.getGym();
+
+        // Encontrar o fighter pelo approach
+        const approaches2 = await this._loadRetentionApproaches();
+        const approach = approaches2.find(a => a.id === approachId);
+        if (!approach) return;
+
+        const fighter = await this.game.fighterCtrl.getFighter(approach.fighterId);
+        if (!fighter) return;
+
+        const result = await this.game.retentionService.respond(now, approachId, action, fighter, gym);
+        await this.game.fighterCtrl.updateFighter(fighter);
+        await this.game.updateGym(gym);
+
+        if (result.success) {
+          this.notificationService.add(result.outcome === 'released' ? 'warning' : 'success', 'Retenção', result.message);
+        } else {
+          this.notificationService.add('warning', 'Retenção', result.message || 'Não foi possível realizar esta ação.');
+        }
+
+        this.renderRoster();
+      });
+    });
+  }
+
+  // Épico A: carregar sondagens ativas do banco
+  async _loadRetentionApproaches() {
+    try {
+      const doc = await this.game.db.get('gameState', 'retention');
+      return doc ? doc.approaches || [] : [];
+    } catch {
+      return [];
+    }
   }
 
   // ===== Recrutamento =====
@@ -516,10 +622,13 @@ class App {
     const gym = await this.game.getGym();
     const team = await this.game.getTeam();
 
+    const knowledge = await this.game.scoutingService.knowledgeMap(agents, gym);
+
     const html = MarketView.render(
       agents, gym, team.length,
       this.marketFilter, this.marketSearch,
-      (f) => this.game.recruitFee(f)
+      (f) => this.game.recruitFee(f),
+      knowledge
     );
     await LayoutView.render(html);
 
@@ -697,7 +806,31 @@ class App {
       const fighter = await this.game.fighterCtrl.getFighter(fighterId);
       if (!fighter) return;
 
-      const result = TrainingCamp.runCamp(fighter, this.trainingState.intensity, this.trainingState.spec);
+      // B3: Anti-exploit — cooldown semanal
+      const absWeekNow = this.game.state.absWeek;
+      if (fighter.lastTrainedAbsWeek === absWeekNow) {
+        alert('Este lutador já treinou esta semana. Espere a próxima semana.');
+        return;
+      }
+
+      // B3: Sem luta marcada, bloquear treino intenso
+      const hasFight = this.game.state.offers?.accepted?.some(o => o.fighterId === fighterId);
+      if (!hasFight && this.trainingState.intensity === 'heavy') {
+        alert('Treino pesado só é permitido quando o lutador tem uma luta marcada.');
+        return;
+      }
+
+      // B3: Cobrar custo do treino
+      const cost = GYM_CONFIG.WEEKLY_COACHING_PER_FIGHTER * 2;
+      const gym = this.game.state.gym;
+      if (gym.cash < cost) {
+        alert(`Saldo insuficiente. O treino custa ${formatCurrency(cost)}.`);
+        return;
+      }
+      gym.addTransaction(absWeekNow, `Treino: ${fighter.name}`, -cost);
+
+      const result = TrainingCamp.runCamp(fighter, this.trainingState.intensity, this.trainingState.spec, absWeekNow);
+      fighter.lastTrainedAbsWeek = absWeekNow;
       await this.game.fighterCtrl.saveFighter(fighter);
 
       const resultContent = document.getElementById('trainingResultContent');
@@ -729,7 +862,8 @@ class App {
     const allFighters = await this.game.fighterCtrl.getAllFighters();
     const active = allFighters.filter(f => f.status !== 'retired');
     const rankings = RankingService.calculateRankings(active);
-    const html = RankingsView.render(rankings);
+    const belts = await this.game.titleService.getBeltMap();
+    const html = RankingsView.render(rankings, belts);
     await LayoutView.render(html);
     this._bindFighterClicks();
   }

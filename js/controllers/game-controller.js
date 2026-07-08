@@ -11,7 +11,12 @@ import { WorldService } from '../services/world-service.js';
 import { OfferService } from '../services/offer-service.js';
 import { RivalGymService } from '../services/rival-gym-service.js';
 import { SponsorService } from '../services/sponsor-service.js';
+import { TitleService } from '../services/title-service.js';
+import { ScoutingService } from '../services/scouting-service.js';
+import { ContractService } from '../services/contract-service.js';
+import { RetentionService } from '../services/retention-service.js';
 import { RivalGym } from '../models/rival-gym.js';
+import { FightOffer } from '../models/fight-offer.js';
 import { generateId, clamp } from '../utils/helpers.js';
 import {
   GYM_CONFIG,
@@ -22,6 +27,7 @@ import {
   COACH_CONFIG,
   SCOUT_CONFIG,
   TRAINING_FOCUS_META,
+  GAME_PLANS,
   absWeek,
 } from '../config/game-config.js';
 
@@ -42,6 +48,10 @@ export class GameController {
     this.offerService = null;
     this.rivalGymService = null;
     this.sponsorService = null;
+    this.titleService = null;
+    this.scoutingService = null;
+    this.contractService = null;
+    this.retentionService = null;
   }
 
   async init() {
@@ -51,17 +61,68 @@ export class GameController {
     this.eventCtrl = new EventController(this.db);
     this.seasonService = new SeasonService(this.db);
     this.notifService = new NotificationService(this.db);
-    this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService);
-    this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService);
-    this.rivalGymService = new RivalGymService(this.db, this.fighterCtrl, this.notifService);
+    this.titleService = new TitleService(this.db, this.fighterCtrl, this.notifService);
+    this.scoutingService = new ScoutingService(this.db, this.notifService);
+    this.contractService = new ContractService(this.db, this.fighterCtrl, this.notifService);
+    this.retentionService = new RetentionService(this.db, this.fighterCtrl, this.notifService);
+    this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.scoutingService, this.contractService);
+    this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.contractService);
+    this.rivalGymService = new RivalGymService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.retentionService);
     this.sponsorService = new SponsorService(this.db, this.notifService);
 
     const meta = await this.db.get('gameState', 'meta');
     if (!meta || meta.mode !== WORLD_MODE || meta.schemaVersion !== WORLD_SCHEMA) {
       await this._bootstrapNewWorld();
+    } else {
+      await this._applyPatches(meta);
     }
 
     return await this.getGym();
+  }
+
+  // ===== Patches aditivos =====
+  // Features novas que só adicionam campos não precisam recriar o mundo —
+  // e portanto não custam a carreira do jogador. Cada patch roda uma vez.
+  async _applyPatches(meta) {
+    const applied = new Set(meta.patches || []);
+
+    if (!applied.has('belts')) {
+      await this.titleService.seedBelts();
+      applied.add('belts');
+    }
+
+    // Épico B: atletas existentes começam sem contrato (nada a derivar)
+    if (!applied.has('promotionContracts')) {
+      const team = await this.getTeam();
+      for (const fighter of team) {
+        if (!fighter.promotionContract) {
+          fighter.promotionContract = null;
+          await this.fighterCtrl.updateFighter(fighter);
+        }
+      }
+      applied.add('promotionContracts');
+    }
+
+    // Épico A: atletas existentes ganham loyalty e purseShare default
+    if (!applied.has('retention')) {
+      const team = await this.getTeam();
+      for (const fighter of team) {
+        fighter.loyalty = fighter.loyalty ?? 50;
+        fighter.purseShare = fighter.purseShare ?? 0.8;
+        fighter.promises = fighter.promises || [];
+        await this.fighterCtrl.updateFighter(fighter);
+      }
+      const gym = await this.getGym();
+      if (gym) {
+        gym.trust = gym.trust ?? 50;
+        await this.updateGym(gym);
+      }
+      applied.add('retention');
+    }
+
+    if (applied.size !== (meta.patches || []).length) {
+      await this.db.put('gameState', { ...meta, id: 'meta', patches: [...applied] });
+    }
   }
 
   // ===== Bootstrap do mundo =====
@@ -129,7 +190,16 @@ export class GameController {
     const gym = new Gym({});
     await this.db.put('gameState', gym);
 
-    await this.db.put('gameState', { id: 'meta', mode: WORLD_MODE, schemaVersion: WORLD_SCHEMA, createdAt: new Date().toISOString() });
+    // O mundo já nasce com campeões — a escada precisa de um cume desde o dia 1
+    await this.titleService.seedBelts();
+
+    await this.db.put('gameState', {
+      id: 'meta',
+      mode: WORLD_MODE,
+      schemaVersion: WORLD_SCHEMA,
+      patches: ['belts'],
+      createdAt: new Date().toISOString(),
+    });
 
     // Primeiras ofertas: o jogador precisa ter uma decisão na mesa já no load
     await this._ensureInitialOffers(gym);
@@ -201,6 +271,12 @@ export class GameController {
     const promotions = await this.worldService.getPromotions();
     const offersCreated = await this.offerService.generateWeekly(now, gym, team, promotions);
 
+    // Épico B: geração de propostas de contrato para atletas elegíveis
+    for (const fighter of team) {
+      if (fighter.status !== 'gym' && fighter.status !== 'roster') continue;
+      await this.contractService.generateOffers(fighter, now);
+    }
+
     const economy = this._applyWeeklyEconomy(gym, team, now);
 
     // Patrocínios: pagamento semanal, metas batidas/perdidas, novas propostas
@@ -212,6 +288,9 @@ export class GameController {
     // roda depois do treino pra refletir moral já atualizado da semana
     const teamAfterTraining = await this.getTeam();
     const rivalActivity = await this.rivalGymService.processWeek(now, gym, teamAfterTraining);
+
+    // Épico A: processar retenção — approaches expirados e promessas vencidas
+    await this.retentionService.processWeek(now, gym);
 
     const milestonesUnlocked = await this._checkMilestones(world.playerEvents, gym);
 
@@ -272,6 +351,18 @@ export class GameController {
         const sponsorState = await this.sponsorService.getState();
         for (const sOffer of sponsorState.offers) {
           await this.acceptSponsorOffer(sOffer.id);
+        }
+
+        // Épico B: aceitar automaticamente a melhor proposta de contrato durante simulação
+        const simTeam = await this.getTeam();
+        for (const fighter of simTeam) {
+          try {
+            const doc = await this.db.get('gameState', `contract-offer-${fighter.id}`);
+            if (doc && doc.offers && doc.offers.length > 0) {
+              doc.offers.sort((a, b) => b.tier - a.tier || b.basePurse - a.basePurse);
+              await this.contractService.accept(fighter.id, doc.offers[0].promotionId, summary.now);
+            }
+          } catch { /* sem propostas */ }
         }
 
         for (const evt of summary.world.playerEvents) {
@@ -415,6 +506,62 @@ export class GameController {
     return { ok: true };
   }
 
+  // ===== Preparação: scouting e plano de jogo =====
+
+  // Estuda o adversário de uma luta marcada. Cada nível custa mais caro e
+  // revela mais: faixas de atributo estreitam, tendências e DNA aparecem.
+  async studyOpponent(fighterId) {
+    const gym = await this.getGym();
+    const opponent = await this.fighterCtrl.getFighter(fighterId);
+    if (!opponent) return { ok: false, reason: 'Lutador não encontrado.' };
+
+    const state = await this.seasonService.getState();
+    const result = await this.scoutingService.study(opponent, gym, absWeek(state));
+    if (result.ok) {
+      await this.updateGym(gym);
+      await this.notifService.add('info', '🔍 Relatório do Olheiro', `${opponent.name} agora está "${result.label}". Custo: $${result.cost.toLocaleString()}.`);
+    }
+    return result;
+  }
+
+  async setGamePlan(offerId, plan) {
+    if (!GAME_PLANS[plan]) return { ok: false, reason: 'Plano inválido.' };
+    const data = await this.db.get('offers', offerId);
+    if (!data) return { ok: false, reason: 'Luta não encontrada.' };
+
+    const offer = new FightOffer(data);
+    offer.gamePlan = plan;
+    await this.db.put('offers', offer);
+    return { ok: true, plan };
+  }
+
+  // Tudo que o jogador tem direito de saber sobre um adversário marcado.
+  async opponentDossier(offer) {
+    const gym = await this.getGym();
+    const opponent = await this.fighterCtrl.getFighter(offer.opponentId);
+    if (!opponent) return null;
+
+    const level = await this.scoutingService.knowledgeOf(opponent, gym);
+    const nextCost = level < 3 ? this.scoutingService.studyCost(level + 1) : null;
+
+    return {
+      opponent,
+      level,
+      levelLabel: ScoutingService.levelLabel(level),
+      nextCost,
+      canAfford: nextCost != null && gym.cash >= nextCost,
+      attrs: {
+        striking: ScoutingService.blur(opponent.strikingScore, level),
+        grappling: ScoutingService.blur(opponent.grapplingScore, level),
+        cardio: ScoutingService.blur(opponent.attributes.cardio, level),
+        fightIQ: ScoutingService.blur(opponent.attributes.fightIQ, level),
+        chin: ScoutingService.blur(opponent.attributes.chin, level),
+      },
+      tendencies: ScoutingService.readTendencies(opponent, level),
+      dna: ScoutingService.revealsDna(level) ? opponent.dnaTraits : null,
+    };
+  }
+
   // ===== Patrocínios =====
   async acceptSponsorOffer(offerId) {
     const state = await this.seasonService.getState();
@@ -440,6 +587,10 @@ export class GameController {
       { id: 'firstTier1', label: 'Elite Mundial', desc: 'Lutar na Apex Fighting Championship', max: 1 },
       { id: 'rep50', label: 'Academia Respeitada', desc: 'Alcançar reputação 50', max: 50 },
       { id: 'topGym', label: 'Academia Nº1', desc: 'Superar todas as academias rivais em reputação', max: 1 },
+      { id: 'firstTitleShot', label: 'Disputa de Cinturão', desc: 'Levar um atleta a uma luta de título', max: 1 },
+      { id: 'firstBelt', label: 'Campeão', desc: 'Conquistar o primeiro cinturão', max: 1 },
+      { id: 'firstDefense', label: 'Defesa de Cinturão', desc: 'Defender um cinturão com sucesso', max: 1 },
+      { id: 'worldChampion', label: 'Campeão Mundial', desc: 'Conquistar o cinturão da elite mundial', max: 1 },
     ];
 
     return defs.map(d => ({
@@ -474,6 +625,16 @@ export class GameController {
         }
         if (evt.event.tier === 2) bump('firstTier2', 1, 1);
         if (evt.event.tier === 1) bump('firstTier1', 1, 1);
+
+        // Cinturões: chegar lá, ganhar, defender, e conquistar o mundial
+        if (r.isTitleFight) {
+          bump('firstTitleShot', 1, 1);
+          if (won) {
+            if (r.titleRetained) bump('firstDefense', 1, 1);
+            else bump('firstBelt', 1, 1);
+            if (evt.event.tier === 1) bump('worldChampion', 1, 1);
+          }
+        }
       }
     }
 
@@ -513,9 +674,22 @@ export class GameController {
       ...rivalGyms.map(r => ({ name: r.name, reputation: r.reputation, isPlayer: false })),
     ].sort((a, b) => b.reputation - a.reputation);
 
+    // Cinturões da casa: { [fighterId]: [{ promotionShort, weightClass, defenses }] }
+    const teamBelts = {};
+    const teamContenderStatus = {};
+    for (const f of team) {
+      const belts = await this.titleService.beltsOf(f.id);
+      if (belts.length > 0) teamBelts[f.id] = belts;
+
+      const status = await this.titleService.contenderStatusOf(f);
+      if (status && !status.isChampion) teamContenderStatus[f.id] = status;
+    }
+
     return {
       gym,
       team,
+      teamBelts,
+      teamContenderStatus,
       pendingOffers,
       bookings,
       promotions,

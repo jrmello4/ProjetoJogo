@@ -10,6 +10,8 @@ import {
   GYM_CONFIG,
   WORLD_CONFIG,
   CORE_WEIGHT_CLASSES,
+  TITLE_CONFIG,
+  TITLE_ROLE,
   absWeekToDate,
   computeSuspensionWeeks,
 } from '../config/game-config.js';
@@ -17,10 +19,13 @@ import {
 // Motor do mundo vivo: cada promoção de IA agenda e realiza os próprios
 // eventos. Lutas do jogador entram nos cards via ofertas aceitas.
 export class WorldService {
-  constructor(db, fighterCtrl, notifService) {
+  constructor(db, fighterCtrl, notifService, titleService = null, scoutingService = null, contractService = null) {
     this.db = db;
     this.fighterCtrl = fighterCtrl;
     this.notifService = notifService;
+    this.titleService = titleService;
+    this.scoutingService = scoutingService;
+    this.contractService = contractService;
   }
 
   async getPromotions() {
@@ -42,6 +47,7 @@ export class WorldService {
   // permitir instruções de córner ao vivo entre rounds (ver app.js).
   async processWeek(absWeekNow, startedAt, gym, cornerHooks = null) {
     await this._recoverInjuries(absWeekNow);
+    if (this.titleService) await this.titleService.reconcileBelts();
 
     const promotions = await this.getPromotions();
     const playerEvents = [];
@@ -102,13 +108,45 @@ export class WorldService {
         }
         booking.opponentId = opponent.id;
         booking.opponentName = opponent.name;
-        await this.notifService.add('info', 'Troca de Adversário', `${opponent.name} substituiu o oponente original de ${fighter.name}.`);
+
+        // Cinturão não muda de mãos contra um substituto: sem o campeão
+        // (ou o desafiante oficial) no córner oposto, a luta perde o título.
+        if (booking.isTitleFight) {
+          booking.isTitleFight = false;
+          booking.titleRole = null;
+          await this.notifService.add('warning', 'Cinturão Fora de Jogo', `O adversário oficial caiu. ${fighter.name} luta contra ${opponent.name}, mas o cinturão não está mais em disputa.`);
+        } else {
+          await this.notifService.add('info', 'Troca de Adversário', `${opponent.name} substituiu o oponente original de ${fighter.name}.`);
+        }
+        await this.db.put('offers', booking);
       }
 
       bookedIds.add(fighter.id);
       bookedIds.add(opponent.id);
       playerFighterIds.add(fighter.id);
-      fights.push({ fighterA: fighter, fighterB: opponent, card: 'main', booking });
+      fights.push({
+        fighterA: fighter,
+        fighterB: opponent,
+        card: 'main',
+        booking,
+        titleWeightClass: booking.isTitleFight ? booking.weightClass : null,
+      });
+    }
+
+    // 1.5) Disputa de cinturão entre lutadores da IA — vira o evento principal
+    if (this.titleService) {
+      const aiTitle = await this.titleService.pickAiTitleFight(promo, absWeekNow, bookedIds);
+      if (aiTitle) {
+        bookedIds.add(aiTitle.fighterA.id);
+        bookedIds.add(aiTitle.fighterB.id);
+        fights.push({
+          fighterA: aiTitle.fighterA,
+          fighterB: aiTitle.fighterB,
+          card: 'main',
+          booking: null,
+          titleWeightClass: aiTitle.weightClass,
+        });
+      }
     }
 
     // 2) Lutas de IA para completar o card
@@ -119,6 +157,7 @@ export class WorldService {
         fighterB: pair[1],
         card: i < 2 ? 'main' : 'prelim',
         booking: null,
+        titleWeightClass: null,
       });
     });
 
@@ -147,12 +186,21 @@ export class WorldService {
         hooks = { onRoundEnd: (info) => cornerHooks.onRoundEnd({ ...info, fighter: fighterA, opponent: fighterB, promo }) };
       }
 
-      const result = await SimulationEngine.simulateFight(fighterA, fighterB, promo.tier === 1, hooks);
+      // O plano de jogo é do jogador. A IA luta equilibrada.
+      const gamePlan = fight.booking?.gamePlan || 'balanced';
+
+      const result = await SimulationEngine.simulateFight(fighterA, fighterB, promo.tier === 1, hooks, gamePlan);
       result.eventId = eventId;
       result.card = fight.card;
+      result.isTitleFight = !!fight.titleWeightClass;
+      result.titleWeightClass = fight.titleWeightClass || null;
 
       fighterA.recoverFromWeightCut();
       fighterB.recoverFromWeightCut();
+
+      // Cartel dentro desta promoção — é o que abre a porta do cinturão
+      fighterA.registerPromoResult(promo.id, result.winnerId === fighterA.id);
+      fighterB.registerPromoResult(promo.id, result.winnerId === fighterB.id);
 
       this._rollInjury(fighterA, result, absWeekNow);
       this._rollInjury(fighterB, result, absWeekNow);
@@ -162,6 +210,15 @@ export class WorldService {
       await this.fighterCtrl.updateFighter(fighterA);
       await this.fighterCtrl.updateFighter(fighterB);
 
+      // O cinturão troca de mãos (ou não) antes de contarmos as consequências
+      let titleOutcome = null;
+      if (fight.titleWeightClass && this.titleService) {
+        titleOutcome = await this.titleService.resolveTitleFight(
+          promo, fight.titleWeightClass, result.winnerId, result.loserId, absWeekNow
+        );
+        result.titleRetained = titleOutcome.retained;
+      }
+
       result.id = generateId();
       await this.db.add('fights', { ...result, fighterId: fighterA.id });
 
@@ -169,12 +226,17 @@ export class WorldService {
 
       // 4) Consequências para o jogador
       if (fight.booking) {
-        await this._settlePlayerFight(fight, result, promo, gym, absWeekNow);
+        // Você acabou de passar 15 minutos dentro do octógono com o cara —
+        // sabe mais sobre ele do que qualquer olheiro. Tarde demais.
+        if (this.scoutingService) await this.scoutingService.observeAfterFight(fighterB.id);
+        await this._settlePlayerFight(fight, result, promo, gym, absWeekNow, titleOutcome);
       }
     }
 
-    // Luta principal por último na transmissão: ordena main por relevância
-    results.sort((a, b) => (a.card === 'main' ? 0 : 1) - (b.card === 'main' ? 0 : 1));
+    // A transmissão sobe: preliminares, depois card principal, e o cinturão
+    // fecha a noite. (Antes o card principal abria o evento — invertido.)
+    const billing = (r) => (r.isTitleFight ? 2 : r.card === 'main' ? 1 : 0);
+    results.sort((a, b) => billing(a) - billing(b));
 
     const event = new Event({
       id: eventId,
@@ -202,13 +264,15 @@ export class WorldService {
     return { event, results, playerResults, playerFighterIds };
   }
 
-  async _settlePlayerFight(fight, result, promo, gym, absWeekNow) {
+  async _settlePlayerFight(fight, result, promo, gym, absWeekNow, titleOutcome = null) {
     const { booking } = fight;
     const fighter = fight.fighterA; // lutador do jogador é sempre o córner A
     const won = result.winnerId === fighter.id;
 
     const totalPurse = booking.purse + (won ? booking.winBonus : 0);
-    const gymCut = Math.round(totalPurse * gym.managerCut);
+    // Épico A: usa purseShare do atleta em vez de managerCut fixo da academia
+    const managerCut = 1 - (fighter.purseShare ?? 0.8);
+    const gymCut = Math.round(totalPurse * managerCut);
 
     gym.addTransaction(absWeekNow, `Comissão — ${fighter.name} (${promo.short})`, gymCut);
     gym.totalPurseEarnings += gymCut;
@@ -226,9 +290,39 @@ export class WorldService {
       await this.notifService.add('warning', 'Derrota', `${fighter.name} foi derrotado por ${result.winnerName} (${result.method}). Comissão da bolsa: $${gymCut.toLocaleString()}.`);
     }
 
+    // O cinturão é a única coisa que pesa mais que a bolsa.
+    if (titleOutcome) {
+      const division = titleOutcome.division;
+      if (won) {
+        const rep = titleOutcome.retained ? TITLE_CONFIG.REP_ON_DEFENSE : TITLE_CONFIG.REP_ON_TITLE_WIN;
+        gym.updateReputation(rep);
+        await this.notifService.add(
+          'achievement',
+          titleOutcome.retained ? '🛡️ Cinturão Defendido!' : '🏆 CAMPEÃO!',
+          titleOutcome.retained
+            ? `${fighter.name} defendeu o cinturão ${division} do ${promo.short} pela ${titleOutcome.defenses}ª vez.`
+            : `${fighter.name} é o novo campeão ${division} do ${promo.name}. A academia inteira sente.`
+        );
+      } else {
+        gym.updateReputation(TITLE_CONFIG.REP_ON_TITLE_LOSS);
+        await this.notifService.add(
+          'warning',
+          booking.titleRole === TITLE_ROLE.DEFENSE ? '💔 Cinturão Perdido' : 'Chance Desperdiçada',
+          booking.titleRole === TITLE_ROLE.DEFENSE
+            ? `${fighter.name} perdeu o cinturão ${division} para ${result.winnerName}.`
+            : `${fighter.name} não conquistou o cinturão ${division}. Vai precisar reconstruir o cartel.`
+        );
+      }
+    }
+
     booking.status = OFFER_STATUS.COMPLETED;
     booking.resultId = result.id;
     await this.db.put('offers', booking);
+
+    // Épico B: consumir luta do contrato exclusivo
+    if (this.contractService) {
+      await this.contractService.consumeFight(fighter.id, won);
+    }
   }
 
   // Ofertas aceitas desta promoção cuja luta é nesta semana (ou atrasada)
@@ -320,7 +414,9 @@ export class WorldService {
     fighter.injury = {
       untilAbsWeek: absWeekNow + weeks,
       description: `Lesionado por ${weeks} semanas`,
-      resumeStatus: fighter.gymId ? 'gym' : 'roster',
+      // Volta exatamente para onde estava. Derivar de `gymId` fazia um atleta
+      // de academia RIVAL voltar como 'gym' — status do jogador.
+      resumeStatus: fighter.status,
     };
     fighter.status = 'injured';
   }
@@ -373,6 +469,9 @@ export class WorldService {
         const wasGymFighter = f.gymId === GYM_CONFIG.ID;
         f.gymId = null;
 
+        // Campeão que pendura as luvas deixa o cinturão vago.
+        const vacated = this.titleService ? await this.titleService.vacateBeltsOf(f.id) : [];
+
         const eligibility = HallOfFame.checkEligibility(f);
         if (eligibility.eligible) {
           const existing = await this.db.get('hallOfFame', f.id);
@@ -385,6 +484,9 @@ export class WorldService {
 
         if (wasGymFighter) {
           await this.notifService.add('info', 'Aposentadoria', `${f.name} pendurou as luvas aos ${age} anos. Obrigado por tudo, campeão.`);
+        }
+        if (vacated.length > 0) {
+          await this.notifService.add('info', 'Cinturão Vago', `${f.name} se aposentou como campeão. O cinturão ${vacated[0].promotionShort} está vago.`);
         }
       }
 

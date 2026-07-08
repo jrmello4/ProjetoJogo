@@ -1,7 +1,8 @@
 import { clamp } from '../utils/helpers.js';
+import { GYM_CONFIG } from '../config/game-config.js';
 
 export class TrainingCamp {
-  static runCamp(fighter, intensity, specialization) {
+  static runCamp(fighter, intensity, specialization, absWeekNow) {
     const gains = this._calculateGains(intensity, specialization);
     const risks = this._calculateRisks(intensity, fighter);
 
@@ -16,7 +17,15 @@ export class TrainingCamp {
 
     if (Math.random() < risks.injuryChance) {
       injured = true;
+      const prevStatus = fighter.status;
       fighter.status = 'injured';
+      const injuryWeeks = 4 + Math.floor(Math.random() * 5); // 4-8 semanas
+      fighter.injury = {
+        untilAbsWeek: absWeekNow + injuryWeeks,
+        description: 'Lesionado no treino',
+        resumeStatus: prevStatus,
+      };
+      fighter.availableFromAbsWeek = fighter.injury.untilAbsWeek;
       fighter.fatigue = clamp(fighter.fatigue + 30, 0, 100);
     }
 

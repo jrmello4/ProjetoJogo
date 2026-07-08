@@ -39,19 +39,36 @@ export function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
 }
 
+// Nomenclatura oficial das divisões em português (padrão UFC Brasil)
 export function getWeightClassLabel(weight) {
   const labels = {
-    'Strawweight': 'Pena (125 lbs)',
-    'Flyweight': 'Mosca (125 lbs)',
-    'Bantamweight': 'Pena (135 lbs)',
-    'Featherweight': 'Galo (145 lbs)',
-    'Lightweight': 'Leve (155 lbs)',
-    'Welterweight': 'Meio-Médio (170 lbs)',
-    'Middleweight': 'Médio (185 lbs)',
-    'Light Heavyweight': 'Meio-Pesado (205 lbs)',
-    'Heavyweight': 'Pesado (265 lbs)',
+    'Strawweight': 'Peso-Palha (115 lbs)',
+    'Flyweight': 'Peso-Mosca (125 lbs)',
+    'Bantamweight': 'Peso-Galo (135 lbs)',
+    'Featherweight': 'Peso-Pena (145 lbs)',
+    'Lightweight': 'Peso-Leve (155 lbs)',
+    'Welterweight': 'Peso-Meio-Médio (170 lbs)',
+    'Middleweight': 'Peso-Médio (185 lbs)',
+    'Light Heavyweight': 'Peso-Meio-Pesado (205 lbs)',
+    'Heavyweight': 'Peso-Pesado (265 lbs)',
   };
   return labels[weight] || weight;
+}
+
+// Nome curto da divisão sem o peso — para textos corridos
+export function getWeightClassName(weight) {
+  const names = {
+    'Strawweight': 'Palha',
+    'Flyweight': 'Mosca',
+    'Bantamweight': 'Galo',
+    'Featherweight': 'Pena',
+    'Lightweight': 'Leve',
+    'Welterweight': 'Meio-Médio',
+    'Middleweight': 'Médio',
+    'Light Heavyweight': 'Meio-Pesado',
+    'Heavyweight': 'Pesado',
+  };
+  return names[weight] || weight;
 }
 
 // Nível de um atributo (0-99) — usado para colorir barras de progresso
@@ -74,17 +91,18 @@ export function renderAttrBar(label, value) {
   `;
 }
 
+// Abreviação em português para badges compactos
 export function getWeightClassShort(weight) {
   const shorts = {
-    'Strawweight': 'SW',
-    'Flyweight': 'FLY',
-    'Bantamweight': 'BAN',
-    'Featherweight': 'FEA',
-    'Lightweight': 'LW',
-    'Welterweight': 'WW',
-    'Middleweight': 'MW',
-    'Light Heavyweight': 'LHW',
-    'Heavyweight': 'HW',
+    'Strawweight': 'PALHA',
+    'Flyweight': 'MOSCA',
+    'Bantamweight': 'GALO',
+    'Featherweight': 'PENA',
+    'Lightweight': 'LEVE',
+    'Welterweight': 'M-MÉDIO',
+    'Middleweight': 'MÉDIO',
+    'Light Heavyweight': 'M-PESADO',
+    'Heavyweight': 'PESADO',
   };
   return shorts[weight] || weight;
 }

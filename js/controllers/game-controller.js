@@ -10,6 +10,7 @@ import { NotificationService } from '../services/notification-service.js';
 import { WorldService } from '../services/world-service.js';
 import { OfferService } from '../services/offer-service.js';
 import { RivalGymService } from '../services/rival-gym-service.js';
+import { SponsorService } from '../services/sponsor-service.js';
 import { RivalGym } from '../models/rival-gym.js';
 import { generateId, clamp } from '../utils/helpers.js';
 import {
@@ -25,7 +26,8 @@ import {
 } from '../config/game-config.js';
 
 const WORLD_MODE = 'gym';
-const WORLD_SCHEMA = 2;
+// v3: ritmo realista de lutas (~3-4/ano), rosters maiores, patrocínios
+const WORLD_SCHEMA = 3;
 
 // Orquestrador do modo academia: o jogador é o treinador/dono de um gym;
 // as promoções são IA e o mundo gira sozinho a cada semana.
@@ -39,6 +41,7 @@ export class GameController {
     this.worldService = null;
     this.offerService = null;
     this.rivalGymService = null;
+    this.sponsorService = null;
   }
 
   async init() {
@@ -51,6 +54,7 @@ export class GameController {
     this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService);
     this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService);
     this.rivalGymService = new RivalGymService(this.db, this.fighterCtrl, this.notifService);
+    this.sponsorService = new SponsorService(this.db, this.notifService);
 
     const meta = await this.db.get('gameState', 'meta');
     if (!meta || meta.mode !== WORLD_MODE || meta.schemaVersion !== WORLD_SCHEMA) {
@@ -66,6 +70,8 @@ export class GameController {
     for (const store of ['fighters', 'organization', 'events', 'fights', 'rivalries', 'hallOfFame', 'notifications', 'offers']) {
       await this.db.clear(store);
     }
+    // Mundo novo = onboarding de novo (nome da academia, dificuldade)
+    try { localStorage.removeItem('gymOnboardingDone'); } catch (e) { /* ambientes sem localStorage */ }
     await this.db.put('gameState', {
       id: 'state',
       week: 1,
@@ -196,6 +202,10 @@ export class GameController {
     const offersCreated = await this.offerService.generateWeekly(now, gym, team, promotions);
 
     const economy = this._applyWeeklyEconomy(gym, team, now);
+
+    // Patrocínios: pagamento semanal, metas batidas/perdidas, novas propostas
+    const sponsorActivity = await this.sponsorService.processWeek(now, gym);
+
     await this._applyWeeklyTraining(team, gym);
 
     // Academias rivais disputam o mercado e podem seduzir atletas seus —
@@ -211,7 +221,7 @@ export class GameController {
       await this.notifService.add('warning', '⚠️ Caixa Negativo', 'A academia está no vermelho. Aceite lutas ou reduza a equipe antes que as portas fechem.');
     }
 
-    return { state, now, world, offersCreated, economy, milestonesUnlocked, rivalActivity };
+    return { state, now, world, offersCreated, economy, milestonesUnlocked, rivalActivity, sponsorActivity };
   }
 
   // ===== Simulação de período (fast-forward) =====
@@ -256,6 +266,12 @@ export class GameController {
         for (const offer of pendingOffers) {
           await this.offerService.accept(offer.id, summary.now);
           offersAccepted++;
+        }
+
+        // Patrocínios também fecham sozinhos — renda sem contrapartida
+        const sponsorState = await this.sponsorService.getState();
+        for (const sOffer of sponsorState.offers) {
+          await this.acceptSponsorOffer(sOffer.id);
         }
 
         for (const evt of summary.world.playerEvents) {
@@ -399,6 +415,17 @@ export class GameController {
     return { ok: true };
   }
 
+  // ===== Patrocínios =====
+  async acceptSponsorOffer(offerId) {
+    const state = await this.seasonService.getState();
+    const gym = await this.getGym();
+    return await this.sponsorService.accept(offerId, absWeek(state), gym.wins);
+  }
+
+  async declineSponsorOffer(offerId) {
+    return await this.sponsorService.decline(offerId);
+  }
+
   // ===== Objetivos (milestones do modo academia) =====
   async getMilestones() {
     const raw = await this.db.get('gameState', 'milestones');
@@ -474,6 +501,7 @@ export class GameController {
     const milestones = await this.getMilestones();
     const state = await this.seasonService.getState();
     const rivalGyms = await this.rivalGymService.getAll();
+    const sponsors = await this.sponsorService.getState();
 
     const allFighters = await this.fighterCtrl.getAllFighters();
     const active = allFighters.filter(f => f.status !== 'retired');
@@ -496,6 +524,7 @@ export class GameController {
       champions,
       rankings,
       gymStandings,
+      sponsors,
       state,
       now: absWeek(state),
     };

@@ -1,3 +1,5 @@
+import { getWeightClassName } from '../utils/helpers.js';
+
 export class TrainingCampView {
   static render(roster) {
     const fighters = roster.filter(f => f.status === 'roster');
@@ -17,7 +19,7 @@ export class TrainingCampView {
           <select id="trainingFighterSelect" class="form-select">
             <option value="">-- Selecione um lutador --</option>
             ${fighters.map(f => `
-              <option value="${f.id}">${f.name} (${f.weightClass})</option>
+              <option value="${f.id}">${f.name} (${getWeightClassName(f.weightClass)})</option>
             `).join('')}
           </select>
         </div>

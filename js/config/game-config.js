@@ -85,29 +85,35 @@ export const CORE_WEIGHT_CLASSES = [
 
 // Promoções de IA. tier 1 = topo mundial; tier 3 = circuito regional.
 // skill = faixa de baseSkill dos lutadores gerados para o roster.
+// Rosters dimensionados para o ritmo realista de ~3-5 lutas/ano por
+// atleta: cards continuam cheios mesmo com longos descansos entre lutas.
 export const PROMOTIONS = [
-  { id: 'promo-afc', name: 'Apex Fighting Championship', short: 'AFC', tier: 1, reputation: 92, cadenceWeeks: 4, rosterSize: 30, skill: [58, 82] },
-  { id: 'promo-pfc', name: 'Pride Fighting Championship', short: 'PFC', tier: 2, reputation: 68, cadenceWeeks: 3, rosterSize: 22, skill: [46, 66] },
-  { id: 'promo-gce', name: 'Global Combat Elite', short: 'GCE', tier: 2, reputation: 61, cadenceWeeks: 3, rosterSize: 22, skill: [44, 62] },
-  { id: 'promo-ifp', name: 'Iron Fist Promotions', short: 'IFP', tier: 3, reputation: 38, cadenceWeeks: 2, rosterSize: 16, skill: [32, 52] },
-  { id: 'promo-vtr', name: 'Vale Tudo Regional', short: 'VTR', tier: 3, reputation: 27, cadenceWeeks: 2, rosterSize: 16, skill: [28, 48] },
+  { id: 'promo-afc', name: 'Apex Fighting Championship', short: 'AFC', tier: 1, reputation: 92, cadenceWeeks: 4, rosterSize: 44, skill: [58, 82] },
+  { id: 'promo-pfc', name: 'Pride Fighting Championship', short: 'PFC', tier: 2, reputation: 68, cadenceWeeks: 4, rosterSize: 36, skill: [46, 66] },
+  { id: 'promo-gce', name: 'Global Combat Elite', short: 'GCE', tier: 2, reputation: 61, cadenceWeeks: 4, rosterSize: 36, skill: [44, 62] },
+  { id: 'promo-ifp', name: 'Iron Fist Promotions', short: 'IFP', tier: 3, reputation: 38, cadenceWeeks: 3, rosterSize: 28, skill: [32, 52] },
+  { id: 'promo-vtr', name: 'Vale Tudo Regional', short: 'VTR', tier: 3, reputation: 27, cadenceWeeks: 3, rosterSize: 28, skill: [28, 48] },
 ];
 
 export const OFFER_CONFIG = {
-  // Chance semanal de um lutador livre da equipe receber oferta
-  WEEKLY_OFFER_CHANCE: 0.75,
-  // Semanas mínimas entre a oferta e a luta (tempo de camp)
-  MIN_WEEKS_NOTICE: 2,
+  // Chance semanal de um lutador livre da equipe receber oferta.
+  // Calibrada para ~2-3 lutas por ano por atleta (no MMA real um
+  // atleta ativo faz no máximo 3-4).
+  WEEKLY_OFFER_CHANCE: 0.5,
+  // Semanas mínimas entre a oferta e a luta — um fight camp de verdade
+  MIN_WEEKS_NOTICE: 6,
   // Semanas até a oferta expirar
-  EXPIRY_WEEKS: 2,
+  EXPIRY_WEEKS: 3,
   // Diferença máxima de OVR preferida ao escolher adversário
   OPPONENT_OVR_WINDOW: 8,
 
-  // Requisitos para receber ofertas de cada tier
+  // Requisitos para receber ofertas de cada tier.
+  // Wins calibrados para o ritmo de ~3-4 lutas/ano: subir de tier leva
+  // temporadas, não meses.
   TIER_GATES: {
     3: { popularity: 0, wins: 0, gymRep: 0 },
-    2: { popularity: 40, wins: 8, gymRep: 30 }, // popularity OU wins, E gymRep
-    1: { popularity: 65, wins: 14, gymRep: 55 },
+    2: { popularity: 40, wins: 5, gymRep: 30 }, // popularity OU wins, E gymRep
+    1: { popularity: 65, wins: 9, gymRep: 55 },
   },
   // Chance de a oferta vir do tier mais alto elegível (senão desce um tier)
   TOP_TIER_CHANCE: 0.35,
@@ -145,14 +151,15 @@ export const TIER_LABELS = {
   3: 'Regional',
 };
 
-// Suspensão médica pós-luta — como nas comissões atléticas reais, todo
-// atleta profissional cumpre um afastamento mínimo entre lutas, maior
-// quanto mais violento foi o desfecho (nocaute > finalização > decisão).
+// Descanso pós-luta — suspensão médica + recuperação + intervalo natural
+// entre camps. No MMA real um atleta ativo faz no máximo 3-4 lutas por
+// ano; o afastamento cresce com a violência do desfecho (nocaute >
+// finalização > decisão).
 export const SUSPENSION_CONFIG = {
-  DECISION_WEEKS: 1,
-  FINISH_WIN_WEEKS: 2,
-  SUBMISSION_LOSS_WEEKS: 3,
-  KO_TKO_LOSS_WEEKS: 5,
+  DECISION_WEEKS: 8,
+  FINISH_WIN_WEEKS: 10,
+  SUBMISSION_LOSS_WEEKS: 12,
+  KO_TKO_LOSS_WEEKS: 16,
 };
 
 export function computeSuspensionWeeks(method, won) {
@@ -222,6 +229,26 @@ export const RIVAL_GYM_CONFIG = {
   POACH_REP_EDGE_CAP: 40,
   MAX_POACH_PER_WEEK: 1,
 };
+
+// Patrocínios — renda recorrente com metas de médio prazo. Preenchem as
+// semanas entre lutas com um objetivo concreto: "vença N lutas até a
+// semana X e leve o bônus". Marcas melhores exigem mais reputação.
+export const SPONSOR_CONFIG = {
+  WEEKLY_OFFER_CHANCE: 0.15, // chance semanal de uma marca procurar a academia
+  MAX_ACTIVE: 2,             // contratos simultâneos
+  OFFER_EXPIRY_WEEKS: 4,
+  REP_PER_GOAL_MET: 2,
+  REP_PER_GOAL_FAILED: -1,
+};
+
+export const SPONSOR_BRANDS = [
+  { id: 'sp-combate',  name: 'Combate Energy',            tier: 3, weekly: 250,  goalWins: 1, goalWeeks: 26, bonus: 4000,  minRep: 0 },
+  { id: 'sp-ferro',    name: 'Ferro & Fibra Suplementos', tier: 3, weekly: 350,  goalWins: 2, goalWeeks: 39, bonus: 6500,  minRep: 20 },
+  { id: 'sp-valetudo', name: 'Vale Tudo Wear',            tier: 2, weekly: 600,  goalWins: 2, goalWeeks: 32, bonus: 12000, minRep: 35 },
+  { id: 'sp-predador', name: 'Predador Fightwear',        tier: 2, weekly: 800,  goalWins: 3, goalWeeks: 39, bonus: 18000, minRep: 45 },
+  { id: 'sp-titan',    name: 'Titan Performance',         tier: 1, weekly: 1500, goalWins: 3, goalWeeks: 32, bonus: 35000, minRep: 60 },
+  { id: 'sp-apexmedia',name: 'Apex Global Media',         tier: 1, weekly: 2200, goalWins: 4, goalWeeks: 39, bonus: 60000, minRep: 75 },
+];
 
 // Presets de simulação de período (fast-forward)
 export const SIMULATE_PERIOD_PRESETS = [

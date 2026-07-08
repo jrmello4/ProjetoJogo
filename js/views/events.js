@@ -356,7 +356,7 @@ export class EventsView {
         ${poachedFighters && poachedFighters.length > 0 ? poachedFighters.map(p => `
           <div class="text-sm" style="padding:0.4rem 0;color:var(--danger)">💔 ${p.fighterName} foi seduzido pela ${p.gymName}</div>
         `).join('') : ''}
-        ${rivalSignings > 0 ? `<div class="text-sm text-muted" style="padding:0.4rem 0">As academias rivais fecharam ${rivalSignings} contratação${rivalSignings === 1 ? '' : 'ões'} no mercado de agentes livres.</div>` : ''}
+        ${rivalSignings > 0 ? `<div class="text-sm text-muted" style="padding:0.4rem 0">As academias rivais fecharam ${rivalSignings} ${rivalSignings === 1 ? 'contratação' : 'contratações'} no mercado de agentes livres.</div>` : ''}
       </div>
     ` : '';
 

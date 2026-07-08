@@ -1,4 +1,4 @@
-import { formatCurrency, formatDate, getWeightClassShort, getNationalityFlag } from '../utils/helpers.js';
+import { formatCurrency, formatDate, getWeightClassShort, getWeightClassLabel, getNationalityFlag } from '../utils/helpers.js';
 
 export class FighterProfileView {
   static render(fighter, fightHistory = []) {
@@ -89,7 +89,7 @@ export class FighterProfileView {
         <div class="card">
           <div class="card-title">Divisão</div>
           <div class="stat-value" style="font-size:1.25rem">${getWeightClassShort(fighter.weightClass)}</div>
-          <div class="stat-label">${fighter.weightClass}</div>
+          <div class="stat-label">${getWeightClassLabel(fighter.weightClass)}</div>
         </div>
         <div class="card">
           <div class="card-title">Status</div>

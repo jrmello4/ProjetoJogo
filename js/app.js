@@ -25,6 +25,7 @@ import { ThreeArena } from './three-arena.js';
 import { ThreeBackground } from './three-background.js';
 import { motion } from './motion/motion-engine.js';
 import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, absWeekToLabel } from './config/game-config.js';
+import { getWeightClassName } from './utils/helpers.js';
 
 class App {
   constructor() {
@@ -117,7 +118,7 @@ class App {
             ${team.map(f => `
               <div class="card" style="padding:0.6rem">
                 <div class="text-sm font-bold">${f.name}</div>
-                <div class="text-xs text-muted">${f.weightClass} · ${f.age} anos</div>
+                <div class="text-xs text-muted">${getWeightClassName(f.weightClass)} · ${f.age} anos</div>
                 <div class="text-xs">OVR ${f.overallRating} · ${f.record.wins}-${f.record.losses}</div>
               </div>
             `).join('')}
@@ -234,6 +235,23 @@ class App {
     document.getElementById('weekAdvanceBtn')?.addEventListener('click', () => this.advanceWeek());
     document.getElementById('saveLoadBtn')?.addEventListener('click', () => this.handleSaveLoad());
     document.getElementById('simulatePeriodBtn')?.addEventListener('click', () => this.openSimulatePeriod());
+
+    // Patrocínios: fechar/recusar direto do dashboard
+    document.querySelectorAll('[data-sponsor-accept]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const result = await this.game.acceptSponsorOffer(btn.dataset.sponsorAccept);
+        if (!result.ok) {
+          await this.notificationService.add('warning', 'Patrocínio Falhou', result.reason);
+        }
+        this.renderDashboard();
+      });
+    });
+    document.querySelectorAll('[data-sponsor-decline]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await this.game.declineSponsorOffer(btn.dataset.sponsorDecline);
+        this.renderDashboard();
+      });
+    });
 
     this._bindFighterClicks();
     this._bindEventClicks();

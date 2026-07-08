@@ -1,4 +1,4 @@
-import { formatCurrency, getWeightClassShort, getNationalityFlag, renderAttrBar } from '../utils/helpers.js';
+import { formatCurrency, getWeightClassShort, getWeightClassName, getNationalityFlag, renderAttrBar } from '../utils/helpers.js';
 import { CORE_WEIGHT_CLASSES, POTENTIAL_TIERS } from '../config/game-config.js';
 
 // Recrutamento: agentes livres que podem se juntar à academia do jogador.
@@ -52,7 +52,7 @@ export class MarketView {
       return `
         ${header}
         <div class="empty-state">
-          <p>${filter ? `Nenhum agente livre na divisão ${filter}.` : 'Nenhum agente livre disponível. Avance a semana — novos nomes aparecem no mercado.'}</p>
+          <p>${filter ? `Nenhum agente livre na divisão ${getWeightClassName(filter)}.` : 'Nenhum agente livre disponível. Avance a semana — novos nomes aparecem no mercado.'}</p>
         </div>
       `;
     }

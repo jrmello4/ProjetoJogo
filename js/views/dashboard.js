@@ -41,6 +41,54 @@ export class DashboardView {
       `;
     }
 
+    // ===== Patrocínios: propostas na mesa + contratos com meta =====
+    const sponsors = data.sponsors || { active: [], offers: [] };
+    let sponsorsHtml = '';
+    if (sponsors.offers.length > 0 || sponsors.active.length > 0) {
+      const offerRows = sponsors.offers.map(o => `
+        <div class="flex items-center justify-between" style="padding:0.75rem 0;border-bottom:1px solid var(--border)">
+          <div>
+            <div class="text-sm font-bold">🤝 ${o.brandName}</div>
+            <div class="text-xs text-muted">${formatCurrency(o.weekly)}/sem + ${formatCurrency(o.bonus)} por ${o.goalWins} vitória${o.goalWins === 1 ? '' : 's'} em ${o.goalWeeks} sem · expira em ${o.expiresAbsWeek - now} sem</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="btn btn-sm btn-success" data-sponsor-accept="${o.id}">Fechar</button>
+            <button class="btn btn-sm btn-secondary" data-sponsor-decline="${o.id}">Recusar</button>
+          </div>
+        </div>
+      `).join('');
+
+      const activeRows = sponsors.active.map(c => {
+        const winsSince = Math.max(0, gym.wins - c.startWins);
+        const weeksLeft = Math.max(0, c.deadlineAbsWeek - now);
+        return `
+          <div class="flex items-center justify-between" style="padding:0.75rem 0;border-bottom:1px solid var(--border)">
+            <div>
+              <div class="text-sm font-bold">${c.brandName} <span class="badge badge-success" style="font-size:0.6rem">ATIVO</span></div>
+              <div class="text-xs text-muted">${formatCurrency(c.weekly)}/sem · bônus de ${formatCurrency(c.bonus)} em jogo · ${weeksLeft} sem restantes</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="progress-bar" style="width:80px;height:6px">
+                <div class="progress-fill ${winsSince >= c.goalWins ? 'high' : 'medium'}" style="width:${Math.min(100, (winsSince / c.goalWins) * 100)}%"></div>
+              </div>
+              <span class="text-xs text-muted">${winsSince}/${c.goalWins} vit.</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      sponsorsHtml = `
+        <div class="section-label" data-reveal>Patrocínios</div>
+        <div class="card mb-4" data-reveal ${sponsors.offers.length > 0 ? 'style="border-top-color:var(--gold)"' : ''}>
+          <div class="card-header">
+            <span class="card-title">💼 Contratos de Marca</span>
+          </div>
+          ${offerRows}
+          ${activeRows}
+        </div>
+      `;
+    }
+
     // ===== Lutas agendadas =====
     let bookingsHtml = '';
     if (bookings.length > 0) {
@@ -268,6 +316,7 @@ export class DashboardView {
       </div>
 
       ${offersHtml}
+      ${sponsorsHtml}
       ${bookingsHtml}
       ${teamHtml}
 

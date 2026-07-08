@@ -133,9 +133,11 @@ export class OfferService {
       const opponent = await this._pickOpponent(promo.id, fighter, targetedOpponentIds, absWeekNow);
       if (!opponent) continue;
 
-      const eventAbsWeek = promo.nextEventAbsWeek - absWeekNow >= OFFER_CONFIG.MIN_WEEKS_NOTICE
-        ? promo.nextEventAbsWeek
-        : promo.nextEventAbsWeek + promo.cadenceWeeks;
+      // Agenda no primeiro evento da promoção que respeite o tempo de camp
+      let eventAbsWeek = promo.nextEventAbsWeek;
+      while (eventAbsWeek - absWeekNow < OFFER_CONFIG.MIN_WEEKS_NOTICE) {
+        eventAbsWeek += promo.cadenceWeeks;
+      }
 
       const purseCfg = OFFER_CONFIG.PURSE[promo.tier];
       const rawPurse = purseCfg.base + fighter.popularity * purseCfg.perPop;

@@ -1,4 +1,4 @@
-import { formatDate } from '../utils/helpers.js';
+import { formatDate, getWeightClassName } from '../utils/helpers.js';
 
 export class HallOfFameView {
   static render(entries) {
@@ -33,7 +33,7 @@ export class HallOfFameView {
             </div>
             <div class="text-center">
               <div class="font-bold text-lg">${entry.name}</div>
-              <div class="text-xs text-muted">${entry.nationality?.name || ''} · ${entry.weightClass}</div>
+              <div class="text-xs text-muted">${entry.nationality?.name || ''} · ${getWeightClassName(entry.weightClass)}</div>
             </div>
             <div class="grid grid-cols-2 gap-2 mt-3">
               <div class="text-center">

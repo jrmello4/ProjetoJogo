@@ -132,9 +132,12 @@ export class DataGenerator {
       evolution: Math.floor(Math.random() * 30) + 10,
     };
 
-    const fights = opts.maxFights != null
-      ? Math.floor(Math.random() * (opts.maxFights + 1))
-      : Math.floor(Math.random() * 20);
+    // Cartel coerente com a idade: carreira começa ~19 anos e um atleta
+    // ativo faz no máximo ~3-4 lutas por ano.
+    const careerYears = Math.max(0, age - 19);
+    const careerCap = Math.min(30, Math.ceil(careerYears * 3.5));
+    const fightCeiling = opts.maxFights != null ? Math.min(opts.maxFights, careerCap) : careerCap;
+    const fights = Math.floor(Math.random() * (fightCeiling + 1));
     // Empates são raros no MMA — no máximo 1, com chance baixa
     const draws = fights > 0 && Math.random() < 0.1 ? 1 : 0;
     const decided = fights - draws;

@@ -56,8 +56,8 @@ export class LiveFightHubView {
   static _beatHtml(beat, fighterA, fighterB) {
     const isA = beat.fighterId === fighterA.id;
     const name = isA ? fighterA.name : fighterB.name;
-    const icon = beat.type === 'knockdown' ? '💥' : beat.type === 'sub_attempt' ? '🔄' : '👇';
-    const colorClass = isA ? '' : 'text-danger';
+    const icon = beat.type === 'finish' ? '🔥' : beat.type === 'knockdown' ? '💥' : beat.type === 'sub_attempt' ? '🔄' : '👇';
+    const colorClass = beat.type === 'finish' ? 'font-bold' : isA ? '' : 'text-danger';
     return `
       <div class="live-beat flex items-center gap-2" style="display:none;padding:0.25rem 0">
         <span>${icon}</span>

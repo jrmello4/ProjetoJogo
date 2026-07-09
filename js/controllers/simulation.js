@@ -113,6 +113,17 @@ export class SimulationEngine {
         loser = finish.loser;
         finishMethod = finish.method;
         finishRound = r;
+        // O momento do desfecho é o beat mais importante da luta — sem ele o
+        // Live Fight Hub mostra "Fim da luta!" sem dizer o que aconteceu.
+        roundLog.push({
+          type: 'finish',
+          fighterId: winner.id,
+          detail: finish.method === 'KO'
+            ? `${winner.name} APAGA ${loser.name}! Nocaute brutal no round ${r}!`
+            : finish.method === 'TKO'
+              ? `${winner.name} castiga ${loser.name} até o árbitro intervir — TKO no round ${r}!`
+              : `${winner.name} FINALIZA ${loser.name}! Acabou no round ${r}!`,
+        });
         // Add the round score anyway
         rounds.push({
           round: r,

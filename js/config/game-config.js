@@ -100,6 +100,9 @@ export const OFFER_CONFIG = {
   // Calibrada para ~2-3 lutas por ano por atleta (no MMA real um
   // atleta ativo faz no máximo 3-4).
   WEEKLY_OFFER_CHANCE: 0.5,
+  // Épico F3: chance de uma oferta armar o REENCONTRO com um ex-atleta da
+  // academia (só dispara se houver ex-atleta elegível na mesma divisão).
+  REUNION_CHANCE: 0.3,
   // Semanas mínimas entre a oferta e a luta — um fight camp de verdade
   MIN_WEEKS_NOTICE: 6,
   // Semanas até a oferta expirar

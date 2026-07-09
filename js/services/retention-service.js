@@ -118,6 +118,10 @@ export class RetentionService {
         // "Deixar Ir" é imediato — transfere o atleta para a rival
         outcome = this._letGo(fighter, gym, approach);
         const prevStatus = fighter.status;
+        // F3: registra a passagem pela sua academia — arma o reencontro futuro.
+        if (fighter.gymId && !fighter.previousGymIds.includes(fighter.gymId)) {
+          fighter.previousGymIds.push(fighter.gymId);
+        }
         fighter.status = 'rival';
         fighter.gymId = approach.rivalGymId;
         approach.resolved = true;
@@ -261,6 +265,10 @@ export class RetentionService {
     if (!stayed) {
       // Atleta sai
       const belts = []; // placeholder — titleService.beltsOf seria chamado aqui
+      // F3: registra a passagem pela sua academia — arma o reencontro futuro.
+      if (fighter.gymId && !fighter.previousGymIds.includes(fighter.gymId)) {
+        fighter.previousGymIds.push(fighter.gymId);
+      }
       fighter.status = 'rival';
       fighter.gymId = approach.rivalGymId;
       gym.reputation = Math.max(0, gym.reputation - 1);

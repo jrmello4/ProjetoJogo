@@ -320,6 +320,14 @@ export class OfferService {
   }
 
   async _pickOpponent(promotionId, fighter, excludeIds, absWeekNow) {
+    // Épico F3: de vez em quando a promoção arma o REENCONTRO — um ex-atleta da
+    // sua academia (hoje em outra equipe) volta como adversário. Só dispara se
+    // existir um candidato elegível na divisão; senão cai na seleção normal.
+    if (Math.random() < OFFER_CONFIG.REUNION_CHANCE) {
+      const reunion = await this._pickReunionOpponent(fighter, excludeIds, absWeekNow);
+      if (reunion) return reunion;
+    }
+
     const rosterData = await this.db.getIndex('fighters', 'organizationId', promotionId);
     const candidates = rosterData
       .map(d => new Fighter(d))
@@ -342,5 +350,28 @@ export class OfferService {
     ).slice(0, 3);
 
     return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  // Épico F3: procura um ex-atleta da sua academia, hoje em outra equipe, na
+  // mesma divisão, para o reencontro. Prefere o de nível mais próximo (duelo
+  // competitivo). Retorna null se não houver ninguém elegível.
+  async _pickReunionOpponent(fighter, excludeIds, absWeekNow) {
+    const all = await this.fighterCtrl.getAllFighters();
+    const candidates = all.filter(f =>
+      (f.previousGymIds || []).includes(GYM_CONFIG.ID) &&
+      f.gymId !== GYM_CONFIG.ID &&                 // não está mais na sua academia
+      f.status !== 'retired' && f.status !== 'injured' &&
+      f.weightClass === fighter.weightClass &&
+      f.id !== fighter.id &&
+      !excludeIds.has(f.id) &&
+      (f.availableFromAbsWeek || 0) <= absWeekNow
+    );
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) =>
+      Math.abs(a.overallRating - fighter.overallRating) -
+      Math.abs(b.overallRating - fighter.overallRating)
+    );
+    return candidates[0];
   }
 }

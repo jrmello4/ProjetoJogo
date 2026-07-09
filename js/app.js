@@ -346,6 +346,9 @@ class App {
           const html = LiveFightHubView.render(fA, fB, playerResult);
           await LayoutView.render(html);
           this._playLiveHub(featured.results, featured.playerFighterIds);
+          // Sem este bind o botão do resumo é um beco sem saída — o jogador
+          // termina a luta e fica preso na tela do hub.
+          document.getElementById('hubBackBtn')?.addEventListener('click', () => this.renderDashboard());
           return;
         }
       }

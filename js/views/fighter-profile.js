@@ -1,6 +1,50 @@
 import { formatCurrency, formatDate, getWeightClassShort, getWeightClassLabel, getNationalityFlag, getAdjacentWeightClasses, clamp } from '../utils/helpers.js';
 
 export class FighterProfileView {
+  // G3: gráfico de carreira — OVR do atleta em cada luta (fighterRating é
+  // gravado pela simulação). Lutas antigas de saves anteriores não têm o
+  // campo; o gráfico usa só as que têm e some se houver menos de 2.
+  static _careerGraph(displayHistory) {
+    // fights é "mais recente primeiro" — inverter para ordem cronológica
+    const points = [...displayHistory].reverse().filter(f => typeof f.fighterRating === 'number');
+    if (points.length < 2) return '';
+
+    const W = 600, H = 110, PAD = 14;
+    const ratings = points.map(p => p.fighterRating);
+    const min = Math.min(...ratings) - 3;
+    const max = Math.max(...ratings) + 3;
+    const x = (i) => PAD + (i / (points.length - 1)) * (W - PAD * 2);
+    const y = (r) => H - PAD - ((r - min) / (max - min)) * (H - PAD * 2);
+
+    const polyline = points.map((p, i) => `${x(i).toFixed(1)},${y(p.fighterRating).toFixed(1)}`).join(' ');
+    const dots = points.map((p, i) => p.won
+      ? `<circle cx="${x(i).toFixed(1)}" cy="${y(p.fighterRating).toFixed(1)}" r="4" fill="var(--red)"/>`
+      : `<circle cx="${x(i).toFixed(1)}" cy="${y(p.fighterRating).toFixed(1)}" r="4" fill="none" stroke="var(--text-muted)" stroke-width="1.5"/>`
+    ).join('');
+
+    const first = ratings[0];
+    const last = ratings[ratings.length - 1];
+    const delta = last - first;
+
+    return `
+      <div class="card mt-4">
+        <div class="card-header">
+          <span class="card-title">Evolução na Carreira</span>
+          <span class="text-sm ${delta >= 0 ? 'text-success' : 'text-danger'}">OVR ${first} → ${last} (${delta >= 0 ? '+' : ''}${delta})</span>
+        </div>
+        <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" aria-label="OVR ao longo das lutas" style="display:block">
+          <polyline points="${polyline}" fill="none" stroke="var(--red)" stroke-width="2" stroke-linejoin="round" opacity="0.85"/>
+          ${dots}
+        </svg>
+        <div class="flex" style="justify-content:space-between">
+          <span class="text-xs text-muted">1ª luta registrada</span>
+          <span class="text-xs text-muted">● vitória &nbsp;○ derrota</span>
+          <span class="text-xs text-muted">última</span>
+        </div>
+      </div>
+    `;
+  }
+
   static render(fighter, fightHistory = []) {
     const displayHistory = fightHistory.length > 0 ? fightHistory : fighter.fights || [];
 
@@ -325,6 +369,8 @@ export class FighterProfileView {
           }).filter(Boolean).join('')}
         </div>
       </div>` : ''}
+
+      ${FighterProfileView._careerGraph(displayHistory)}
 
       <div class="mt-4">
         ${historyHtml}

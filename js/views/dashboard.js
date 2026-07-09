@@ -353,7 +353,46 @@ export class DashboardView {
       </div>
     ` : '';
 
-    // ===== Objetivos =====
+    // ===== Metas iniciais (novos treinadores) =====
+    let goalsHtml = '';
+    if (localStorage.getItem('gymTutorialDone') && !localStorage.getItem('gymGoalsDone')) {
+      const teamWins = team.reduce((s, f) => s + (f.record?.wins || 0), 0);
+      const teamFights = team.reduce((s, f) => s + (f.fights?.length || 0), 0);
+      const anyTitle = team.some(f => (f.titlesWon || 0) > 0);
+      const highestTier = Math.min(...team.map(f => f.promotionContract?.tier || 99));
+      const hasFought = teamFights > 0;
+      const hasWon = teamWins > 0;
+
+      const goals = [
+        { done: true, label: 'Nomear sua academia' },
+        { done: true, label: 'Recrutar equipe inicial' },
+        { done: hasFought, label: 'Disputar sua primeira luta', hint: hasFought ? '' : 'Aceite uma oferta na aba Ofertas' },
+        { done: hasWon, label: 'Vencer sua primeira luta', hint: hasWon ? '' : 'Configure o camp e escolha o plano de jogo certo' },
+        { done: highestTier <= 2, label: 'Subir para o Tier 2', hint: highestTier <= 2 ? '' : 'Mais vitórias atraem promoções melhores' },
+        { done: anyTitle, label: 'Disputar um cinturão', hint: anyTitle ? '' : 'Chegue ao topo do ranking da sua divisão' },
+      ];
+      const allDone = goals.every(g => g.done);
+      if (allDone) localStorage.setItem('gymGoalsDone', '1');
+
+      goalsHtml = `
+        <div class="section-label" data-reveal>🎯 Próximos Passos</div>
+        <div class="card mb-4" data-reveal style="border-top-color:var(--accent)">
+          <div class="card-header"><span class="card-title">${allDone ? '🏁 Missão Completa!' : '🚀 Sua Jornada Começa'}</span></div>
+          ${goals.map(g => `
+            <div class="flex items-center justify-between" style="padding:0.6rem 0;border-bottom:1px solid var(--border)">
+              <div>
+                <span style="${g.done ? 'opacity:0.5;text-decoration:line-through' : 'font-weight:600'}">
+                  ${g.done ? '✅' : '☐'} ${g.label}
+                </span>
+                ${g.hint ? `<div class="text-xs text-muted" style="margin-top:0.15rem">💡 ${g.hint}</div>` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // ===== Objetivos (milestones do sistema) =====
     const pendingMilestones = (milestones || []).filter(m => !m.unlocked).slice(0, 3);
     const milestonesHtml = pendingMilestones.length > 0 ? `
       <div class="section-label" data-reveal>Objetivos</div>
@@ -447,6 +486,7 @@ export class DashboardView {
 
       ${worldHtml}
       ${standingsHtml}
+      ${goalsHtml}
       ${milestonesHtml}
       ${resultsHtml}
     `;

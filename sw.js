@@ -1,7 +1,9 @@
 /* MMA Manager — service worker
-   Estratégia: network-first para arquivos locais (sempre pega a versão nova,
-   cache é fallback offline); cache como fallback também para CDNs. */
-const CACHE = 'mma-manager-v2';
+   Estratégia: network-first com cache runtime.
+   No install, pré-cacheia assets críticos (HTML/CSS/JS core).
+   JS modules restantes são cacheados sob demanda na primeira visita.
+   CDNs também são cacheados runtime — app funciona offline após 1 visita. */
+const CACHE = 'mma-manager-v3';
 const LOCAL_ASSETS = [
   './',
   './index.html',
@@ -13,8 +15,31 @@ const LOCAL_ASSETS = [
   './css/components.css',
 ];
 
+// Arquivos JS que garantem o boot do app — o resto é cacheado sob demanda
+const JS_CORE = [
+  './js/app.js',
+  './js/config/game-config.js',
+  './js/utils/helpers.js',
+  './js/utils/gaussian.js',
+  './js/services/db.js',
+  './js/services/notification-service.js',
+  './js/services/toast.js',
+  './js/motion/motion-engine.js',
+];
+
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(LOCAL_ASSETS)));
+  e.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    // Assets críticos em lote (se um falhar, o install falha — é o comportamento desejado)
+    await cache.addAll(LOCAL_ASSETS);
+    // JS core: cada arquivo individualmente para não bloquear o install
+    for (const url of JS_CORE) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) await cache.put(url, res);
+      } catch { /* arquivo será cacheado na primeira visita normal */ }
+    }
+  })());
   self.skipWaiting();
 });
 

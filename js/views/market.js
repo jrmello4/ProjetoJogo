@@ -53,7 +53,7 @@ export class MarketView {
       return `
         ${header}
         <div class="empty-state">
-          <p>${filter ? `Nenhum agente livre na divisão ${getWeightClassName(filter)}.` : 'Nenhum agente livre disponível. Avance a semana — novos nomes aparecem no mercado.'}</p>
+          <p>${filter ? `Nenhum agente livre na divisão ${getWeightClassName(filter)}.` : 'Mercado vazio hoje. Novos nomes aparecem toda semana — alguns viram estrelas, outros viram história.'}</p>
         </div>
       `;
     }

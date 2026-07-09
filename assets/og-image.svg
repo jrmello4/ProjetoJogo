@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#14110f"/>
+      <stop offset="100%" stop-color="#1a1613"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e8234a"/>
+      <stop offset="100%" stop-color="#c01a3a"/>
+    </linearGradient>
+    <clipPath id="octagon">
+      <polygon points="400,315 440,285 525,285 565,315 565,355 525,385 440,385 400,355"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Grain texture subtle -->
+  <rect width="1200" height="630" fill="url(#bg)" opacity="0.03"/>
+
+  <!-- Red glow -->
+  <ellipse cx="600" cy="315" rx="500" ry="280" fill="url(#accent)" opacity="0.04"/>
+
+  <!-- Octagon outline -->
+  <polygon points="400,315 440,285 525,285 565,315 565,355 525,385 440,385 400,355"
+           fill="none" stroke="#e8234a" stroke-width="4" stroke-linejoin="round" opacity="0.3"/>
+
+  <!-- Inner octagon -->
+  <polygon points="440,315 468,295 516,295 544,315 544,339 516,359 468,359 440,339"
+           fill="none" stroke="#c9a227" stroke-width="2" stroke-linejoin="round" opacity="0.6"/>
+
+  <!-- VS text -->
+  <text x="495" y="325" font-family="Archivo, sans-serif" font-size="28" font-weight="900"
+        fill="#e8234a" text-anchor="middle" letter-spacing="4">VS</text>
+
+  <!-- Left fighter name -->
+  <text x="320" y="315" font-family="Archivo, sans-serif" font-size="24" font-weight="700"
+        fill="#f4f2ef" text-anchor="end" letter-spacing="1">VOCÊ</text>
+
+  <!-- Right fighter name -->
+  <text x="670" y="315" font-family="Archivo, sans-serif" font-size="24" font-weight="700"
+        fill="#a09888" text-anchor="start" letter-spacing="1">O MUNDO</text>
+
+  <!-- Main headline -->
+  <text x="600" y="440" font-family="Archivo, sans-serif" font-size="52" font-weight="800"
+        fill="#f4f2ef" text-anchor="middle" letter-spacing="-1">
+    <tspan x="600" dy="0">Comande sua academia</tspan>
+    <tspan x="600" dy="58" fill="#e8234a">de MMA.</tspan>
+  </text>
+
+  <!-- Subtitle -->
+  <text x="600" y="530" font-family="IBM Plex Sans, sans-serif" font-size="18" font-weight="400"
+        fill="#6b6358" text-anchor="middle" letter-spacing="2">RECRUTE · TREINE · LUTE · CONSTRUA UM IMPÉRIO</text>
+
+  <!-- Logo bottom right -->
+  <image href="icon.svg" x="1120" y="555" width="40" height="40" opacity="0.6"/>
+
+  <!-- Price tag -->
+  <rect x="880" y="400" width="180" height="44" rx="8" fill="#e8234a" opacity="0.15"/>
+  <text x="970" y="427" font-family="Archivo, sans-serif" font-size="16" font-weight="700"
+        fill="#e8234a" text-anchor="middle">EARLY ACCESS · R$29,90</text>
+
+  <!-- Line separator -->
+  <line x1="200" y1="460" x2="1000" y2="460" stroke="rgba(232,226,217,0.06)" stroke-width="1"/>
+</svg>

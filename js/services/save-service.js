@@ -53,14 +53,20 @@ export class SaveService {
   }
 
   async importSave(json) {
-    const data = JSON.parse(json);
+    let data;
+    try {
+      data = JSON.parse(json);
+    } catch {
+      throw new Error('Arquivo de save corrompido — não foi possível ler os dados.');
+    }
     for (const store of STORES) {
       await this.db.clear(store);
-      for (const item of data[store] || []) await this.db.add(store, item);
+      const items = data[store] || [];
+      if (items.length > 0) await this.db.batchPut(store, items);
     }
     await this.db.clear('gameState');
     const gameStates = Array.isArray(data.gameState) ? data.gameState : [data.gameState].filter(Boolean);
-    for (const gs of gameStates) await this.db.put('gameState', gs);
+    if (gameStates.length > 0) await this.db.batchPut('gameState', gameStates);
     return true;
   }
 

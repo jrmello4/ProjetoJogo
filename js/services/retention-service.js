@@ -448,7 +448,7 @@ export class RetentionService {
 
   async _getTeam() {
     try {
-      const team = await this.fighterCtrl.getByGym(GYM_CONFIG.ID);
+      const team = await this.fighterCtrl.getTeam(GYM_CONFIG.ID);
       return team.filter(f => f.status === 'gym' || f.status === 'roster');
     } catch {
       return [];

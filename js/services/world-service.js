@@ -326,6 +326,12 @@ export class WorldService {
       );
     }
 
+    // Expõe dados financeiros no resultado para a tela pós-luta
+    result._purse = totalPurse;
+    result._gymCut = gymCut;
+    result._hypeBonus = hypeBonus;
+    result._won = won;
+
     // O cinturão é a única coisa que pesa mais que a bolsa.
     if (titleOutcome) {
       const division = titleOutcome.division;

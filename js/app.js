@@ -173,6 +173,84 @@ class App {
       modal.remove();
       this.notificationService.add('success', 'Academia Aberta', `${name} está de portas abertas. Confira as ofertas de luta na mesa, treinador!`);
       this.renderDashboard();
+      // Tutorial guiado para novos treinadores
+      setTimeout(() => this._showTutorial(), 600);
+    });
+  }
+
+  // ===== Tutorial guiado para novos jogadores =====
+  _showTutorial() {
+    if (localStorage.getItem('gymTutorialDone')) return;
+
+    const steps = [
+      {
+        emoji: '📊',
+        title: 'Dashboard',
+        text: 'Aqui você vê o resumo da sua academia: próximas lutas, resultados recentes, finanças e notificações. Fique de olho nas ofertas!',
+      },
+      {
+        emoji: '📩',
+        title: 'Ofertas de Luta',
+        text: 'No menu "Ofertas" você recebe propostas de luta das promoções. Aceite as certas para subir de tier e disputar cinturões.',
+      },
+      {
+        emoji: '🏋️',
+        title: 'Acampamento',
+        text: 'Antes de cada luta, configure o acampamento no perfil do lutador. Escolha a intensidade e o foco — isso define o desempenho no octógono.',
+      },
+      {
+        emoji: '⏩',
+        title: 'Avançar Semana',
+        text: 'Use o botão "Avançar Semana" para progredir. Cada semana traz treinos, ofertas, eventos e notícias do mundo do MMA.',
+      },
+    ];
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'tutorialOverlay';
+    overlay.style.cssText = 'z-index:9999;background:rgba(8,8,10,0.85);display:flex;align-items:center;justify-content:center';
+
+    let currentStep = 0;
+
+    function renderStep(i) {
+      const step = steps[i];
+      const total = steps.length;
+      return `
+        <div class="modal" style="max-width:480px;text-align:center">
+          <div style="font-size:3rem;margin-bottom:0.75rem">${step.emoji}</div>
+          <h3 style="margin-bottom:0.5rem">${step.title}</h3>
+          <p class="text-sm" style="color:var(--text-secondary);line-height:1.6;margin-bottom:1.5rem">${step.text}</p>
+          <div style="display:flex;gap:0.5rem;justify-content:center;margin-bottom:1.25rem">
+            ${Array.from({ length: total }, (_, j) =>
+              `<span style="width:8px;height:8px;border-radius:50%;background:${j === i ? 'var(--belt)' : 'var(--border)'};display:inline-block"></span>`
+            ).join('')}
+          </div>
+          <div class="modal-actions" style="flex-direction:column;gap:0.5rem">
+            ${i < total - 1
+              ? `<button class="btn btn-primary w-full tutorial-next" style="width:100%">Próximo — ${steps[i + 1].title}</button>
+                 <button class="btn btn-sm btn-secondary tutorial-skip" style="width:100%">Pular tutorial</button>`
+              : `<button class="btn btn-primary w-full tutorial-finish" style="width:100%">✅ Entendi! Vou começar</button>`}
+          </div>
+        </div>
+      `;
+    }
+
+    overlay.innerHTML = renderStep(0);
+    document.body.appendChild(overlay);
+
+    // Avançar passo
+    overlay.addEventListener('click', (e) => {
+      const nextBtn = e.target.closest('.tutorial-next');
+      const skipBtn = e.target.closest('.tutorial-skip');
+      const finishBtn = e.target.closest('.tutorial-finish');
+
+      if (nextBtn) {
+        currentStep++;
+        overlay.innerHTML = renderStep(currentStep);
+      } else if (skipBtn || finishBtn) {
+        localStorage.setItem('gymTutorialDone', '1');
+        overlay.remove();
+      }
     });
   }
 
@@ -351,6 +429,17 @@ class App {
           // Sem este bind o botão do resumo é um beco sem saída — o jogador
           // termina a luta e fica preso na tela do hub.
           document.getElementById('hubBackBtn')?.addEventListener('click', () => this.renderDashboard());
+          document.getElementById('shareFightBtn')?.addEventListener('click', () => {
+            const fText = `${playerResult._won ? '🏆' : '😔'} ${fA.name} ${playerResult._won ? 'venceu' : 'perdeu'} por ${playerResult.method} no R${playerResult.round}!`;
+            const shareText = `${fText}\n💰 Bolsa: $${(playerResult._purse || 0).toLocaleString()} | Comissão: $${(playerResult._gymCut || 0).toLocaleString()}\n📊 Recorde: ${fA.record.wins}-${fA.record.losses}-${fA.record.draws}\n\nJogue MMA Manager: ${window.location.origin}/landing.html`;
+            if (navigator.share) {
+              navigator.share({ title: 'MMA Manager', text: shareText });
+            } else {
+              navigator.clipboard.writeText(shareText).then(() => {
+                this.notificationService?.add('success', 'Compartilhar', 'Resultado copiado! Envie para um amigo.');
+              });
+            }
+          });
           return;
         }
       }
@@ -724,57 +813,123 @@ class App {
   // Fase 2: Live Fight Hub — revelação temporizada round a round
   _playLiveHub(allResults, playerFighterIds) {
     const statusText = document.getElementById('liveStatusText');
+    const statusCard = document.getElementById('liveHubStatus');
     const rounds = document.querySelectorAll('.live-round');
     const summary = document.getElementById('liveHubSummary');
     const skipBtn = document.getElementById('skipLiveHubBtn');
+    const title = document.getElementById('hubFightTitle');
+    const subtitle = document.getElementById('hubFightSubtitle');
     let roundIdx = 0;
     let beatIdx = 0;
-    let timer = null;
+    let cancelled = false;
+    let tl = gsap.timeline();
+
+    const faceOff = document.getElementById('hubFaceOff');
+    let threeFaceOff = null;
+    // Tenta montar ThreeFaceOff (falha silenciosa se Three.js nao carregou)
+    try {
+      import('./three-faceoff.js').then(mod => {
+        if (!cancelled && faceOff) {
+          threeFaceOff = new mod.ThreeFaceOff('hubFaceOff', null, null);
+        }
+      }).catch(() => {});
+    } catch {}
 
     const finish = () => {
-      clearTimeout(timer);
+      cancelled = true;
+      tl.kill();
+      tl = gsap.timeline(); // fresh timeline for summary
+
       rounds.forEach(r => r.style.display = 'block');
-      // Collapse all beat containers
       rounds.forEach(r => {
-        const beatsDiv = r.querySelector('.live-round-beats');
-        if (beatsDiv) beatsDiv.querySelectorAll('.live-beat').forEach(b => b.style.display = 'flex');
+        r.querySelectorAll('.live-beat').forEach(b => b.style.display = 'flex');
       });
-      if (summary) summary.style.display = 'block';
+
       if (statusText) statusText.textContent = 'Luta encerrada';
       if (skipBtn) skipBtn.style.display = 'none';
+
+      // Summary dramatic reveal
+      if (summary) {
+        summary.style.display = 'block';
+        tl.to('#hubResultIcon', { opacity: 1, scale: 1, duration: 0.4, ease: 'back.out(2)' }, 0)
+          .to('#hubResultText', { opacity: 1, y: 0, duration: 0.3 }, '-=0.2')
+          .to('#hubResultMethod', { opacity: 1, duration: 0.3 }, '-=0.15')
+          .to('#hubScorecards', { opacity: 1, duration: 0.3 }, '-=0.1')
+          .to('#hubPurseDisplay', { opacity: 1, y: 0, duration: 0.3 }, '-=0.05')
+          .to('#hubDamageWarning', { opacity: 1, duration: 0.3 }, '-=0.05')
+          .to('#hubActions', { opacity: 1, y: 0, duration: 0.3 }, '-=0.05');
+      }
     };
 
     const showBeat = () => {
+      if (cancelled) return;
       const round = rounds[roundIdx];
       if (!round) { finish(); return; }
       const beats = round.querySelectorAll('.live-beat');
+
       if (!beats.length || beatIdx >= beats.length) {
-        // All beats done — move to next round after a pause
-        timer = setTimeout(() => {
+        // Pausa entre rounds
+        tl.call(() => {
+          if (cancelled) return;
           roundIdx++;
           beatIdx = 0;
           if (roundIdx >= rounds.length) { finish(); return; }
           rounds[roundIdx].style.display = 'block';
-          if (statusText) {
-            statusText.textContent = `Round ${roundIdx + 1} de ${rounds.length}`;
-          }
-          timer = setTimeout(showBeat, 400);
-        }, 800);
+          if (statusText) statusText.textContent = `Round ${roundIdx + 1} de ${rounds.length}`;
+          tl.call(showBeat, null, null, 0.6);
+        }, null, null, 1);
         return;
       }
-      beats[beatIdx].style.display = 'flex';
+
+      const beat = beats[beatIdx];
+      const beatType = beat.dataset.beatType;
+
+      // Revelar beat com animacao
+      tl.call(() => {
+        if (cancelled) return;
+        beat.style.display = 'flex';
+      }, null, null, 0);
+
+      // Screen shake em knockdown e finish
+      if (beatType === 'knockdown') {
+        tl.to(faceOff || document.getElementById('liveHubRounds'), {
+          x: '+=6', duration: 0.04, repeat: 4, yoyo: true, ease: 'power1.inOut',
+        }, 0);
+        if (threeFaceOff?.onKnockdown) tl.call(() => threeFaceOff.onKnockdown(), null, null, 0);
+      } else if (beatType === 'finish') {
+        tl.to(faceOff || document.getElementById('liveHubRounds'), {
+          x: '+=10', duration: 0.05, repeat: 6, yoyo: true, ease: 'power1.inOut',
+        }, 0);
+        // Flash momentâneo
+        const flash = document.createElement('div');
+        flash.style.cssText = 'position:fixed;inset:0;background:rgba(232,35,74,0.3);pointer-events:none;z-index:999';
+        document.body.appendChild(flash);
+        tl.to(flash, { opacity: 0, duration: 0.6, onComplete: () => flash.remove() }, 0);
+        if (threeFaceOff?.onFinish) tl.call(() => threeFaceOff.onFinish(), null, null, 0);
+      }
+
       beatIdx++;
-      timer = setTimeout(showBeat, 600);
+      tl.call(showBeat, null, null, 0.45);
     };
 
-    if (rounds.length === 0) { finish(); return; }
+    if (rounds.length === 0 || cancelled) { finish(); return; }
+
+    // Intro animation
+    tl.to(statusCard, { opacity: 1, duration: 0.3 }, 0)
+      .to(title, { opacity: 1, y: 0, duration: 0.4, ease: 'back.out(1.2)' }, '-=0.1')
+      .to(subtitle, { opacity: 1, duration: 0.3 }, '-=0.15');
 
     // Show first round
-    rounds[0].style.display = 'block';
-    if (statusText) statusText.textContent = `Round 1 de ${rounds.length}`;
+    tl.call(() => {
+      if (!cancelled) {
+        rounds[0].style.display = 'block';
+        if (statusText) statusText.textContent = `Round 1 de ${rounds.length}`;
+      }
+    }, null, null, 0.8);
 
     skipBtn?.addEventListener('click', finish);
-    timer = setTimeout(showBeat, 1200);
+
+    tl.call(showBeat, null, null, 1.2);
   }
   _playLiveBroadcast() {
     const status = document.getElementById('liveStatus');
@@ -873,6 +1028,27 @@ class App {
         await this.game.updateGym(gym);
 
         this.notificationService.add('success', 'Divisão Alterada', `${f.name} mudou de ${oldClass} para ${newWeightClass}.`);
+        this.showFighterProfile(fighterId);
+      });
+    });
+
+    // Renomear lutador
+    document.querySelectorAll('.fighter-rename').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const fId = btn.dataset.id;
+        const f = await this.game.fighterCtrl.getFighter(fId);
+        if (!f) return;
+
+        const newName = prompt('Novo nome do lutador:', f.name);
+        if (!newName || newName.trim().length === 0) return;
+        if (newName.length > 30) {
+          this.notificationService.add('warning', 'Renomear', 'O nome deve ter no máximo 30 caracteres.');
+          return;
+        }
+
+        f.name = newName.trim();
+        await this.game.fighterCtrl.updateFighter(f);
+        this.notificationService.add('success', 'Renomear', `Lutador renomeado para ${newName.trim()}.`);
         this.showFighterProfile(fighterId);
       });
     });
@@ -1035,6 +1211,17 @@ class App {
     const entries = await this.game.db.getAll('hallOfFame');
     const html = HallOfFameView.render(entries);
     await LayoutView.render(html);
+
+    document.querySelector('.hall-of-fame-share')?.addEventListener('click', () => {
+      const text = `Acabei de imortalizar ${entries.length} lendas no MMA Manager!\n\nConstrua dinastias. Destrua legados.\n👉 ${window.location.origin}/landing.html`;
+      if (navigator.share) {
+        navigator.share({ title: 'MMA Manager', text, url: `${window.location.origin}/landing.html` });
+      } else {
+        navigator.clipboard.writeText(text).then(() => {
+          this.notificationService?.add('success', 'Compartilhar', 'Link copiado! Envie para um amigo fã de MMA.');
+        });
+      }
+    });
   }
 
   // ===== G5: Cerimônia de Aposentadoria =====

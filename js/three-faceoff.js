@@ -3,6 +3,7 @@ import * as THREE from 'three';
 /**
  * MMA Manager — 3D Face-off Scene
  * Two fighter silhouettes facing each other with dramatic lighting.
+ * Responde a eventos de luta (knockdown, KO, vitória) com reações visuais.
  */
 export class ThreeFaceOff {
   constructor(containerId, fighterA, fighterB) {
@@ -15,6 +16,8 @@ export class ThreeFaceOff {
     this.scene = null;
     this.camera = null;
     this.renderer = null;
+    this.redSpot = null;
+    this.blueSpot = null;
     this.clock = new THREE.Clock();
     this.disposed = false;
     this._rafId = null;
@@ -58,18 +61,18 @@ export class ThreeFaceOff {
     this.scene.add(ambient);
 
     // Red spotlight (left fighter)
-    const redSpot = new THREE.SpotLight(0xc41e3a, 3, 15, Math.PI / 6, 0.6, 1);
-    redSpot.position.set(-3, 5, 2);
-    redSpot.target.position.set(-1.5, 1, 0);
-    this.scene.add(redSpot);
-    this.scene.add(redSpot.target);
+    this.redSpot = new THREE.SpotLight(0xc41e3a, 3, 15, Math.PI / 6, 0.6, 1);
+    this.redSpot.position.set(-3, 5, 2);
+    this.redSpot.target.position.set(-1.5, 1, 0);
+    this.scene.add(this.redSpot);
+    this.scene.add(this.redSpot.target);
 
     // Blue spotlight (right fighter)
-    const blueSpot = new THREE.SpotLight(0x3a5a8a, 3, 15, Math.PI / 6, 0.6, 1);
-    blueSpot.position.set(3, 5, 2);
-    blueSpot.target.position.set(1.5, 1, 0);
-    this.scene.add(blueSpot);
-    this.scene.add(blueSpot.target);
+    this.blueSpot = new THREE.SpotLight(0x3a5a8a, 3, 15, Math.PI / 6, 0.6, 1);
+    this.blueSpot.position.set(3, 5, 2);
+    this.blueSpot.target.position.set(1.5, 1, 0);
+    this.scene.add(this.blueSpot);
+    this.scene.add(this.blueSpot.target);
 
     // Center fill
     const fill = new THREE.PointLight(0x333333, 0.3, 8);
@@ -152,7 +155,6 @@ export class ThreeFaceOff {
     floor.rotation.x = -Math.PI / 2;
     this.scene.add(floor);
 
-    // Center line
     const lineGeo = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(0, 0.01, -3),
       new THREE.Vector3(0, 0.01, 3),
@@ -177,13 +179,9 @@ export class ThreeFaceOff {
       positions[i3 + 2] = (Math.random() - 0.5) * 4;
 
       if (Math.random() > 0.5) {
-        colors[i3] = 0.77;
-        colors[i3 + 1] = 0.12;
-        colors[i3 + 2] = 0.23;
+        colors[i3] = 0.77; colors[i3 + 1] = 0.12; colors[i3 + 2] = 0.23;
       } else {
-        colors[i3] = 0.23;
-        colors[i3 + 1] = 0.35;
-        colors[i3 + 2] = 0.54;
+        colors[i3] = 0.23; colors[i3 + 1] = 0.35; colors[i3 + 2] = 0.54;
       }
     }
 
@@ -192,15 +190,67 @@ export class ThreeFaceOff {
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     const mat = new THREE.PointsMaterial({
-      size: 0.02,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.5,
-      sizeAttenuation: true,
+      size: 0.02, vertexColors: true, transparent: true,
+      opacity: 0.5, sizeAttenuation: true,
     });
 
     this.particles = new THREE.Points(geo, mat);
     this.scene.add(this.particles);
+  }
+
+  // === Reações a eventos da luta ===
+
+  onKnockdown() {
+    if (this.disposed || !this.redSpot || !this.blueSpot) return;
+    // Flash momentâneo — intensifica os spots
+    this.redSpot.intensity = 8;
+    this.blueSpot.intensity = 8;
+    // Camera shake sutil
+    if (this.camera) {
+      const origX = this.camera.position.x;
+      const origY = this.camera.position.y;
+      let shakeCount = 0;
+      const shake = () => {
+        if (shakeCount++ > 6 || this.disposed) {
+          this.camera.position.x = 0;
+          this.camera.position.y = 2;
+          this.redSpot.intensity = 3;
+          this.blueSpot.intensity = 3;
+          return;
+        }
+        this.camera.position.x = (Math.random() - 0.5) * 0.3;
+        this.camera.position.y = 2 + (Math.random() - 0.5) * 0.1;
+        setTimeout(shake, 40);
+      };
+      shake();
+    }
+  }
+
+  onFinish() {
+    if (this.disposed) return;
+    // Flash mais intenso
+    if (this.redSpot) this.redSpot.intensity = 10;
+    if (this.blueSpot) this.blueSpot.intensity = 10;
+    if (this.camera) {
+      const shake = () => {
+        for (let i = 0; i < 8; i++) {
+          setTimeout(() => {
+            if (this.disposed || !this.camera) return;
+            this.camera.position.x = (Math.random() - 0.5) * 0.5;
+            this.camera.position.y = 2 + (Math.random() - 0.5) * 0.2;
+          }, i * 50);
+        }
+        setTimeout(() => {
+          if (!this.disposed && this.camera) {
+            this.camera.position.x = 0;
+            this.camera.position.y = 2;
+          }
+          if (this.redSpot) this.redSpot.intensity = 3;
+          if (this.blueSpot) this.blueSpot.intensity = 3;
+        }, 500);
+      };
+      shake();
+    }
   }
 
   onResize() {
@@ -213,8 +263,6 @@ export class ThreeFaceOff {
 
   animate() {
     if (this.disposed) return;
-
-    // Se a navegação removeu o canvas do DOM, encerra o loop junto
     if (!this.renderer.domElement.isConnected) {
       this.dispose();
       return;
@@ -222,16 +270,17 @@ export class ThreeFaceOff {
 
     this._rafId = requestAnimationFrame(() => this.animate());
 
-    // Cena decorativa: 30fps é suficiente
     const nowMs = performance.now();
     if (nowMs - this._lastFrame < 33) return;
     this._lastFrame = nowMs;
 
     const elapsed = this.clock.getElapsedTime();
 
-    // Subtle camera sway
-    this.camera.position.x = Math.sin(elapsed * 0.3) * 0.5;
-    this.camera.lookAt(0, 1.2, 0);
+    // Subtle camera sway (se não estiver em shake)
+    if (this.camera && Math.abs(this.camera.position.x) < 0.1) {
+      this.camera.position.x = Math.sin(elapsed * 0.3) * 0.5;
+      this.camera.lookAt(0, 1.2, 0);
+    }
 
     // Animate particles
     if (this.particles) {

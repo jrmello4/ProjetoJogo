@@ -115,7 +115,10 @@ export class FighterProfileView {
 
     return `
       <div class="page-header">
-        <h2>${getNationalityFlag(fighter.nationality.code)} ${fighter.name}</h2>
+        <h2>
+          ${getNationalityFlag(fighter.nationality.code)} ${fighter.name}
+          <button class="btn-icon fighter-rename" data-id="${fighter.id}" title="Renomear lutador" style="font-size:0.8rem;vertical-align:middle;margin-left:0.5rem;cursor:pointer;background:none;border:none;padding:2px;opacity:0.5;transition:opacity 0.2s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.5">✏️</button>
+        </h2>
         <p>${fighter.nationality.name} · ${fighter.age} anos · ${fighter.fightingStyle}</p>
       </div>
 

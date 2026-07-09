@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Comande sua própria academia de MMA. Recrute, treine, lute e construa um império nas 5 divisões de peso.">
+  <meta name="theme-color" content="#14110f">
+
+  <!-- OG tags -->
+  <meta property="og:title" content="MMA Manager — Comande sua academia de MMA">
+  <meta property="og:description" content="Recrute lutadores, monte o card perfeito, dê instruções de córner ao vivo. 24 atributos, 6 promoções, 5 divisões.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="assets/og-image.svg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MMA Manager — Comande sua academia de MMA">
+  <meta name="twitter:description" content="Recrute, treine, lute. Instruções de córner ao vivo entre os rounds.">
+  <meta name="twitter:image" content="assets/og-image.svg">
+
+  <title>MMA Manager — Comande sua Academia de MMA</title>
+  <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ===== RESET ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; scroll-behavior: smooth; }
+    body {
+      font-family: 'IBM Plex Sans', sans-serif;
+      background: #14110f;
+      color: #e8e2d9;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== TYPOGRAPHY ===== */
+    h1, h2, h3 { font-family: 'Archivo', sans-serif; font-stretch: expanded; font-weight: 800; line-height: 1.1; }
+    h1 { font-size: clamp(2.5rem, 6vw, 4.5rem); letter-spacing: -0.02em; }
+    h2 { font-size: clamp(1.75rem, 4vw, 2.75rem); letter-spacing: -0.01em; }
+    h3 { font-size: 1.35rem; font-weight: 700; }
+    p { font-size: 1.05rem; color: #a09888; max-width: 60ch; }
+    .text-muted { color: #6b6358; }
+    .text-accent { color: #e8234a; }
+    .text-gold { color: #c9a227; }
+    .text-center { text-align: center; }
+    .text-sm { font-size: 0.875rem; }
+    .text-xs { font-size: 0.75rem; }
+
+    /* ===== LAYOUT ===== */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; }
+    section { padding: 5rem 0; }
+    .flex { display: flex; }
+    .flex-center { display: flex; align-items: center; justify-content: center; }
+    .flex-between { display: flex; align-items: center; justify-content: space-between; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; }
+    .gap-1 { gap: 1rem; }
+    .gap-2 { gap: 2rem; }
+    .mt-2 { margin-top: 2rem; }
+    .mt-4 { margin-top: 4rem; }
+    .mb-2 { margin-bottom: 2rem; }
+
+    /* ===== GRAIN OVERLAY ===== */
+    .grain {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+      pointer-events: none; z-index: 9999; opacity: 0.035;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-repeat: repeat; background-size: 256px 256px;
+    }
+
+    /* ===== NAVBAR ===== */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      padding: 1rem 0; background: rgba(20,17,15,0.85); backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(232,226,217,0.06);
+    }
+    nav .container { display: flex; align-items: center; justify-content: space-between; }
+    .nav-logo { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.08em; }
+    .nav-logo img { width: 28px; height: 28px; }
+    .nav-links { display: flex; align-items: center; gap: 2rem; list-style: none; }
+    .nav-links a { color: #a09888; text-decoration: none; font-size: 0.85rem; font-weight: 500; transition: color 0.2s; }
+    .nav-links a:hover { color: #e8e2d9; }
+
+    /* ===== BUTTONS ===== */
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.8rem 1.75rem; border-radius: 8px; font-weight: 700;
+      font-size: 0.9rem; text-decoration: none; cursor: pointer;
+      border: none; transition: all 0.25s ease;
+      font-family: 'Archivo', sans-serif; text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .btn-primary { background: #e8234a; color: #fff; }
+    .btn-primary:hover { background: #d01e40; transform: translateY(-1px); box-shadow: 0 8px 24px rgba(232,35,74,0.3); }
+    .btn-secondary { background: transparent; color: #e8e2d9; border: 1px solid rgba(232,226,217,0.15); }
+    .btn-secondary:hover { border-color: rgba(232,226,217,0.4); }
+    .btn-lg { padding: 1rem 2.5rem; font-size: 1rem; }
+    .btn-sm { padding: 0.5rem 1.25rem; font-size: 0.75rem; }
+
+    /* ===== HERO ===== */
+    .hero {
+      min-height: 100vh; display: flex; align-items: center;
+      background: radial-gradient(ellipse at 50% 0%, rgba(232,35,74,0.08) 0%, transparent 60%),
+                  radial-gradient(ellipse at 80% 80%, rgba(201,162,39,0.04) 0%, transparent 50%);
+    }
+    .hero-content { max-width: 640px; }
+    .hero h1 { margin-bottom: 1.25rem; }
+    .hero h1 span { color: #e8234a; }
+    .hero p { font-size: 1.15rem; margin-bottom: 2rem; }
+    .hero-tag {
+      display: inline-block; padding: 0.3rem 0.75rem; border-radius: 4px;
+      background: rgba(201,162,39,0.1); color: #c9a227; font-size: 0.75rem;
+      font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+      margin-bottom: 1.5rem;
+    }
+    .hero-strip {
+      display: flex; gap: 2rem; margin-top: 3rem; flex-wrap: wrap;
+    }
+    .hero-strip-item { text-align: center; }
+    .hero-strip-item .num { font-family: 'Archivo', sans-serif; font-size: 1.5rem; font-weight: 800; color: #f4f2ef; }
+    .hero-strip-item .label { font-size: 0.75rem; color: #6b6358; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    /* ===== POSTER PREVIEW ===== */
+    .hero-poster {
+      position: relative;
+      background: linear-gradient(135deg, rgba(232,35,74,0.06), rgba(201,162,39,0.04));
+      border: 1px solid rgba(232,226,217,0.08);
+      border-radius: 12px; padding: 2rem; text-align: center;
+      max-width: 420px; margin: 0 auto;
+    }
+    .hero-poster .octagon {
+      width: 80px; height: 80px; margin: 0 auto 1rem;
+      background: rgba(232,35,74,0.08);
+      clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem; color: rgba(232,35,74,0.3);
+    }
+    .hero-poster .vs { font-family: 'Archivo', sans-serif; font-size: 2.5rem; font-weight: 900; color: rgba(232,226,217,0.15); letter-spacing: -0.05em; }
+    .hero-poster .fighter-name { font-weight: 700; color: #e8e2d9; }
+    .hero-poster .fighter-record { font-size: 0.8rem; color: #6b6358; }
+    .hero-poster .poster-belt { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 3px; background: rgba(201,162,39,0.12); color: #c9a227; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 0.75rem; }
+
+    /* ===== FEATURES ===== */
+    .features { background: rgba(255,255,255,0.01); border-top: 1px solid rgba(232,226,217,0.04); border-bottom: 1px solid rgba(232,226,217,0.04); }
+    .feature-card {
+      padding: 1.5rem; border-radius: 8px;
+      border: 1px solid rgba(232,226,217,0.06);
+      background: rgba(255,255,255,0.02);
+      transition: border-color 0.2s;
+    }
+    .feature-card:hover { border-color: rgba(232,226,217,0.12); }
+    .feature-icon { font-size: 1.5rem; margin-bottom: 0.75rem; }
+    .feature-card h3 { margin-bottom: 0.5rem; font-size: 1rem; }
+    .feature-card p { font-size: 0.875rem; }
+
+    /* ===== PRICING ===== */
+    .pricing { text-align: center; }
+    .pricing-card {
+      display: inline-block; padding: 2.5rem 3rem; border-radius: 12px;
+      border: 1px solid rgba(232,226,217,0.08);
+      background: linear-gradient(135deg, rgba(232,35,74,0.04), rgba(201,162,39,0.02));
+      max-width: 400px;
+    }
+    .pricing-card .price { font-family: 'Archivo', sans-serif; font-size: 3rem; font-weight: 800; color: #f4f2ef; }
+    .pricing-card .price-sub { font-size: 0.85rem; color: #6b6358; margin-top: 0.25rem; }
+    .pricing-card ul { list-style: none; margin: 1.5rem 0; text-align: left; }
+    .pricing-card ul li { padding: 0.4rem 0; font-size: 0.9rem; color: #a09888; }
+    .pricing-card ul li::before { content: "✓ "; color: #4ade80; font-weight: 700; }
+
+    /* ===== CTA SECTION ===== */
+    .cta-section {
+      text-align: center;
+      background: radial-gradient(ellipse at 50% 50%, rgba(232,35,74,0.06) 0%, transparent 60%);
+    }
+    .cta-section h2 { margin-bottom: 1rem; }
+    .cta-section p { margin: 0 auto 2rem; }
+
+    /* ===== FOOTER ===== */
+    footer {
+      border-top: 1px solid rgba(232,226,217,0.04);
+      padding: 3rem 0; text-align: center;
+    }
+    footer .bold-line { font-family: 'Archivo', sans-serif; font-size: 1.1rem; font-weight: 700; color: #f4f2ef; margin-bottom: 0.5rem; }
+    footer .sub { color: #6b6358; font-size: 0.85rem; margin-bottom: 1.5rem; }
+    footer .share-prompt { font-size: 0.75rem; color: #4a4438; margin-top: 2rem; }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 768px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      .nav-links { display: none; }
+      .hero-strip { gap: 1rem; justify-content: center; }
+      .hero-poster { max-width: 100%; }
+      section { padding: 3rem 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="grain"></div>
+
+  <!-- NAVBAR -->
+  <nav>
+    <div class="container">
+      <div class="nav-logo">
+        <img src="assets/icon.svg" alt="MMA Manager">
+        MMA Manager
+      </div>
+      <ul class="nav-links">
+        <li><a href="#features">Funcionalidades</a></li>
+        <li><a href="#pricing">Preço</a></li>
+        <li><a href="#cta" class="btn btn-sm btn-primary">Jogar Agora</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="container">
+      <div class="grid-2" style="align-items:center">
+        <div class="hero-content">
+          <div class="hero-tag">🎮 Early Access</div>
+          <h1>Comande sua <span>academia</span> de MMA.</h1>
+          <p>
+            Recrute lutadores, monte o card perfeito, dê instruções de córner
+            ao vivo entre os rounds e construa um império nas 5 divisões de peso.
+          </p>
+          <a href="index.html" class="btn btn-primary btn-lg">Começar Agora — R$14,90</a>
+          <div class="hero-strip">
+            <div class="hero-strip-item">
+              <div class="num">24</div>
+              <div class="label">Atributos</div>
+            </div>
+            <div class="hero-strip-item">
+              <div class="num">6</div>
+              <div class="label">Promoções</div>
+            </div>
+            <div class="hero-strip-item">
+              <div class="num">5</div>
+              <div class="label">Divisões</div>
+            </div>
+            <div class="hero-strip-item">
+              <div class="num">52</div>
+              <div class="label">Semanas/Ano</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- POSTER PREVIEW -->
+        <div class="hero-poster">
+          <div class="octagon">🥊</div>
+          <div class="fighter-name">Luan "Predador" Silva</div>
+          <div class="fighter-record">18-3-0 · 12 finalizações</div>
+          <div class="vs">VS</div>
+          <div class="fighter-name" style="color:#e8234a">Mike "The Hammer" Thompson</div>
+          <div class="fighter-record">22-5-0 · 15 nocautes</div>
+          <div class="poster-belt">🏆 Cinturão Peso Leve em Jogo</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features" id="features">
+    <div class="container">
+      <h2 class="text-center mb-2">O jogo de gerenciamento de MMA<br>que você sempre quis</h2>
+      <div class="grid-3 mt-4">
+        <div class="feature-card">
+          <div class="feature-icon">🧠</div>
+          <h3>24 Atributos</h3>
+          <p>Boxe, chão, força, velocidade, resistência, chin, QI de luta — cada lutador é único.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔄</div>
+          <h3>Instruções de Córner ao Vivo</h3>
+          <p>Entre os rounds, escolha o ritmo e a estratégia. Sua decisão define o resultado.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📋</div>
+          <h3>Contratos Exclusivos</h3>
+          <p>Negocie com 6 promoções, suba de tier, dispute cinturões e gerencie a carreira.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🏥</div>
+          <h3>Dano Acumulado</h3>
+          <p>Cada nocaute deixa marcas. Atletas envelhecem, declinam e precisam se aposentar.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⚔️</div>
+          <h3>Rivalidades & Reencontros</h3>
+          <p>Ex-atletas viram oponentes. Revanches escrevem histórias. O Hall da Fama eterniza.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🎯</div>
+          <h3>Scouting & Estudo</h3>
+          <p>Analise oponentes, descubra pontos fracos e monte o plano de jogo perfeito.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMO FUNCIONA -->
+  <section style="text-align:center" id="how-it-works">
+    <div class="container">
+      <h2 class="mb-2">Como funciona</h2>
+      <p class="text-center" style="margin:0 auto 3rem;max-width:500px">Três passos para construir sua dinastia no octógono.</p>
+      <div class="grid-3" style="gap:2rem;text-align:left">
+        <div class="feature-card" style="text-align:center">
+          <div style="font-family:'Archivo',sans-serif;font-size:2rem;font-weight:800;color:#e8234a;margin-bottom:0.5rem">1</div>
+          <h3 style="margin-bottom:0.5rem">Recrute & Treine</h3>
+          <p>Escolha seus atletas no mercado, monte a equipe e configure o acampamento de treino com foco em striking, grappling ou cardio.</p>
+        </div>
+        <div class="feature-card" style="text-align:center">
+          <div style="font-family:'Archivo',sans-serif;font-size:2rem;font-weight:800;color:#e8234a;margin-bottom:0.5rem">2</div>
+          <h3 style="margin-bottom:0.5rem">Negocie & Lute</h3>
+          <p>Aceite ofertas das promoções, suba de tier e dispute cinturões. Durante a luta, dê instruções de córner ao vivo entre os rounds.</p>
+        </div>
+        <div class="feature-card" style="text-align:center">
+          <div style="font-family:'Archivo',sans-serif;font-size:2rem;font-weight:800;color:#e8234a;margin-bottom:0.5rem">3</div>
+          <h3 style="margin-bottom:0.5rem">Evolua & Conquiste</h3>
+          <p>Atletas envelhecem, acumulam dano e se aposentam. Gerencie carreiras, construa rivalidades e eternize lendas no Hall da Fama.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section class="pricing" id="pricing">
+    <div class="container">
+      <h2 class="mb-2">Early Access</h2>
+      <p class="text-center" style="margin:0 auto 2rem">Compre uma vez. Jogue para sempre. Atualizações vitalícias inclusas.</p>
+      <div class="flex-center">
+        <div class="pricing-card">
+          <div class="price">R$14,90</div>
+          <div class="price-sub">pagamento único · sem assinatura</div>
+          <ul>
+            <li>Acesso completo ao jogo</li>
+            <li>Todas as 6 promoções</li>
+            <li>24 atributos + DNA</li>
+            <li>Instruções de córner ao vivo</li>
+            <li>Save com 6 slots</li>
+            <li>Atualizações vitalícias</li>
+          </ul>
+          <a href="index.html" class="btn btn-primary btn-lg" style="width:100%;justify-content:center">Começar Agora</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section" id="cta">
+    <div class="container">
+      <h2>Construa sua dinastia.</h2>
+      <p>Recrute, treine, lute. O octógono espera.</p>
+      <a href="index.html" class="btn btn-primary btn-lg">Jogar MMA Manager</a>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="container">
+      <div class="bold-line">Construa dinastias. Destrua legados.</div>
+      <div class="sub">MMA Manager — o simulador de MMA que coloca você no córner.</div>
+      <a href="index.html" class="btn btn-primary">Jogar Agora — R$14,90</a>
+      <div class="share-prompt">Conhece um fã de MMA? Manda esse link pra ele. 👊</div>
+    </div>
+  </footer>
+</body>
+</html>

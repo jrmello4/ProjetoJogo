@@ -13,8 +13,8 @@ export const GYM_CONFIG = {
   // Economia semanal
   WEEKLY_RENT: 1200,
   WEEKLY_COACHING_PER_FIGHTER: 300,
-  STUDENT_INCOME_BASE: 1500, // mensalidades de alunos comuns
-  STUDENT_INCOME_PER_REP: 20,
+  STUDENT_INCOME_BASE: 1800, // mensalidades de alunos comuns
+  STUDENT_INCOME_PER_REP: 25,
 
   // Recrutamento de agentes livres para a equipe
   RECRUIT_FEE_PER_OVR: 150,
@@ -70,6 +70,7 @@ export const TRAINING_FOCUS_META = {
 export const DIFFICULTIES = [
   { id: 'easy', name: 'Mestre Estabelecido', cash: 60000, desc: 'Caixa folgado para errar sem medo' },
   { id: 'normal', name: 'Treinador Profissional', cash: 35000, desc: 'A experiência equilibrada' },
+  { id: 'challenging', name: 'Desafiante', cash: 25000, desc: 'Cada dólar exige planejamento' },
   { id: 'hard', name: 'Garagem e Sonho', cash: 18000, desc: 'Cada dólar conta' },
 ];
 
@@ -255,7 +256,7 @@ export const SCOUTING_LEVELS = [
 
 export const SCOUTING_CONFIG = {
   // Custo de estudar o adversário, por nível alcançado (1 → 2 → 3)
-  STUDY_COST: [0, 1500, 3500, 7000],
+  STUDY_COST: [0, 1000, 2000, 4000],
   // O olheiro contratado (gym.scoutLevel) dá conhecimento de base a todos
   BASELINE_WITH_SCOUT: 1,
   // Lutar contra alguém ensina muito sobre ele

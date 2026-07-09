@@ -118,6 +118,18 @@ export class DB {
     return this._txw(storeName, (tx, store) => store.clear());
   }
 
+  async batchPut(storeName, items) {
+    if (items.length === 0) return;
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction(storeName, 'readwrite');
+      const store = tx.objectStore(storeName);
+      for (const item of items) store.put(item);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(new Error('Transaction aborted'));
+    });
+  }
+
   async getIndex(storeName, indexName, value) {
     return this._tx(storeName, (tx, store) => store.index(indexName).getAll(value));
   }

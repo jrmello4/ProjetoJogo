@@ -60,19 +60,19 @@ export class SimulationEngine {
       controlTimeA: 0, controlTimeB: 0, // seconds
     };
 
-    const staminaA = 100, staminaB = 100;
+    let staminaA = 100, staminaB = 100;
     let winner = null, loser = null;
     let isDraw = false;
     let finishMethod = null, finishRound = 0;
     let cornerInstruction = 'balanced';
-    let staminaDebtA = 0;
+    let staminaDebtA = 0, staminaDebtB = 0;
 
     for (let r = 1; r <= maxRounds; r++) {
       if (winner) break; // fight already finished
 
       const cornerModA = CORNER_INSTRUCTIONS[cornerInstruction] || CORNER_INSTRUCTIONS.balanced;
       const staminaFactorA = Math.max(10, staminaA * (1 - (r - 1) * 0.12) - staminaDebtA);
-      const staminaFactorB = staminaB * (1 - (r - 1) * 0.12);
+      const staminaFactorB = Math.max(10, staminaB * (1 - (r - 1) * 0.12) - staminaDebtB);
 
       const perfA = this._calcRoundPerformance(fighterA, fighterB, isBigEvent, staminaFactorA, cornerModA, plan, planEdge);
       const perfB = this._calcRoundPerformance(fighterB, fighterA, isBigEvent, staminaFactorB, null);
@@ -161,6 +161,10 @@ export class SimulationEngine {
 
       // O ritmo escolhido no córner cobra seu preço (ou ajuda) no fôlego dos rounds seguintes
       staminaDebtA += (cornerModA.fatigueMod - 1) * 15;
+
+      // Stamina base decai a cada round
+      staminaA = Math.max(15, staminaA - 10);
+      staminaB = Math.max(15, staminaB - 10);
 
       if (cornerHooks?.onRoundEnd && r < maxRounds) {
         // Cartões oficiais parciais (10-point must acumulado) — é isto que o

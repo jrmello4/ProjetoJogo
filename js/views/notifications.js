@@ -1,4 +1,5 @@
 import { formatDateShort } from '../utils/helpers.js';
+import { ICON_MAP } from '../services/notification-service.js';
 
 const CATEGORIES = {
   all: { label: 'Todas', types: null },
@@ -108,13 +109,7 @@ export class NotificationsView {
   }
 
   static iconFor(type) {
-    const icons = {
-      'contract-expiry': '⚠️', injury: '🏥', rivalry: '⚔️',
-      'hall-of-fame': '🏆', 'week-advance': '📅', info: 'ℹ️',
-      warning: '⚠️', success: '✅', headline: '📰', achievement: '🏆',
-      expectation: '💭',
-    };
-    return icons[type] || 'ℹ️';
+    return ICON_MAP[type] || 'ℹ️';
   }
 
   static renderSaveLoad(saveInfo, slots, currentSlot) {

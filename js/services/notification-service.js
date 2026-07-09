@@ -14,6 +14,8 @@ const TYPE_ICONS = {
   expectation: '💭',  // Épico F2: expectativas de atletas
 };
 
+export const ICON_MAP = TYPE_ICONS;
+
 export class NotificationService {
   constructor(db) {
     this.db = db;
@@ -60,10 +62,8 @@ export class NotificationService {
 
   async markAllRead() {
     const all = await this.getAll();
-    for (const n of all) {
-      n.read = true;
-      await this.db.put('notifications', n);
-    }
+    for (const n of all) n.read = true;
+    if (all.length > 0) await this.db.batchPut('notifications', all);
   }
 
   async clearOld() {

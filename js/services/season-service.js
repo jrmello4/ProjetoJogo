@@ -47,8 +47,9 @@ export class SeasonService {
   }
 
   async applyWeeklyRecovery(fighterCtrl) {
-    const roster = await fighterCtrl.getRoster('org-001');
-    for (const f of roster) {
+    const allFighters = await fighterCtrl.getAllFighters();
+    for (const f of allFighters) {
+      if (f.status === 'retired') continue;
       f.fatigue = Math.max(0, f.fatigue - 10);
       f.morale = Math.min(100, f.morale + 5);
       await fighterCtrl.updateFighter(f);

@@ -23,6 +23,7 @@ export function formatDateShort(date) {
 }
 
 export function getNationalityFlag(code) {
+  if (!code || code.length !== 2) return '';
   const segments = code.toUpperCase().split('');
   return segments.map(c => String.fromCodePoint(0x1F1E6 + (c.charCodeAt(0) - 'A'.charCodeAt(0)))).join('');
 }

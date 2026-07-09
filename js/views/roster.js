@@ -41,7 +41,7 @@ export class RosterView {
           <p>Os atletas da sua academia</p>
         </div>
         <div class="empty-state">
-          <p>Nenhum atleta na equipe. Vá ao Recrutamento para trazer talentos.</p>
+          <p>Sua academia precisa de lutadores. Vá ao Recrutamento — o próximo campeão pode estar lá.</p>
         </div>
       `;
     }

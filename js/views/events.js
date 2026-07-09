@@ -42,7 +42,7 @@ export class EventsView {
     `;
 
     const pastHtml = pastEvents.length === 0 ? `
-      <div class="empty-state"><p>Nenhum evento realizado ainda. Avance a semana para o mundo girar.</p></div>
+      <div class="empty-state"><p>Nenhum evento realizado ainda. O mundo do MMA está em silêncio — avance a semana para o primeiro evento.</p></div>
     ` : `
       <div class="section-label" data-reveal>Resultados</div>
       <div class="table-container" data-reveal>

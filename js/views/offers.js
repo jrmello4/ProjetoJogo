@@ -106,7 +106,7 @@ export class OffersView {
     };
 
     const pendingHtml = pending.length === 0
-      ? `<div class="empty-state"><p>Nenhuma oferta na mesa. Avance a semana — promoções procuram lutadores ativos e descansados.</p></div>`
+      ? `<div class="empty-state"><p>Silêncio no rádio hoje. Avance a semana — as promoções estão de olho em quem está treinando.</p></div>`
       : pending.map(o => {
           const fighter = fighterOf(o);
           const weeksToFight = o.eventAbsWeek - now;

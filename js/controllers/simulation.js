@@ -366,7 +366,32 @@ export class SimulationEngine {
     };
   }
 
-static _genRoundBeats(fighterA, fighterB, roundStats) {    const beats = [];    if (roundStats.knockdownsA > 0) beats.push({ type: 'knockdown', fighterId: fighterA.id, detail: fighterA.name + ' derruba ' + fighterB.name + ' com um knockdown devastador!' });    if (roundStats.knockdownsB > 0) beats.push({ type: 'knockdown', fighterId: fighterB.id, detail: fighterB.name + ' responde com um knockdown em ' + fighterA.name + '!' });    if (roundStats.subAttemptsA > 0) beats.push({ type: 'sub_attempt', fighterId: fighterA.id, detail: fighterA.name + ' tenta finalização e coloca ' + fighterB.name + ' em apuros!' });    if (roundStats.subAttemptsB > 0) beats.push({ type: 'sub_attempt', fighterId: fighterB.id, detail: fighterB.name + ' arrisca uma finalização em ' + fighterA.name + '!' });    if (roundStats.takedownsA > 0) beats.push({ type: 'takedown', fighterId: fighterA.id, detail: fighterA.name + ' leva a luta ao chão com uma queda precisa.' });    if (roundStats.takedownsB > 0) beats.push({ type: 'takedown', fighterId: fighterB.id, detail: fighterB.name + ' acerta a queda em ' + fighterA.name + '.' });    return beats;  }
+  // Fase 2 (Live Fight Hub): extrai os "momentos" de destaque de um round
+  // a partir das estatísticas já calculadas. Só apresentação — não altera o
+  // resultado da luta.
+  static _genRoundBeats(fighterA, fighterB, roundStats) {
+    const beats = [];
+    if (roundStats.knockdownsA > 0) {
+      beats.push({ type: 'knockdown', fighterId: fighterA.id, detail: `${fighterA.name} derruba ${fighterB.name} com um knockdown devastador!` });
+    }
+    if (roundStats.knockdownsB > 0) {
+      beats.push({ type: 'knockdown', fighterId: fighterB.id, detail: `${fighterB.name} responde com um knockdown em ${fighterA.name}!` });
+    }
+    if (roundStats.subAttemptsA > 0) {
+      beats.push({ type: 'sub_attempt', fighterId: fighterA.id, detail: `${fighterA.name} tenta finalização e coloca ${fighterB.name} em apuros!` });
+    }
+    if (roundStats.subAttemptsB > 0) {
+      beats.push({ type: 'sub_attempt', fighterId: fighterB.id, detail: `${fighterB.name} arrisca uma finalização em ${fighterA.name}!` });
+    }
+    if (roundStats.takedownsA > 0) {
+      beats.push({ type: 'takedown', fighterId: fighterA.id, detail: `${fighterA.name} leva a luta ao chão com uma queda precisa.` });
+    }
+    if (roundStats.takedownsB > 0) {
+      beats.push({ type: 'takedown', fighterId: fighterB.id, detail: `${fighterB.name} acerta a queda em ${fighterA.name}.` });
+    }
+    return beats;
+  }
+
   static _checkRoundFinish(fighterA, fighterB, perfA, perfB, diff, round, roundStats, cornerModA = null, plan = null) {
     const finishChance = Math.min(0.4, 0.05 + Math.abs(diff) * 0.008);
 

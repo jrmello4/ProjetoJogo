@@ -562,7 +562,7 @@ export class GameController {
     const target = eligible[Math.floor(Math.random() * eligible.length)];
 
     // Pega um lutador de IA de qualquer lugar
-    const allFighters = await this.fighterCtrl.getAll();
+    const allFighters = await this.fighterCtrl.getAllFighters();
     const callouters = allFighters.filter(f =>
       f.id !== target.id &&
       f.status !== 'retired' &&

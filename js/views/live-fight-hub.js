@@ -13,7 +13,7 @@ export class LiveFightHubView {
       </div>
 
       <div id="liveHubStatus" class="card" style="text-align:center;padding:0.75rem;margin-bottom:1rem">
-        <span class="live-dot" style="display:inline-block;width:8px;height:8px;background:var(--red);border-radius:50%;animation:pulse 1s infinite;margin-right:0.5rem"></span>
+        <span class="live-dot" style="display:inline-block;width:8px;height:8px;background:var(--red);border-radius:50%;animation:livePulse 1s infinite;margin-right:0.5rem"></span>
         <span id="liveStatusText">Luta começando...</span>
         <button id="skipLiveHubBtn" class="btn btn-sm btn-secondary" style="float:right">Pular</button>
       </div>
@@ -24,7 +24,7 @@ export class LiveFightHubView {
           <div style="font-size:2rem">🏆</div>
           <h2 class="text-success">${fighterA.name} VENCEU!</h2>
         ` : `
-          <div style="font-size:2rem"></div>
+          <div style="font-size:2rem">🏆</div>
           <h2 class="text-danger">${fighterB.name} VENCEU!</h2>
         `}
         <p class="text-muted">${result.method}${result.round ? ` no R${result.round}` : ''}</p>

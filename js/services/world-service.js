@@ -529,6 +529,8 @@ export class WorldService {
         f.organizationId = null;
         const wasGymFighter = f.gymId === GYM_CONFIG.ID;
         f.gymId = null;
+        // Fase 1: ex-atletas do jogador nunca são purgados do banco (abaixo).
+        if (wasGymFighter) f.wasPlayerFighter = true;
 
         // Campeão que pendura as luvas deixa o cinturão vago.
         const vacated = this.titleService ? await this.titleService.vacateBeltsOf(f.id) : [];
@@ -606,6 +608,10 @@ export class WorldService {
       }
     }
 
+    // Fase 1: purga aposentados sem relevância — impede o banco de crescer sem
+    // teto ao longo de carreiras longas (cada getAllFighters lê o store inteiro).
+    await this._purgeForgettableRetired();
+
     // Fase 1: registra a safra no doc worldGen
     const worldGen = (await this.db.get('gameState', 'worldGen')) || { id: 'worldGen', lastGenAbsWeek: 0, totalGenerated: 0 };
     worldGen.lastGenAbsWeek = absWeekNow;
@@ -614,5 +620,31 @@ export class WorldService {
 
     const msg = `${count} jovens prospectos chegaram ao mercado${distributed > 0 ? ` (${distributed} ja contratados por academias rivais)` : ''}.`;
     await this.notifService.add('success', 'Nova Safra', msg);
+  }
+
+  // Fase 1: mantém o store 'fighters' limitado. Aposentados de IA sem relevância
+  // (nunca foram do jogador, não entraram no Hall da Fama) não têm valor de jogo
+  // e só pesam nas leituras semanais de getAllFighters(). Lendas e ex-atletas do
+  // jogador são preservados. Rivalidades órfãs do purgado também são removidas.
+  async _purgeForgettableRetired() {
+    const all = await this.fighterCtrl.getAllFighters();
+    const retired = all.filter(f => f.status === 'retired');
+    if (retired.length === 0) return 0;
+
+    const rivalries = await this.db.getAll('rivalries');
+    let purged = 0;
+    for (const f of retired) {
+      if (f.wasPlayerFighter) continue;                 // ex-atleta do jogador
+      const legend = await this.db.get('hallOfFame', f.id);
+      if (legend) continue;                             // lenda: fica no Hall da Fama
+      await this.db.delete('fighters', f.id);
+      for (const r of rivalries) {
+        if (r.fighterAId === f.id || r.fighterBId === f.id) {
+          await this.db.delete('rivalries', r.id);
+        }
+      }
+      purged++;
+    }
+    return purged;
   }
 }

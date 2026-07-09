@@ -32,6 +32,52 @@
 
 ---
 
+## ⚠️ REALITY CHECK (playtest de 09/07/2026)
+
+> **Este bloco é a fonte de verdade mais atual.** As seções 7–9 abaixo descrevem
+> vários itens como "a construir", mas um playtest revelou que **grande parte já
+> está implementada no working tree (não commitada)**. Quando este bloco e as
+> seções antigas divergirem, **este bloco vence**. A reconciliação completa das
+> seções fica para depois de commitar e validar.
+
+**Já implementado no working tree (verificado no playtest):**
+- **Épico F parcial** — F1 (hype da coletiva → bônus de bolsa via
+  `HYPE_PURSE_RATIO` + heat na rivalidade) ligado ponta a ponta; F2
+  (`GameController._checkExpectations`) e F3 (`_generateCallouts`, inbox de
+  callouts) parcialmente construídos.
+- **Fase 1 — Regeneração do Mundo** — funciona: safra anual (`generateProspect`),
+  patch aditivo `worldRegen`, teto de população (`POPULATION_CAP = 300`) que
+  segura o nº de ativos, aposentadorias por idade.
+- **Fase 2 — Live Fight Hub** — construído (`js/views/live-fight-hub.js`) e
+  integrado no `advanceWeek`; a simulação emite beats por round (`roundLog`).
+- **G5 — Cerimônia de aposentadoria** — construída
+  (`js/views/retirement-ceremony.js`), disparada por notificação.
+- **G3 (base)** — a simulação já grava `fighterRating` por luta; falta a tela do
+  gráfico.
+
+**Bug de crash encontrado e corrigido no playtest:**
+- `GameController._generateCallouts` chamava `this.fighterCtrl.getAll()`
+  (inexistente) → travava ~30% dos avanços de semana. Corrigido para
+  `getAllFighters()`. ✅
+
+**Bugs cosméticos corrigidos:**
+- Live Fight Hub usava o keyframe `pulse` (inexistente → `livePulse`) e tinha um
+  `<div>` vazio no ramo de vitória do lutador B. `_genRoundBeats` estava numa
+  linha só — reformatado. ✅
+
+**Balanceamento a validar (NÃO é bug, é calibração — regra de ouro):**
+- Influxo de **~70 novos lutadores/ano**, muito acima do `DRAFT_MIN/MAX` (5–10) —
+  há outra fonte de geração (mercado/rivais) somando ~60/ano. O nº de ativos
+  estabiliza no cap de 300 em ~2 anos, mas os registros de **aposentados se
+  acumulam no banco sem teto** (perf de carreira muito longa). Precisa de uma
+  passada de balanceamento dedicada.
+
+**Ainda aberto de verdade:** terminar/polir o Épico F (F2/F3), validar o balance
+da regeneração, a tela do gráfico G3, e a decisão emoji vs. G7 (as telas novas
+usam emoji fartamente).
+
+---
+
 ## 0. Como usar este documento
 
 **Uma fatia por vez.** Cada épico abaixo é uma fatia vertical: um recorte

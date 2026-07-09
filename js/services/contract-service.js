@@ -129,9 +129,10 @@ export class ContractService {
     const contract = fighter.promotionContract;
     contract.fightsRemaining--;
 
-    if (won) {
+    // won === null → empate: não é vitória nem derrota, não mexe na sequência.
+    if (won === true) {
       contract.consecutiveLosses = 0;
-    } else {
+    } else if (won === false) {
       contract.consecutiveLosses = (contract.consecutiveLosses || 0) + 1;
     }
 

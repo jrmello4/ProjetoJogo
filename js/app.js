@@ -301,6 +301,8 @@ class App {
           roundResult: info.roundResult,
           totalScoreA: info.totalScoreA,
           totalScoreB: info.totalScoreB,
+          cardA: info.cardA,
+          cardB: info.cardB,
         });
         LayoutView.render(html).then(() => {
           document.querySelectorAll('.corner-choice').forEach(b => {

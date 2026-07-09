@@ -73,7 +73,7 @@ export class FighterProfileView {
               <div class="timeline-item">
                 <div class="timeline-date">${formatDate(f.date)}</div>
                 <div class="timeline-content">
-                  <span class="badge ${f.won ? 'badge-success' : 'badge-danger'}">${f.result}</span>
+                  <span class="badge ${f.won === true ? 'badge-success' : f.won === null ? 'badge-warning' : 'badge-danger'}">${f.result}</span>
                   <span class="text-sm"> vs ${f.opponent} — ${f.method} (R${f.round})</span>
                 </div>
               </div>
@@ -352,13 +352,13 @@ export class FighterProfileView {
             const ovr = f.fighterRating;
             if (!ovr) return '';
             const pct = Math.round((ovr / 100) * 100);
-            const barColor = f.won ? 'high' : 'low';
+            const barColor = f.won === true ? 'high' : f.won === null ? 'medium' : 'low';
             const prev = arr[i - 1];
             const delta = prev?.fighterRating ? (ovr - prev.fighterRating) : null;
             const deltaLabel = delta !== null ? (delta > 0 ? `<span class="text-success">+${delta}</span>` : delta < 0 ? `<span class="text-danger">${delta}</span>` : '') : '';
             return `
               <div class="flex items-center gap-2 mb-1" style="font-size:0.75rem">
-                <span class="badge ${f.won ? 'badge-success' : 'badge-danger'}" style="min-width:1.5rem;font-size:0.55rem">${f.result}</span>
+                <span class="badge ${f.won === true ? 'badge-success' : f.won === null ? 'badge-warning' : 'badge-danger'}" style="min-width:1.5rem;font-size:0.55rem">${f.result}</span>
                 <span style="width:5.5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.opponent}</span>
                 <div class="progress-bar flex-1" style="height:8px;max-width:120px">
                   <div class="progress-fill ${barColor}" style="width:${pct}%"></div>

@@ -36,15 +36,15 @@ As promoções são controladas pela IA: elas realizam os próprios eventos, cor
 
 ## Como rodar
 
-Site estático — qualquer servidor HTTP serve:
-
 ```bash
-python -m http.server 8341   # ou: npx serve .
+node server.js 8341
 ```
 
 Abra `http://localhost:8341`.
 
-> ⚠️ O servidor do Python não envia `Cache-Control` e o navegador cacheia módulos ES por heurística. Depois de editar um `.js` já carregado, um reload normal pode servir a versão antiga **sem erro visível**. Use hard-reload.
+`server.js` envia `Cache-Control: no-store` em tudo — sem isso (ex.: `python -m
+http.server`), o navegador cacheia módulos ES por heurística e um reload normal
+pode servir um `.js` antigo **sem erro visível** depois de editar o arquivo.
 
 ## Stack
 

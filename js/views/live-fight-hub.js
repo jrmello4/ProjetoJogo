@@ -20,7 +20,10 @@ export class LiveFightHubView {
 
       <!-- Results summary (hidden initially) -->
       <div id="liveHubSummary" class="card" style="display:none;text-align:center;padding:1rem;background:linear-gradient(135deg,var(--bg),#1a1a2e)">
-        ${result.winnerId === fighterA.id ? `
+        ${result.isDraw ? `
+          <div style="font-size:2rem">🤝</div>
+          <h2>EMPATE!</h2>
+        ` : result.winnerId === fighterA.id ? `
           <div style="font-size:2rem">🏆</div>
           <h2 class="text-success">${fighterA.name} VENCEU!</h2>
         ` : `
@@ -28,6 +31,11 @@ export class LiveFightHubView {
           <h2 class="text-danger">${fighterB.name} VENCEU!</h2>
         `}
         <p class="text-muted">${result.method}${result.round ? ` no R${result.round}` : ''}</p>
+        ${result.scorecards ? `
+          <p class="text-sm text-muted" style="font-family:var(--font-mono)">
+            Cartões: ${result.scorecards.map(j => `${j.a}–${j.b}`).join(' · ')}
+          </p>
+        ` : ''}
         <button class="btn btn-secondary mt-2" id="hubBackBtn">Voltar ao Dashboard</button>
       </div>
 

@@ -5,7 +5,7 @@ import { OFFER_STATUS } from '../models/fight-offer.js';
 import { SimulationEngine } from '../controllers/simulation.js';
 import { DataGenerator } from './data-generator.js';
 import { HallOfFame } from './hall-of-fame.js';
-import { generateId } from '../utils/helpers.js';
+import { generateId, getWeightClassName } from '../utils/helpers.js';
 import {
   GYM_CONFIG,
   RIVAL_GYMS,
@@ -65,7 +65,9 @@ export class WorldService {
         playerEvents.push(outcome);
       } else if (outcome.results.length > 0) {
         const main = outcome.results[0];
-        aiHeadlines.push(`${outcome.event.name}: ${main.winnerName} venceu ${main.winnerId === main.fighterAId ? main.fighterBName : main.fighterAName} por ${main.method}.`);
+        aiHeadlines.push(main.isDraw
+          ? `${outcome.event.name}: ${main.fighterAName} e ${main.fighterBName} empataram.`
+          : `${outcome.event.name}: ${main.winnerName} venceu ${main.winnerId === main.fighterAId ? main.fighterBName : main.fighterAName} por ${main.method}.`);
       }
     }
 
@@ -203,9 +205,12 @@ export class WorldService {
       fighterA.recoverFromWeightCut();
       fighterB.recoverFromWeightCut();
 
-      // Cartel dentro desta promoção — é o que abre a porta do cinturão
-      fighterA.registerPromoResult(promo.id, result.winnerId === fighterA.id);
-      fighterB.registerPromoResult(promo.id, result.winnerId === fighterB.id);
+      // Cartel dentro desta promoção — é o que abre a porta do cinturão.
+      // Empate não conta nem como vitória nem como derrota no cartel.
+      if (!result.isDraw) {
+        fighterA.registerPromoResult(promo.id, result.winnerId === fighterA.id);
+        fighterB.registerPromoResult(promo.id, result.winnerId === fighterB.id);
+      }
 
       this._rollInjury(fighterA, result, absWeekNow);
       this._rollInjury(fighterB, result, absWeekNow);
@@ -215,9 +220,12 @@ export class WorldService {
       await this.fighterCtrl.updateFighter(fighterA);
       await this.fighterCtrl.updateFighter(fighterB);
 
-      // O cinturão troca de mãos (ou não) antes de contarmos as consequências
+      // O cinturão troca de mãos (ou não) antes de contarmos as consequências.
+      // Empate em luta de título: o campeão retém automaticamente (regra real
+      // do MMA) — não chamamos resolveTitleFight, então o mapa de campeões da
+      // promoção simplesmente não muda.
       let titleOutcome = null;
-      if (fight.titleWeightClass && this.titleService) {
+      if (fight.titleWeightClass && this.titleService && !result.isDraw) {
         titleOutcome = await this.titleService.resolveTitleFight(
           promo, fight.titleWeightClass, result.winnerId, result.loserId, absWeekNow
         );
@@ -272,7 +280,8 @@ export class WorldService {
   async _settlePlayerFight(fight, result, promo, gym, absWeekNow, titleOutcome = null) {
     const { booking } = fight;
     const fighter = fight.fighterA; // lutador do jogador é sempre o córner A
-    const won = result.winnerId === fighter.id;
+    const isDraw = !!result.isDraw;
+    const won = !isDraw && result.winnerId === fighter.id;
 
     // Épico F1: hype da coletiva vira bônus na bolsa
     const hypeBonus = (fighter.pcHype || 0) * HYPE_PURSE_RATIO;
@@ -288,7 +297,10 @@ export class WorldService {
     gym.totalPurseEarnings += gymCut;
     fighter.careerEarnings = (fighter.careerEarnings || 0) + totalPurse;
 
-    if (won) {
+    if (isDraw) {
+      // Empate não conta como vitória nem derrota no cartel da academia.
+      await this.notifService.add('info', '🤝 Empate', `${fighter.name} empatou com ${result.fighterBName} (${result.method}) no ${promo.nextEventName()}. Comissão: $${gymCut.toLocaleString()}.`);
+    } else if (won) {
       gym.wins++;
       const isFinish = result.method && !result.method.startsWith('Decision');
       let rep = GYM_CONFIG.REP_PER_WIN + (GYM_CONFIG.REP_TIER_BONUS[promo.tier] || 0);
@@ -299,6 +311,19 @@ export class WorldService {
       gym.losses++;
       gym.updateReputation(GYM_CONFIG.REP_PER_LOSS);
       await this.notifService.add('warning', 'Derrota', `${fighter.name} foi derrotado por ${result.winnerName} (${result.method}). Comissão da bolsa: $${gymCut.toLocaleString()}.`);
+    }
+
+    // Título em empate: o campeão retém automaticamente (regra real do MMA) —
+    // resolveTitleFight nunca foi chamado, então o mapa de campeões não mudou.
+    if (fight.titleWeightClass && isDraw) {
+      const division = getWeightClassName(fight.titleWeightClass);
+      await this.notifService.add(
+        'info',
+        '🛡️ Cinturão Mantido (Empate)',
+        booking.titleRole === TITLE_ROLE.DEFENSE
+          ? `${fighter.name} empatou e mantém o cinturão ${division} do ${promo.short}.`
+          : `${fighter.name} empatou pelo cinturão ${division} — o campeão atual mantém o título.`
+      );
     }
 
     // O cinturão é a única coisa que pesa mais que a bolsa.
@@ -334,9 +359,10 @@ export class WorldService {
     booking.resultId = result.id;
     await this.db.put('offers', booking);
 
-    // Épico B: consumir luta do contrato exclusivo
+    // Épico B: consumir luta do contrato exclusivo. `null` = empate — não
+    // reseta nem incrementa derrotas seguidas (não é vitória nem derrota).
     if (this.contractService) {
-      await this.contractService.consumeFight(fighter.id, won);
+      await this.contractService.consumeFight(fighter.id, isDraw ? null : won);
     }
   }
 
@@ -475,10 +501,9 @@ export class WorldService {
         const champId = promo.championOf(wc);
         if (!champId) continue;
         const champ = all.find(f => f.id === champId);
-        if (!champ) continue;
 
-        // FASE 1: Criar interino (só quando campeão está lesionado 12+ semanas)
-        if (champ.status === 'injured') {
+        // FASE 1: Criar interino (só quando o campeão ATIVO está lesionado 12+ semanas)
+        if (champ && champ.status === 'injured') {
           const injuryEnd = champ.availableFromAbsWeek || 0;
           const weeksOut = Math.max(0, injuryEnd - absWeekNow);
           if (weeksOut >= 12 && !promo.interimChampionOf(wc)) {
@@ -492,16 +517,22 @@ export class WorldService {
           }
         }
 
-        // FASE 2: Promover interino (roda independente do status do campeão)
-        // O campeão original pode já ter se recuperado (status !== 'injured')
-        // ou pode nunca mais voltar. Se o interino existe, promove.
+        // FASE 2: Promover interino a definitivo — só quando o campeão
+        // original REALMENTE não volta mais (se aposentou ou saiu do banco).
+        // Bug anterior: a condição era `champ.status !== 'injured'`, que
+        // também vale pra um campeão SAUDÁVEL recém-recuperado — como
+        // `_recoverInjuries` roda antes disto no mesmo processWeek, o
+        // interino tomava o cinturão do campeão de volta sem nenhuma luta.
         const interimId = promo.interimChampionOf(wc);
-        if (interimId && champ && champ.status !== 'injured') {
-          const promotedId = promo.promoteInterim(wc);
-          if (promotedId) {
-            const name = all.find(f => f.id === promotedId)?.name || 'Desafiante';
-            await this.notifService.add('headline', 'Cinturão Definitivo',
-              `${promo.short} promoveu ${name} a campeão definitivo dos ${wc}!`);
+        if (interimId) {
+          const championGone = !champ || champ.status === 'retired';
+          if (championGone) {
+            const promotedId = promo.promoteInterim(wc);
+            if (promotedId) {
+              const name = all.find(f => f.id === promotedId)?.name || 'Desafiante';
+              await this.notifService.add('headline', 'Cinturão Definitivo',
+                `${promo.short} promoveu ${name} a campeão definitivo dos ${wc}!`);
+            }
           }
         }
       }

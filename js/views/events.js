@@ -66,7 +66,7 @@ export class EventsView {
                   <td class="text-xs">${e.promotionName || '—'}</td>
                   <td>${formatDateShort(e.date)}</td>
                   <td>${e.totalFights}</td>
-                  <td class="text-xs">${main ? `${main.winnerName} venceu por ${main.method}` : '—'}</td>
+                  <td class="text-xs">${main ? (main.isDraw ? `Empate (${main.method})` : `${main.winnerName} venceu por ${main.method}`) : '—'}</td>
                   <td><button class="btn btn-sm btn-secondary event-details" data-id="${e.id}">Ver card</button></td>
                 </tr>
               `;
@@ -128,7 +128,9 @@ export class EventsView {
           </div>
 
           <div class="live-method ${finish ? 'live-method--finish' : ''}">
-            <strong>${r.winnerName}</strong> vence por <strong>${r.method}</strong> no round ${r.round}
+            ${r.isDraw
+              ? `<strong>Empate</strong> — <strong>${r.method}</strong>`
+              : `<strong>${r.winnerName}</strong> vence por <strong>${r.method}</strong> no round ${r.round}`}
           </div>
 
           <table class="tale-of-tape">
@@ -182,6 +184,7 @@ export class EventsView {
                 <span class="badge ${r.card === 'main' ? 'badge-info' : 'badge-warning'}">${r.card === 'main' ? 'Main Card' : 'Prelim'}</span>
                 ${isPlayer ? '<span class="badge badge-success" style="font-size:0.6rem;margin-left:0.25rem">SUA ACADEMIA</span>' : ''}
                 <span class="text-xs text-muted ml-2">${r.method} · R${r.round}</span>
+                ${r.isDraw ? '<span class="badge badge-warning" style="font-size:0.6rem;margin-left:0.25rem">EMPATE</span>' : ''}
               </div>
               <span class="text-xs text-muted">Clique para detalhes ▼</span>
             </div>
@@ -295,10 +298,14 @@ export class EventsView {
     `;
   }
 
-  static renderCornerRound({ fighterName, opponentName, round, roundResult, totalScoreA, totalScoreB }) {
-    const leading = totalScoreA === totalScoreB
-      ? 'Round parelho nos cartões'
-      : totalScoreA > totalScoreB
+  static renderCornerRound({ fighterName, opponentName, round, roundResult, totalScoreA, totalScoreB, cardA, cardB }) {
+    // Cartões oficiais (10-point must acumulado). Fallback pra performance
+    // bruta só em chamadas antigas que não passam cardA/cardB.
+    const cA = cardA ?? totalScoreA;
+    const cB = cardB ?? totalScoreB;
+    const leading = cA === cB
+      ? 'Tudo igual nos cartões'
+      : cA > cB
         ? `${fighterName} está na frente nos cartões`
         : `${opponentName} está na frente nos cartões`;
 
@@ -321,7 +328,7 @@ export class EventsView {
 
       <div class="page-header">
         <h2>Fim do Round ${round}</h2>
-        <p>Cartões parciais: ${totalScoreA} — ${totalScoreB}</p>
+        <p>Cartões parciais: ${cA} — ${cB}</p>
       </div>
 
       <table class="tale-of-tape mb-4">
@@ -363,7 +370,7 @@ export class EventsView {
       : fightResults.map(f => `
           <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
             <div>
-              <span class="badge ${f.won ? 'badge-success' : 'badge-danger'}">${f.won ? 'VITÓRIA' : 'DERROTA'}</span>
+              <span class="badge ${f.won === true ? 'badge-success' : f.won === null ? 'badge-warning' : 'badge-danger'}">${f.won === true ? 'VITÓRIA' : f.won === null ? 'EMPATE' : 'DERROTA'}</span>
               <span class="text-sm font-bold ml-2">${f.fighterName}</span>
               <span class="text-xs text-muted"> vs ${f.opponentName} · ${f.method} · ${f.promoName}</span>
             </div>

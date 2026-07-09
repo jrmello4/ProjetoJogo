@@ -4,10 +4,57 @@
 > `TODO_REMAINING.md`, que descrevem o modo organização (pré-pivot) e afirmam
 > coisas que não são mais verdade.
 >
-> Última atualização: 09/07/2026 (revisão de alinhamento com o código —
-> Épicos D e E concluídos, correção de performance das cenas 3D)
+> Última atualização: 09/07/2026 (2ª revisão do dia — pontuação real de MMA,
+> sistema de empates implementado, causa-raiz de cache do servidor eliminada)
 
-### Changelog desta revisão (09/07/2026)
+### Changelog 09/07/2026 (2ª revisão — pontuação, empates, cache)
+
+- **CAUSA-RAIZ eliminada: cache do servidor de dev.** `python -m http.server`
+  envia `Last-Modified` sem `Cache-Control`, e o navegador cacheava módulos ES
+  por heurística — depois de editar um `.js`, um reload normal podia continuar
+  servindo a versão antiga **sem erro visível**. Isso explicava bugs que
+  pareciam "voltar" depois de corrigidos. `server.js` agora envia
+  `Cache-Control: no-store` em tudo e é o servidor padrão
+  (`.claude/launch.json` e `README.md` atualizados — não usar mais
+  `python -m http.server` para este projeto).
+- **Pontuação da luta corrigida de verdade.** A calibração da revisão anterior
+  tinha thresholds cedo demais (10-7 aparecia com frequência alta em qualquer
+  luta, não só nas desiguais). Recalibrado com dados reais de matchmaking do
+  próprio jogo: **10-9 em 97%, 10-8 em 2,5%, 10-7 praticamente inexistente em
+  lutas parelhas** — e continua aparecendo corretamente perto de 100% dos
+  rounds em mismatches genuínos (testado com gap de 49 pontos de OVR).
+  Validado com lutas reais pela UI (não só chamadas diretas do engine).
+- **✅ NOVO: Empates (draws) implementados — `fighter.record.draws` era
+  campo morto.** O modelo tinha o campo e a UI exibia `W-L-D` em 15+ telas,
+  mas nada nunca incrementava `draws` — todo empate matematicamente virava
+  decisão dividida, porque a regra de maioria (2 de 3 juízes) nunca era
+  aplicada de verdade. Corrigido na simulação (3 sub-tipos: unânime,
+  majoritário, dividido) e propagado por toda a cadeia: bolsa (sem bônus de
+  vitória), reputação da academia (neutra), cinturão (**campeão retém em
+  empate**, inclusive luta de título), contrato exclusivo (empate não conta
+  como derrota pro corte por 2 derrotas seguidas), fila de desafiante mandatório
+  (empate contra o campeão não é "perdeu para ele"), e a UI (badge neutro,
+  nunca mostra vencedor falso). Validado: 8 anos simulados, empates em 0,74%
+  das lutas (realista), zero crash.
+- **Bug corrigido: `_generateHeadlines` (Épico F3) nunca disparava.** Iterava
+  o wrapper do evento em vez do resultado da luta (`pe.won`/`pe.method` sempre
+  `undefined`) — as manchetes de nocaute/finalização do próprio jogador nunca
+  apareciam desde que o épico foi escrito. Corrigido para espelhar o padrão já
+  correto de `_checkMilestones`.
+- **Bug corrigido: cinturão interino roubava o campeão saudável (G1).** A
+  condição de promoção do interino a definitivo era `champ.status !== 'injured'`
+  — verdadeiro tanto pra "campeão nunca mais volta" quanto pra "campeão acabou
+  de se recuperar". Como `_recoverInjuries` roda antes de `_checkInterimTitles`
+  no mesmo tick, um campeão são que tinha acabado de voltar perdia o cinturão
+  pro interino sem lutar. Corrigido para só promover quando o campeão original
+  realmente não volta mais (`retired` ou removido do banco). Validado
+  ponta a ponta: criação → recuperação (mantém) → aposentadoria (promove).
+- **G2 (tela de desafiantes) já estava implementado** — descoberto ao
+  investigar, não precisou de trabalho novo. `TitleService.getBeltMap()` já
+  populava `contenders` (top 5) e `views/rankings.js` já renderizava a lista.
+  Confirmado funcionando na UI com dados reais.
+
+### Changelog 09/07/2026 (1ª revisão)
 
 - **Épico D (Acampamento de verdade): ✅ CONCLUÍDO.** O camp virou configuração
   que roda dentro de `_applyWeeklyTraining()` — não é mais botão manual. Fecha
@@ -52,8 +99,16 @@
   integrado no `advanceWeek`; a simulação emite beats por round (`roundLog`).
 - **G5 — Cerimônia de aposentadoria** — construída
   (`js/views/retirement-ceremony.js`), disparada por notificação.
-- **G3 (base)** — a simulação já grava `fighterRating` por luta; falta a tela do
-  gráfico.
+- **G3 — ✅ CONCLUÍDO** (era "falta a tela", resolvido na revisão seguinte):
+  gráfico "Evolução na Carreira" em `views/fighter-profile.js` (linha do OVR
+  por luta, ● vitória / ○ derrota).
+- **G2 — ✅ JÁ ESTAVA PRONTO**, descoberto só na revisão seguinte:
+  `TitleService.getBeltMap()` já populava `contenders` (top 5) e
+  `views/rankings.js` já renderizava a lista de desafiantes por cinturão.
+- **G1 — ✅ CONCLUÍDO** (cinturão interino): existia mas tinha um bug —
+  promovia o interino a definitivo assim que o campeão original *recuperava*
+  da lesão (não só quando se aposentava), porque `_recoverInjuries` roda antes
+  de `_checkInterimTitles` no mesmo tick. Corrigido e validado ponta a ponta.
 
 **Bug de crash encontrado e corrigido no playtest:**
 - `GameController._generateCallouts` chamava `this.fighterCtrl.getAll()`
@@ -65,16 +120,17 @@
   `<div>` vazio no ramo de vitória do lutador B. `_genRoundBeats` estava numa
   linha só — reformatado. ✅
 
-**Balanceamento a validar (NÃO é bug, é calibração — regra de ouro):**
-- Influxo de **~70 novos lutadores/ano**, muito acima do `DRAFT_MIN/MAX` (5–10) —
-  há outra fonte de geração (mercado/rivais) somando ~60/ano. O nº de ativos
-  estabiliza no cap de 300 em ~2 anos, mas os registros de **aposentados se
-  acumulam no banco sem teto** (perf de carreira muito longa). Precisa de uma
-  passada de balanceamento dedicada.
+**Balanceamento — ✅ RESOLVIDO** (Fatia #1, sessão seguinte): o influxo alto
+de lutadores/ano não era o problema real — o teto de população (300 ativos) já
+segurava isso. O problema de verdade era **aposentados nunca serem removidos
+do banco**, degradando toda leitura semanal numa carreira longa.
+`_purgeForgettableRetired()` agora deleta aposentados de IA irrelevantes
+(preserva Hall da Fama e ex-atletas do jogador). Validado: 9 anos simulados,
+banco estável (~300 ativos + trickle lento de lendas).
 
-**Ainda aberto de verdade:** terminar/polir o Épico F (F2/F3), validar o balance
-da regeneração, a tela do gráfico G3, e a decisão emoji vs. G7 (as telas novas
-usam emoji fartamente).
+**Ainda aberto de verdade:** polir o Épico F2/F3 (expectativas + inbox estilo
+FM), a decisão emoji vs. G7 (as telas novas usam emoji fartamente), e G4
+(slots de save).
 
 ---
 

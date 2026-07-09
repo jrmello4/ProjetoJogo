@@ -430,7 +430,7 @@ export class GameController {
         for (const evt of summary.world.playerEvents) {
           for (const r of evt.playerResults) {
             const playerIsA = evt.playerFighterIds.has(r.fighterAId);
-            const won = r.winnerId === (playerIsA ? r.fighterAId : r.fighterBId);
+            const won = r.isDraw ? null : r.winnerId === (playerIsA ? r.fighterAId : r.fighterBId);
             fightResults.push({
               fighterName: playerIsA ? r.fighterAName : r.fighterBName,
               opponentName: playerIsA ? r.fighterBName : r.fighterAName,
@@ -513,17 +513,28 @@ export class GameController {
   async _generateHeadlines(now, world, team) {
     const { playerEvents, promotionEvents } = world;
 
-    // Manchetes de eventos do jogador
-    for (const pe of (playerEvents || [])) {
-      const fighter = team.find(f => f.id === pe.fighterId);
-      if (!pe.won && pe.method && (pe.method.startsWith('KO') || pe.method.startsWith('TKO'))) {
-        await this.notifService.add('headline', 'Nocaute Sofrido', `${fighter?.name || 'Atleta'} foi nocauteado por ${pe.opponentName} no R${pe.round}.`);
-      }
-      if (pe.won && pe.method && pe.method.startsWith('KO')) {
-        await this.notifService.add('headline', 'Nocaute!', `${fighter?.name || 'Atleta'} nocauteou ${pe.opponentName} no R${pe.round}!`);
-      }
-      if (pe.won && pe.method && pe.method.startsWith('Submission')) {
-        await this.notifService.add('headline', 'Finalização!', `${fighter?.name || 'Atleta'} finalizou ${pe.opponentName} no R${pe.round}!`);
+    // Manchetes de eventos do jogador. `evt` é o wrapper de um evento inteiro
+    // ({ event, results, playerResults, playerFighterIds }) — a luta em si
+    // está em `evt.playerResults`, não em `evt` diretamente. Ler `evt.won`/
+    // `evt.method` direto (como antes) sempre dava `undefined`: essas
+    // manchetes nunca disparavam desde que o épico foi escrito.
+    for (const evt of (playerEvents || [])) {
+      for (const r of (evt.playerResults || [])) {
+        const playerIsA = evt.playerFighterIds?.has(r.fighterAId);
+        const playerId = playerIsA ? r.fighterAId : r.fighterBId;
+        const opponentName = playerIsA ? r.fighterBName : r.fighterAName;
+        const fighter = team.find(f => f.id === playerId);
+        const won = r.isDraw ? null : r.winnerId === playerId;
+
+        if (won === false && r.method && (r.method.startsWith('KO') || r.method.startsWith('TKO'))) {
+          await this.notifService.add('headline', 'Nocaute Sofrido', `${fighter?.name || 'Atleta'} foi nocauteado por ${opponentName} no R${r.round}.`);
+        }
+        if (won === true && r.method && r.method.startsWith('KO')) {
+          await this.notifService.add('headline', 'Nocaute!', `${fighter?.name || 'Atleta'} nocauteou ${opponentName} no R${r.round}!`);
+        }
+        if (won === true && r.method && r.method.startsWith('Submission')) {
+          await this.notifService.add('headline', 'Finalização!', `${fighter?.name || 'Atleta'} finalizou ${opponentName} no R${r.round}!`);
+        }
       }
     }
 

@@ -42,7 +42,9 @@ export class SimulationEngine {
   // evento simulado num fast-forward levava o relógio real — e "todo mundo lutava
   // no mesmo dia". O chamador (WorldService) passa absWeekToDate(semana).
   static async simulateFight(fighterA, fighterB, isBigEvent = false, cornerHooks = null, gamePlanKey = 'balanced', dateISO = null) {
-    const maxRounds = 5;
+    // Formato MMA: lutas normais são 3 rounds; eventos grandes (tier 1 —
+    // main events e títulos) vão a 5. Antes era 5 fixo pra todo mundo.
+    const maxRounds = isBigEvent ? 5 : 3;
     const rounds = [];
     let totalScoreA = 0, totalScoreB = 0;
 
@@ -60,6 +62,7 @@ export class SimulationEngine {
 
     const staminaA = 100, staminaB = 100;
     let winner = null, loser = null;
+    let isDraw = false;
     let finishMethod = null, finishRound = 0;
     let cornerInstruction = 'balanced';
     let staminaDebtA = 0;
@@ -90,17 +93,26 @@ export class SimulationEngine {
       stats.subAttemptsA += roundStats.subAttemptsA;
       stats.subAttemptsB += roundStats.subAttemptsB;
 
-      // Score the round (10-9, 10-8, etc.)
+      // 10-point must: quem vence o round leva 10, o outro leva 9 (round
+      // normal), 8 (dominação) ou 7 (atropelo raro). 10-10 existe mas é
+      // raríssimo — juiz de MMA é instruído a escolher um vencedor. A versão
+      // anterior só testava diff positivo (B era incapaz de VENCER um round
+      // no cartão) e o knockdown rebaixava o 10 do vencedor, gerando 9-9.
+      // Agora o knockdown pesa na DECISÃO do round, como um juiz faria.
       const diff = perfA.score - perfB.score;
-      let scoreA = 10, scoreB = 10;
-      if (diff > 15) { scoreA = 10; scoreB = 8; }      // dominant round
-      else if (diff > 8) { scoreA = 10; scoreB = 9; }    // clear round
-      else if (diff > 3) { scoreA = 10; scoreB = 9; }    // close round
-      else { scoreA = 10; scoreB = 10; }                  // even round
-
-      // Adjust scores for knockdowns
-      if (roundStats.knockdownsA > 0) scoreB = Math.max(7, scoreB - 1);
-      if (roundStats.knockdownsB > 0) scoreA = Math.max(7, scoreA - 1);
+      const kdSwing = (roundStats.knockdownsA - roundStats.knockdownsB) * 12;
+      const effDiff = diff + kdSwing;
+      const margin = Math.abs(effDiff);
+      // Thresholds calibrados na distribuição real de margens da simulação
+      // (mediana ~23, p90 ~53, p99 ~73): 10-8 em ~10% dos rounds, 10-7 ~1%.
+      let loseScore;
+      if (margin > 75) loseScore = 7;                       // atropelo histórico
+      else if (margin > 52) loseScore = 8;                  // round dominante
+      else if (margin > 1.5) loseScore = 9;                 // round claro/apertado
+      else loseScore = Math.random() < 0.05 ? 10 : 9;       // quase-empate: 10-10 raro
+      let scoreA, scoreB;
+      if (effDiff >= 0) { scoreA = 10; scoreB = loseScore; }
+      else { scoreB = 10; scoreA = loseScore; }
 
       // Track control time (simplified: based on takedowns)
       stats.controlTimeA += roundStats.takedownsA * 30; // 30 sec per takedown
@@ -129,6 +141,7 @@ export class SimulationEngine {
           round: r,
           scoreA: finish.winner.id === fighterA.id ? scoreA : scoreB,
           scoreB: finish.winner.id === fighterA.id ? scoreB : scoreA,
+          margin,
           ...roundStats,
           finished: true,
           finishMethod: finish.method,
@@ -140,6 +153,7 @@ export class SimulationEngine {
       rounds.push({
         round: r,
         scoreA, scoreB,
+        margin,
         ...roundStats,
         finished: false,
         roundLog,
@@ -149,27 +163,71 @@ export class SimulationEngine {
       staminaDebtA += (cornerModA.fatigueMod - 1) * 15;
 
       if (cornerHooks?.onRoundEnd && r < maxRounds) {
+        // Cartões oficiais parciais (10-point must acumulado) — é isto que o
+        // córner de verdade sabe entre rounds, não a "performance bruta".
+        const cardA = rounds.reduce((s, rd) => s + rd.scoreA, 0);
+        const cardB = rounds.reduce((s, rd) => s + rd.scoreB, 0);
         const chosen = await cornerHooks.onRoundEnd({
           round: r,
           roundResult: rounds[rounds.length - 1],
           totalScoreA: Math.round(totalScoreA),
           totalScoreB: Math.round(totalScoreB),
+          cardA,
+          cardB,
         });
         if (chosen && CORNER_INSTRUCTIONS[chosen]) cornerInstruction = chosen;
       }
     }
 
-    // If no finish, determine winner by decision
+    // Sem finish → decisão dos juízes, computada DOS CARTÕES (10-point must).
+    // A versão anterior somava performance bruta — o jogador via os rounds
+    // no placar e o veredito podia contradizê-los.
+    let scorecards = null;
     if (!winner) {
-      const totalDiff = totalScoreA - totalScoreB;
-      if (Math.abs(totalDiff) < 5) {
-        winner = Math.random() < 0.5 ? fighterA : fighterB;
-        finishMethod = 'Decision (Split)';
+      // 3 juízes: cada um pontua os rounds. Em round apertado (margin <= 4)
+      // um juiz pode ter visto o round pro outro lado.
+      scorecards = [0, 1, 2].map(() => {
+        let a = 0, b = 0;
+        for (const rd of rounds) {
+          let sA = rd.scoreA, sB = rd.scoreB;
+          if ((rd.margin ?? 99) <= 6 && sA !== sB && Math.random() < 0.15) {
+            const t = sA; sA = sB; sB = t; // divergência do juiz
+          }
+          a += sA; b += sB;
+        }
+        return { a, b };
+      });
+
+      const votesA = scorecards.filter(j => j.a > j.b).length;
+      const votesB = scorecards.filter(j => j.b > j.a).length;
+      const evenCards = 3 - votesA - votesB;
+
+      // Regra real do MMA: só vence quem tem MAIORIA (2 de 3 juízes). A
+      // versão anterior declarava vencedor sempre que votesA !== votesB —
+      // 1 voto a 0 (com 2 cartões empatados) já bastava, tornando empate
+      // matematicamente impossível mesmo com fighter.record.draws existindo
+      // no modelo e sendo exibido em todas as telas (sempre 0).
+      if (votesA >= 2 || votesB >= 2) {
+        const aWins = votesA >= 2;
+        winner = aWins ? fighterA : fighterB;
+        loser = winner === fighterA ? fighterB : fighterA;
+        const winVotes = aWins ? votesA : votesB;
+        finishMethod = winVotes === 3
+          ? 'Decision (Unanimous)'
+          : evenCards === 1
+            ? 'Decision (Majority)'
+            : 'Decision (Split)';
       } else {
-        winner = totalDiff > 0 ? fighterA : fighterB;
-        finishMethod = 'Decision (Unanimous)';
+        // Nenhum lado tem maioria — empate. Sub-tipo segue a nomenclatura
+        // oficial: unânime (3 cartões empatados), majoritário (1 juiz viu
+        // um vencedor, 2 empataram) ou dividido (1 pra cada lado + 1 empatado).
+        isDraw = true;
+        finishMethod = evenCards === 3
+          ? 'Decision (Draw)'
+          : evenCards === 2
+            ? 'Decision (Majority Draw)'
+            : 'Decision (Split Draw)';
       }
-      loser = winner === fighterA ? fighterB : fighterA;
       finishRound = maxRounds;
     }
 
@@ -179,10 +237,11 @@ export class SimulationEngine {
       fighterBId: fighterB.id,
       fighterAName: fighterA.name,
       fighterBName: fighterB.name,
-      winnerId: winner.id,
-      winnerName: winner.name,
-      loserId: loser.id,
-      loserName: loser.name,
+      winnerId: isDraw ? null : winner.id,
+      winnerName: isDraw ? null : winner.name,
+      loserId: isDraw ? null : loser.id,
+      loserName: isDraw ? null : loser.name,
+      isDraw,
       method: finishMethod,
       round: finishRound,
       eventId: null,
@@ -191,19 +250,28 @@ export class SimulationEngine {
       rounds,
       totalScoreA: Math.round(totalScoreA),
       totalScoreB: Math.round(totalScoreB),
+      scorecards, // [{a,b} x3] em decisões; null em finish
     };
 
-    this._updateFighter(winner, loser, true, { method: finishMethod }, finishRound, dateISO);
-    this._updateFighter(loser, winner, false, { method: finishMethod }, finishRound, dateISO);
+    if (isDraw) {
+      this._updateFighter(fighterA, fighterB, 'draw', { method: finishMethod }, finishRound, dateISO);
+      this._updateFighter(fighterB, fighterA, 'draw', { method: finishMethod }, finishRound, dateISO);
+      this._updatePopularity(fighterA, fighterB, { method: finishMethod }, 'draw');
+      this._updatePopularity(fighterB, fighterA, { method: finishMethod }, 'draw');
+      fighterA.applyPostFightEffects();
+      fighterB.applyPostFightEffects();
+      // Empate nunca é decidido por nocaute/finalização — sem dano acumulado (E2).
+    } else {
+      this._updateFighter(winner, loser, 'win', { method: finishMethod }, finishRound, dateISO);
+      this._updateFighter(loser, winner, 'loss', { method: finishMethod }, finishRound, dateISO);
+      this._updatePopularity(winner, loser, { method: finishMethod }, 'win');
+      this._updatePopularity(loser, winner, { method: finishMethod }, 'loss');
+      winner.applyPostFightEffects();
+      loser.applyPostFightEffects();
 
-    // Post-fight effects
-    this._updatePopularity(winner, loser, { method: finishMethod }, true);
-    this._updatePopularity(loser, winner, { method: finishMethod }, false);
-    winner.applyPostFightEffects();
-    loser.applyPostFightEffects();
-
-    // E2: dano acumulado — cada derrota por KO/TKO raspa chin e durability permanentemente
-    this._applyAccumulatedDamage(winner, loser, result);
+      // E2: dano acumulado — cada derrota por KO/TKO raspa chin e durability permanentemente
+      this._applyAccumulatedDamage(winner, loser, result);
+    }
 
     return result;
   }
@@ -477,10 +545,14 @@ export class SimulationEngine {
     return advantage;
   }
 
-  static _updateFighter(fighter, opponent, won, method, round, dateISO = null) {
-    if (won) {
+  // `outcome`: 'win' | 'loss' | 'draw'
+  static _updateFighter(fighter, opponent, outcome, method, round, dateISO = null) {
+    if (outcome === 'win') {
       fighter.record.wins++;
       fighter.applyMoraleChange(10);
+    } else if (outcome === 'draw') {
+      fighter.record.draws++;
+      fighter.applyMoraleChange(-2); // ninguém comemora um empate, mas não é derrota
     } else {
       fighter.record.losses++;
       fighter.applyMoraleChange(-12);
@@ -498,11 +570,13 @@ export class SimulationEngine {
       opponentRating: opponent.overallRating,
       // G3: OVR do lutador no momento da luta para gráfico de carreira
       fighterRating: fighter.overallRating,
-      result: won ? 'W' : 'L',
+      result: outcome === 'win' ? 'W' : outcome === 'draw' ? 'D' : 'L',
       method: method.method,
       round,
       date: dateISO || new Date().toISOString(),
-      won,
+      // null (não false) — um empate não deve quebrar/contar como derrota
+      // em nenhuma lógica que faça `=== false` em vez de checar falsy.
+      won: outcome === 'win' ? true : outcome === 'draw' ? null : false,
     });
 
     if (fighter.fights.length > 50) {
@@ -510,14 +584,17 @@ export class SimulationEngine {
     }
   }
 
-  static _updatePopularity(fighter, opponent, method, won) {
+  // `outcome`: 'win' | 'loss' | 'draw'
+  static _updatePopularity(fighter, opponent, method, outcome) {
     let change = 0;
-    if (won) {
+    if (outcome === 'win') {
       change = 2 + Math.floor(Math.random() * 4);
       if (method.method === 'KO' || method.method === 'Submission') change += 4;
       if (method.method === 'TKO') change += 2;
       if (opponent.overallRating >= 70) change += 5;
       if (opponent.overallRating >= 80) change += 5;
+    } else if (outcome === 'draw') {
+      change = Math.random() < 0.5 ? 0 : -1; // quase neutro
     } else {
       change = -1 - Math.floor(Math.random() * 3);
       if (opponent.overallRating >= 70) change = Math.max(change, -2);

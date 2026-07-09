@@ -386,7 +386,7 @@ export class DashboardView {
             <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border);cursor:pointer" data-event-click="${e.id}">
               <div>
                 <span class="text-sm font-bold">${e.name}</span>
-                ${main ? `<span class="text-xs text-muted ml-2">${main.winnerName} venceu por ${main.method}</span>` : ''}
+                ${main ? `<span class="text-xs text-muted ml-2">${main.isDraw ? `Empate (${main.method})` : `${main.winnerName} venceu por ${main.method}`}</span>` : ''}
               </div>
               <span class="text-xs text-muted">ver card →</span>
             </div>

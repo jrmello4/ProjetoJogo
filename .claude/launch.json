@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "mma-manager",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8341"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server.js", "8341"],
       "port": 8341
     }
   ]

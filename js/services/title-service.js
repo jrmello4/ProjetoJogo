@@ -161,11 +161,13 @@ export class TitleService {
   }
 
   // Já perdeu para o campeão atual nas últimas lutas? Vai para o fim da fila.
+  // `f.won === false` (não `!f.won`) — um empate (`won: null`) não é derrota;
+  // não deve punir o desafiante na fila do cinturão.
   _recentlyLostTo(fighter, championId) {
     if (!championId) return false;
     return fighter.fights
       .slice(0, TITLE_CONFIG.REMATCH_BLOCK_FIGHTS)
-      .some(f => f.opponentId === championId && !f.won);
+      .some(f => f.opponentId === championId && f.won === false);
   }
 
   // O desafiante mandatório: o mais bem ranqueado que esteja livre e que

@@ -21,7 +21,7 @@ export class ContractService {
   }
 
   // Gera propostas de contrato quando o lutador atinge os gates de tier
-  async generateOffers(fighter, absWeekNow) {
+  async generateOffers(fighter, absWeekNow, gym) {
     if (fighter.promotionContract?.status === 'active') return; // já tem contrato
 
     const tier = this._currentTier(fighter);
@@ -32,7 +32,7 @@ export class ContractService {
     const gate = OFFER_CONFIG.TIER_GATES[nextTier];
     if (!gate) return;
 
-    const eligible = this._checkGate(fighter, nextTier, gate);
+    const eligible = this._checkGate(fighter, nextTier, gate, gym?.reputation || 50);
     if (!eligible) return;
 
     // Buscar promoções do tier alvo
@@ -260,10 +260,9 @@ export class ContractService {
     return 3;
   }
 
-  _checkGate(fighter, targetTier, gate) {
+  _checkGate(fighter, targetTier, gate, gymRep) {
     const wins = fighter.record?.wins || 0;
     const pop = fighter.popularity || 0;
-    const gymRep = 50; // placeholder — será substituído por gym.reputation no Épico A
 
     const meetsWins = wins >= gate.wins;
     const meetsPop = pop >= gate.popularity;

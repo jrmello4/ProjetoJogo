@@ -68,7 +68,7 @@ export class GameController {
     this.titleService = new TitleService(this.db, this.fighterCtrl, this.notifService);
     this.scoutingService = new ScoutingService(this.db, this.notifService);
     this.contractService = new ContractService(this.db, this.fighterCtrl, this.notifService);
-    this.retentionService = new RetentionService(this.db, this.fighterCtrl, this.notifService);
+    this.retentionService = new RetentionService(this.db, this.fighterCtrl, this.notifService, this.titleService);
     this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.scoutingService, this.contractService);
     this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.contractService);
     this.rivalGymService = new RivalGymService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.retentionService);
@@ -309,7 +309,7 @@ export class GameController {
     // Épico B: geração de propostas de contrato para atletas elegíveis
     for (const fighter of team) {
       if (fighter.status !== 'gym' && fighter.status !== 'roster') continue;
-      await this.contractService.generateOffers(fighter, now);
+      await this.contractService.generateOffers(fighter, now, gym);
     }
 
     const economy = this._applyWeeklyEconomy(gym, team, now);

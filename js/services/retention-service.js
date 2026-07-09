@@ -12,10 +12,11 @@ import { RIVAL_GYM_CONFIG, GYM_CONFIG, EXPECTATION_CONFIG } from '../config/game
 const APPROACH_DEADLINE_WEEKS = 2;
 
 export class RetentionService {
-  constructor(db, fighterCtrl, notifService) {
+  constructor(db, fighterCtrl, notifService, titleService) {
     this.db = db;
     this.fighterCtrl = fighterCtrl;
     this.notifService = notifService;
+    this.titleService = titleService;
   }
 
   // ===== Sondagem =====
@@ -263,8 +264,11 @@ export class RetentionService {
     const stayed = Math.random() < finalChance;
 
     if (!stayed) {
-      // Atleta sai
-      const belts = []; // placeholder — titleService.beltsOf seria chamado aqui
+      // Atleta sai — verificar se possui cinturões
+      const belts = this.titleService ? await this.titleService.beltsOf(fighter.id) : [];
+      const beltMsg = belts.length > 0
+        ? ` ${belts.map(b => `${b.promotionShort} (${b.weightClass})`).join(', ')} — o cinturão foi perdido.`
+        : '';
       // F3: registra a passagem pela sua academia — arma o reencontro futuro.
       if (fighter.gymId && !fighter.previousGymIds.includes(fighter.gymId)) {
         fighter.previousGymIds.push(fighter.gymId);
@@ -275,8 +279,8 @@ export class RetentionService {
 
       this.notifService.add(
         'warning',
-        '💔 Atleta Perdido',
-        `${fighter.name} não resistiu à proposta da ${approach.rivalGymName} e deixou a academia.`
+        belts.length > 0 ? '👑 Campeão Perdido' : '💔 Atleta Perdido',
+        `${fighter.name} não resistiu à proposta da ${approach.rivalGymName} e deixou a academia.${beltMsg}`
       );
     } else {
       // Atleta fica

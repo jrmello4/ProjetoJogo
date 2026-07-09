@@ -24,7 +24,7 @@ export class HallOfFame {
     };
   }
 
-  static induct(fighter) {
+  static induct(fighter, inductionDateISO = null) {
     const finishes = (fighter.fights || []).filter(f => f.method && !f.method.startsWith('Decision'));
     const decisions = (fighter.fights || []).filter(f => f.method && f.method.startsWith('Decision'));
     const kos = finishes.filter(f => f.method === 'KO' || f.method === 'TKO');
@@ -51,7 +51,7 @@ export class HallOfFame {
       totalFights: fighter.totalFights || 0,
       peakRating: fighter.overallRating,
       popularity: fighter.popularity,
-      inductionDate: new Date().toISOString(),
+      inductionDate: inductionDateISO || new Date().toISOString(),
       achievements: this._getAchievements(fighter),
 
       // G5: estatísticas enriquecidas

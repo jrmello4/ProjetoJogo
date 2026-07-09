@@ -74,7 +74,7 @@ export class WorldService {
     }
 
     await this._refillFreeAgents();
-    await this._processYearEnd(absWeekNow);
+    await this._processYearEnd(absWeekNow, startedAt);
     // G1: verificar cinturões interinos (toda semana)
     await this._checkInterimTitles(absWeekNow, promotions);
 
@@ -193,7 +193,8 @@ export class WorldService {
       // O plano de jogo é do jogador. A IA luta equilibrada.
       const gamePlan = fight.booking?.gamePlan || 'balanced';
 
-      const result = await SimulationEngine.simulateFight(fighterA, fighterB, promo.tier === 1, hooks, gamePlan);
+      const fightDateISO = absWeekToDate(absWeekNow, startedAt).toISOString();
+      const result = await SimulationEngine.simulateFight(fighterA, fighterB, promo.tier === 1, hooks, gamePlan, fightDateISO);
       result.eventId = eventId;
       result.card = fight.card;
       result.isTitleFight = !!fight.titleWeightClass;
@@ -510,8 +511,9 @@ export class WorldService {
     }
   }
   // Virada de ano (semana 52): aposentadorias e nova safra de prospectos
-  async _processYearEnd(absWeekNow) {
+  async _processYearEnd(absWeekNow, startedAt = null) {
     if (absWeekNow % 52 !== 0) return;
+    const inGameNowISO = absWeekToDate(absWeekNow, startedAt).toISOString();
 
     const all = await this.fighterCtrl.getAllFighters();
     for (const f of all) {
@@ -539,7 +541,7 @@ export class WorldService {
         if (eligibility.eligible) {
           const existing = await this.db.get('hallOfFame', f.id);
           if (!existing) {
-            const entry = HallOfFame.induct(f);
+            const entry = HallOfFame.induct(f, inGameNowISO);
             entry.id = f.id;
             await this.db.put('hallOfFame', entry);
           }
@@ -571,6 +573,9 @@ export class WorldService {
       const weightClass = CORE_WEIGHT_CLASSES[Math.floor(Math.random() * CORE_WEIGHT_CLASSES.length)];
       const prospect = DataGenerator.generateProspect(weightClass);
       prospect.id = generateId();
+      // Data-no-jogo de entrada no mundo — senão toda safra "estreia" no mesmo
+      // dia real do fast-forward.
+      prospect.createdAt = inGameNowISO;
       prospects.push(prospect);
     }
 

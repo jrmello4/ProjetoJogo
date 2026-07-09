@@ -38,7 +38,10 @@ export class SimulationEngine {
   // Sem cornerHooks, o comportamento é idêntico ao automático de sempre.
   // gamePlanKey: escolhido antes da luta, vale por todos os rounds; a
   // instrução de córner ajusta por cima, round a round.
-  static async simulateFight(fighterA, fighterB, isBigEvent = false, cornerHooks = null, gamePlanKey = 'balanced') {
+  // `dateISO`: data-no-jogo da luta (derivada da semana atual). Sem ela, todo
+  // evento simulado num fast-forward levava o relógio real — e "todo mundo lutava
+  // no mesmo dia". O chamador (WorldService) passa absWeekToDate(semana).
+  static async simulateFight(fighterA, fighterB, isBigEvent = false, cornerHooks = null, gamePlanKey = 'balanced', dateISO = null) {
     const maxRounds = 5;
     const rounds = [];
     let totalScoreA = 0, totalScoreB = 0;
@@ -172,15 +175,15 @@ export class SimulationEngine {
       method: finishMethod,
       round: finishRound,
       eventId: null,
-      date: new Date().toISOString(),
+      date: dateISO || new Date().toISOString(),
       stats,
       rounds,
       totalScoreA: Math.round(totalScoreA),
       totalScoreB: Math.round(totalScoreB),
     };
 
-    this._updateFighter(winner, loser, true, { method: finishMethod }, finishRound);
-    this._updateFighter(loser, winner, false, { method: finishMethod }, finishRound);
+    this._updateFighter(winner, loser, true, { method: finishMethod }, finishRound, dateISO);
+    this._updateFighter(loser, winner, false, { method: finishMethod }, finishRound, dateISO);
 
     // Post-fight effects
     this._updatePopularity(winner, loser, { method: finishMethod }, true);
@@ -463,7 +466,7 @@ export class SimulationEngine {
     return advantage;
   }
 
-  static _updateFighter(fighter, opponent, won, method, round) {
+  static _updateFighter(fighter, opponent, won, method, round, dateISO = null) {
     if (won) {
       fighter.record.wins++;
       fighter.applyMoraleChange(10);
@@ -487,7 +490,7 @@ export class SimulationEngine {
       result: won ? 'W' : 'L',
       method: method.method,
       round,
-      date: new Date().toISOString(),
+      date: dateISO || new Date().toISOString(),
       won,
     });
 

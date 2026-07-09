@@ -39,6 +39,9 @@ export class FightOffer {
     // Plano de jogo escolhido durante o camp. Vale por toda a luta.
     this.gamePlan = data.gamePlan || 'balanced';
 
+    // Épico F4: o reencontro — adversário foi da academia
+    this.isReencounter = data.isReencounter || false;
+
     this.createdAtAbsWeek = data.createdAtAbsWeek ?? 1;
     this.createdAt = data.createdAt || new Date().toISOString();
   }

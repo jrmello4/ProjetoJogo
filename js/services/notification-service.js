@@ -10,6 +10,8 @@ const TYPE_ICONS = {
   info: 'ℹ️',
   warning: '⚠️',
   success: '✅',
+  headline: '📰',     // Épico F3: manchetes estilo FM
+  expectation: '💭',  // Épico F2: expectativas de atletas
 };
 
 export class NotificationService {

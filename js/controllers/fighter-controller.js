@@ -53,6 +53,10 @@ export class FighterController {
     const fighter = await this.getFighter(fighterId);
     if (!fighter) return false;
 
+    // Épico F4: registrar academia anterior antes de soltar
+    if (fighter.gymId && !fighter.previousGymIds.includes(fighter.gymId)) {
+      fighter.previousGymIds.push(fighter.gymId);
+    }
     fighter.gymId = null;
     fighter.status = 'free';
 

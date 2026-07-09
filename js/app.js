@@ -25,7 +25,8 @@ import { ThreeArena } from './three-arena.js';
 import { ThreeBackground } from './three-background.js';
 import { motion } from './motion/motion-engine.js';
 import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, absWeekToLabel, GYM_CONFIG } from './config/game-config.js';
-import { getWeightClassName, formatCurrency } from './utils/helpers.js';
+import { getWeightClassName, formatCurrency, getAdjacentWeightClasses } from './utils/helpers.js';
+import { CAMP_CONFIG, absWeek } from './config/game-config.js';
 
 class App {
   constructor() {
@@ -35,7 +36,6 @@ class App {
     this.marketSearch = '';
     this.previousView = 'dashboard';
     this.rivalryService = null;
-    this.trainingState = { intensity: null, spec: null };
     this.seasonService = new SeasonService(this.game.db);
     this.notificationService = new NotificationService(this.game.db);
     this.saveService = new SaveService(this.game.db);
@@ -750,111 +750,115 @@ class App {
         this.navigateTo(this.previousView);
       });
     });
+
+    // Épico E1: mudança de divisão de peso
+    document.querySelectorAll('.change-weight-class').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const dir = btn.dataset.dir;
+        const fId = btn.dataset.fighter;
+        const f = await this.game.fighterCtrl.getFighter(fId);
+        if (!f) return;
+
+        const adj = getAdjacentWeightClasses(f.weightClass);
+        const newWeightClass = dir === 'up' ? adj.up : adj.down;
+        if (!newWeightClass) return;
+
+        const gym = await this.game.getGym();
+        const cost = 5000;
+        if (gym.cash < cost) {
+          this.notificationService.add('warning', 'Divisão', `Saldo insuficiente. Mudança custa ${formatCurrency(cost)}.`);
+          return;
+        }
+
+        // Efeitos da mudança na divisão
+        const oldClass = f.weightClass;
+        f.weightClass = newWeightClass;
+
+        // Ajustes de atributos por mudança de divisão
+        if (dir === 'up') {
+          // Subir = enfrentar oponentes menores: perde power/strength, ganha speed/cardio
+          f.attributes.power = Math.max(1, (f.attributes.power || 50) - 3);
+          f.attributes.strength = Math.max(1, (f.attributes.strength || 50) - 2);
+          f.attributes.speed = Math.min(99, (f.attributes.speed || 50) + 2);
+          f.attributes.cardio = Math.min(99, (f.attributes.cardio || 50) + 1);
+        } else {
+          // Descer = enfrentar oponentes maiores: ganha power/strength, perde speed/cardio
+          f.attributes.power = Math.min(99, (f.attributes.power || 50) + 2);
+          f.attributes.strength = Math.min(99, (f.attributes.strength || 50) + 3);
+          f.attributes.speed = Math.max(1, (f.attributes.speed || 50) - 2);
+          f.attributes.cardio = Math.max(1, (f.attributes.cardio || 50) - 2);
+        }
+
+        const state = await this.seasonService.getState();
+        const week = absWeek(state);
+        gym.addTransaction(week, `Mudança divisão: ${f.name} (${oldClass} → ${newWeightClass})`, -cost);
+        await this.game.fighterCtrl.updateFighter(f);
+        await this.game.updateGym(gym);
+
+        this.notificationService.add('success', 'Divisão Alterada', `${f.name} mudou de ${oldClass} para ${newWeightClass}.`);
+        this.showFighterProfile(fighterId);
+      });
+    });
   }
 
-  // ===== Training Camp =====
+  // ===== Training Camp (Épico D) =====
   async renderTrainingCamp() {
     const team = await this.game.getTeam();
-    const html = TrainingCampView.render(team);
+    const bookings = await this.game.offerService.getAccepted();
+    const state = await this.seasonService.getState();
+    const now = (state.year - 1) * 52 + state.week;
+    const gym = await this.game.getGym();
+    const html = TrainingCampView.render(team, bookings, now, gym);
     await LayoutView.render(html);
-    this._bindTrainingCamp(team);
+    this._bindTrainingCamp(team, bookings, now, gym);
   }
 
-  _bindTrainingCamp(team) {
-    const select = document.getElementById('trainingFighterSelect');
-    if (!select) return;
+  _bindTrainingCamp(team, bookings, now, gym) {
+    // Salvar configuração de camp
+    document.querySelectorAll('.camp-save').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const fighterId = btn.dataset.fighter;
+        const fighter = await this.game.fighterCtrl.getFighter(fighterId);
+        if (!fighter) return;
 
-    select.addEventListener('change', () => {
-      const options = document.getElementById('trainingOptions');
-      if (select.value) {
-        options.style.display = 'block';
-      } else {
-        options.style.display = 'none';
-      }
-    });
+        const intensity = document.querySelector(`.camp-intensity[data-fighter="${fighterId}"]`)?.value;
+        const spec = document.querySelector(`.camp-spec[data-fighter="${fighterId}"]`)?.value;
+        const sparringPartnerId = document.querySelector(`.camp-sparring[data-fighter="${fighterId}"]`)?.value || null;
 
-    document.querySelectorAll('.training-intensity').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.trainingState.intensity = btn.dataset.intensity;
-        document.querySelectorAll('.training-intensity').forEach(b => {
-          b.classList.remove('btn-primary');
-          b.classList.add('btn-secondary');
-        });
-        btn.classList.remove('btn-secondary');
-        btn.classList.add('btn-primary');
-        this._checkTrainingReady();
+        if (!intensity) {
+          this.notificationService.add('warning', 'Camp', 'Selecione uma intensidade para o camp.');
+          return;
+        }
+
+        const booking = bookings.find(b => b.fighterId === fighterId);
+        if (intensity === 'intense' && !booking) {
+          this.notificationService.add('warning', 'Camp', 'Treino intenso só é permitido com luta marcada.');
+          return;
+        }
+
+        TrainingCamp.configureCamp(fighter, intensity, spec || 'striking', sparringPartnerId);
+        await this.game.fighterCtrl.updateFighter(fighter);
+
+        const cost = CAMP_CONFIG.WEEKLY_COST[intensity] || 0;
+        this.notificationService.add('success', 'Camp Configurado', `${fighter.name} iniciou camp ${intensity} ($${cost.toLocaleString()}/sem).`);
+        this.renderTrainingCamp();
       });
     });
 
-    document.querySelectorAll('.training-spec').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.trainingState.spec = btn.dataset.spec;
-        document.querySelectorAll('.training-spec').forEach(b => {
-          b.classList.remove('btn-primary');
-          b.classList.add('btn-secondary');
-        });
-        btn.classList.remove('btn-secondary');
-        btn.classList.add('btn-primary');
-        this._checkTrainingReady();
+    // Cancelar camp
+    document.querySelectorAll('.camp-cancel').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const fighterId = btn.dataset.fighter;
+        const fighter = await this.game.fighterCtrl.getFighter(fighterId);
+        if (!fighter) return;
+
+        TrainingCamp.cancelCamp(fighter);
+        await this.game.fighterCtrl.updateFighter(fighter);
+
+        this.notificationService.add('info', 'Camp Cancelado', `Camp de ${fighter.name} foi cancelado.`);
+        this.renderTrainingCamp();
       });
     });
-
-    document.getElementById('startTrainingBtn')?.addEventListener('click', async () => {
-      const fighterId = select.value;
-      if (!fighterId || !this.trainingState.intensity || !this.trainingState.spec) return;
-
-      const fighter = await this.game.fighterCtrl.getFighter(fighterId);
-      if (!fighter) return;
-
-      // B3: Anti-exploit — cooldown semanal
-      const absWeekNow = this.game.state.absWeek;
-      if (fighter.lastTrainedAbsWeek === absWeekNow) {
-        alert('Este lutador já treinou esta semana. Espere a próxima semana.');
-        return;
-      }
-
-      // B3: Sem luta marcada, bloquear treino intenso
-      const hasFight = this.game.state.offers?.accepted?.some(o => o.fighterId === fighterId);
-      if (!hasFight && this.trainingState.intensity === 'heavy') {
-        alert('Treino pesado só é permitido quando o lutador tem uma luta marcada.');
-        return;
-      }
-
-      // B3: Cobrar custo do treino
-      const cost = GYM_CONFIG.WEEKLY_COACHING_PER_FIGHTER * 2;
-      const gym = this.game.state.gym;
-      if (gym.cash < cost) {
-        alert(`Saldo insuficiente. O treino custa ${formatCurrency(cost)}.`);
-        return;
-      }
-      gym.addTransaction(absWeekNow, `Treino: ${fighter.name}`, -cost);
-
-      const result = TrainingCamp.runCamp(fighter, this.trainingState.intensity, this.trainingState.spec, absWeekNow);
-      fighter.lastTrainedAbsWeek = absWeekNow;
-      await this.game.fighterCtrl.saveFighter(fighter);
-
-      const resultContent = document.getElementById('trainingResultContent');
-      resultContent.innerHTML = TrainingCampView.renderResult(result, fighter);
-      document.getElementById('trainingResult').style.display = 'block';
-
-      this.trainingState = { intensity: null, spec: null };
-      document.querySelectorAll('.training-intensity').forEach(b => {
-        b.classList.remove('btn-primary');
-        b.classList.add('btn-secondary');
-      });
-      document.querySelectorAll('.training-spec').forEach(b => {
-        b.classList.remove('btn-primary');
-        b.classList.add('btn-secondary');
-      });
-      document.getElementById('startTrainingBtn').disabled = true;
-    });
-  }
-
-  _checkTrainingReady() {
-    const btn = document.getElementById('startTrainingBtn');
-    if (btn) {
-      btn.disabled = !(this.trainingState.intensity && this.trainingState.spec);
-    }
   }
 
   // ===== Rankings =====
@@ -987,9 +991,34 @@ class App {
   async renderPressConference() {
     const team = await this.game.getTeam();
     const upcoming = await this.game.offerService.getAccepted();
-    const event = { name: upcoming[0] ? `Luta vs ${upcoming[0].opponentName}` : 'Próxima Luta' };
-    const fighterA = team[0] || { name: 'N/A', record: { wins: 0, losses: 0, draws: 0 } };
-    const fighterB = { name: upcoming[0]?.opponentName || 'Adversário', record: upcoming[0]?.opponentRecord || { wins: 0, losses: 0, draws: 0 } };
+
+    // F1: buscar a luta real do primeiro atleta com booking
+    const booking = upcoming.length > 0 ? upcoming[0] : null;
+    let fighterA = null;
+    let fighterB = null;
+    let event = null;
+
+    if (booking) {
+      fighterA = team.find(f => f.id === booking.fighterId) || team[0];
+      const oppData = await this.game.fighterCtrl.getFighter(booking.opponentId);
+      if (oppData) {
+        fighterB = oppData;
+      } else {
+        fighterB = { name: booking.opponentName, record: booking.opponentRecord || { wins: 0, losses: 0, draws: 0 } };
+      }
+      const promotions = await this.game.worldService.getPromotions();
+      const promo = promotions.find(p => p.id === booking.promotionId);
+      event = {
+        name: `${promo?.name || booking.promotionName || 'Evento'} — Luta principal`,
+        promotion: promo?.name || booking.promotionName || '',
+      };
+    } else {
+      // Fallback: sem luta marcada
+      event = { name: 'Nenhuma luta marcada', promotion: '' };
+      fighterA = { name: '—', record: { wins: 0, losses: 0, draws: 0 } };
+      fighterB = { name: '—', record: { wins: 0, losses: 0, draws: 0 } };
+    }
+
     const scenarios = PressConference.getScenarios();
     const html = PressConferenceView.render(scenarios, fighterA, fighterB, event);
     await LayoutView.render(html);
@@ -1012,7 +1041,7 @@ class App {
           document.getElementById('pressConferenceSummary').innerHTML = summary;
           document.getElementById('pressConferenceSummary').style.display = 'block';
           document.getElementById('pcSimulateBtn').style.display = 'none';
-          this.notificationService.add('success', 'Imprensa', 'Conferência de imprensa concluída!');
+          this.notificationService.add('success', 'Imprensa', `Conferência de imprensa de ${fighterA.name} concluída!`);
         }
       });
     });

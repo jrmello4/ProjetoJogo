@@ -2,7 +2,7 @@ import { FightOffer, OFFER_STATUS } from '../models/fight-offer.js';
 import { Fighter } from '../models/fighter.js';
 import { generateId, clamp } from '../utils/helpers.js';
 import { getWeightClassName } from '../utils/helpers.js';
-import { OFFER_CONFIG, NEGOTIATION_CONFIG, TITLE_CONFIG, TITLE_ROLE } from '../config/game-config.js';
+import { OFFER_CONFIG, NEGOTIATION_CONFIG, TITLE_CONFIG, TITLE_ROLE, GYM_CONFIG } from '../config/game-config.js';
 
 // Ciclo de vida das ofertas de luta: geração semanal pelas promoções,
 // expiração, aceite e recusa.
@@ -103,6 +103,17 @@ export class OfferService {
     return offer;
   }
 
+  // Épico D: cancela uma luta já aceita (ex: lesão no camp)
+  async cancelBooking(offerId) {
+    const data = await this.db.get('offers', offerId);
+    if (!data || data.status !== OFFER_STATUS.ACCEPTED) return null;
+
+    const offer = new FightOffer(data);
+    offer.status = OFFER_STATUS.CANCELLED;
+    await this.db.put('offers', offer);
+    return offer;
+  }
+
   async expireOld(absWeekNow) {
     const pending = await this.getPending();
     for (const offer of pending) {
@@ -156,6 +167,9 @@ export class OfferService {
       const opponent = await this._pickOpponent(promo.id, fighter, targetedOpponentIds, absWeekNow);
       if (!opponent) continue;
 
+      // Épico F4: verificar se o adversário já foi da academia do jogador
+      const isReencounter = (opponent.previousGymIds || []).includes(GYM_CONFIG.ID);
+
       const eventAbsWeek = this._nextEventWeek(promo, absWeekNow);
 
       // Épico B: usar bolsa do contrato se tiver contrato ativo
@@ -186,6 +200,7 @@ export class OfferService {
         winBonus,
         eventAbsWeek,
         expiresAbsWeek: absWeekNow + OFFER_CONFIG.EXPIRY_WEEKS,
+        isReencounter, // Épico F4
         createdAtAbsWeek: absWeekNow,
       });
 

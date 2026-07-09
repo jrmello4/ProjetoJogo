@@ -4,7 +4,7 @@
 > `TODO_REMAINING.md`, que descrevem o modo organização (pré-pivot) e afirmam
 > coisas que não são mais verdade.
 >
-> Última atualização: 08/07/2026
+> Última atualização: 08/07/2026 (revisão de alinhamento com o código)
 
 ---
 
@@ -40,39 +40,49 @@ médica pós-luta, simulação de período, academias rivais, patrocínios,
 **cinturões com desafiante mandatório**, e **névoa de guerra + scouting +
 plano de jogo**.
 
+**Bugs P0 resolvidos:** B1 (camp filtra por gymId) ✅, B2 (lesão não é mais
+permanente) ✅, B3 (anti-exploit parcial — cooldown, custo, bloqueio) ⚠️
+
+**Épicos completos:** B (contrato exclusivo com promoção) ✅, A (retenção
+com sondagem + resposta) ✅, C (atributos 8→24) ✅
+
 ---
 
 ## 1. P0 — Bugs (corrigir antes de qualquer feature nova)
 
-### B1. A aba Acampamento não lista nenhum atleta
-`js/views/training-camp.js:5` filtra `roster.filter(f => f.status === 'roster')`.
-No modo academia os atletas do jogador têm `status === 'gym'`. O `<select>`
-nasce vazio — a aba parece quebrada porque **está**.
+### B1. (RESOLVIDO) A aba Acampamento não listava atletas
+`js/views/training-camp.js:5` filtrar por `f.status === 'roster'`.
+No modo academia os atletas do jogador têm `status === 'gym'`. O `<select>` nascia vazio — a aba parecia quebrada porque **estava**.
 
-**Correção:** filtrar por `f.gymId === GYM_CONFIG.ID`.
+**Correção:** agora filtra por `f.gymId === GYM_CONFIG.ID`. ✅ Resolvido entre PRD 1.0 e o código atual.
 
-### B2. O Acampamento produz lesão PERMANENTE
-`js/controllers/training-camp.js:19` faz `fighter.status = 'injured'` mas
-**nunca cria o objeto `fighter.injury`** nem seta `availableFromAbsWeek`.
+### B2. (RESOLVIDO) O Acampamento produzia lesão PERMANENTE
+`js/controllers/training-camp.js:19` fazia `fighter.status = 'injured'` mas
+**nunca criava o objeto `fighter.injury'** nem setava `availableFromAbsWeek`.
 `WorldService._recoverInjuries()` começa com `if (!data.injury || ...) continue`
-→ o atleta nunca se recupera. Fica lesionado até o fim da carreira.
+→ o atleta nunca se recuperava. Ficava lesionado até o fim da carreira.
 
-**Correção:** `runCamp` deve produzir uma lesão no mesmo formato de
-`WorldService._rollInjury`: `{ untilAbsWeek, description, resumeStatus: fighter.status }`
-e `availableFromAbsWeek = untilAbsWeek`. E, se houver luta marcada, **cancelar
-a luta** (`booking.status = CANCELLED`) com notificação.
+**Correção:** agora cria objeto `injury` no mesmo formato de
+`WorldService._rollInjury`: `{ untilAbsWeek, description, resumeStatus }`
+e seta `availableFromAbsWeek`. ✅ Resolvido (sem cancelamento automático de booking — pendente para Épico D).
 
-### B3. O Acampamento é um exploit
-`app.js` chama `TrainingCamp.runCamp()` no clique do botão, sem custo, sem
-cooldown e sem consumir tempo. Dá para clicar 100 vezes e maximizar atributos.
+### B3. O Acampamento é um exploit (parcialmente mitigado)
 
-**Correção:** ver Épico D. O camp deixa de ser um botão e passa a ser uma
-configuração que roda dentro de `processWeek()`.
+Proteções já aplicadas no `app.js:800-850`:
+- **Cooldown semanal** (`fighter.lastTrainedAbsWeek === absWeekNow`) — impede spam
+- **Custo financeiro** (`GYM_CONFIG.WEEKLY_COACHING_PER_FIGHTER * 2`) — paga do caixa
+- **Treino pesado bloqueado sem luta marcada** — heavy exige booking ativo
 
-### B4. `models/contract.js` é código morto do modo organização
+Ainda pendente: o camp continua sendo um botão manual em vez de uma
+configuração que roda dentro de `processWeek()`. Ver Épico D.
+
+### B4. `models/contract.js` é principalmente código legado do modo organização
 `fighter.contract` só era setado por `FighterController.hireFighter()`, que
-não é mais chamado. **Decisão:** reaproveitar o arquivo como
-`PromotionContract` no Épico B, ou apagar. Não deixar como está.
+não é mais chamado. O campo `fighter.contract` ainda é inicializado em
+`fighter.js:52` para compatibilidade reversa de saves antigos, mas o novo
+sistema de contratos (Épico B) usa `fighter.promotionContract` diretamente.
+**Decisão:** manter como está (backward compat) ou remover o campo legado
+numa migração futura.
 
 ### B5. Docs desatualizados
 `ROADMAP_FUTURE.md` e `TODO_REMAINING.md` descrevem o modo organização e
@@ -80,7 +90,9 @@ afirmam que o Camp está "IMPLEMENTADO ✅". Já receberam banner de superado.
 
 ### B6. `PressConference` é órfã
 `app.js:renderPressConference()` renderiza usando `team[0]` e o primeiro
-booking, sem ligação real. Sem rota no menu. Ver Épico F.
+booking, sem ligação real. O menu lateral já tem link ("Coletiva" em
+`index.html:113`), mas a lógica não usa o evento/lutador corretos.
+Ver Épico F.
 
 **Critério de aceite dos P0:** nenhum atleta pode ficar permanentemente
 lesionado; a aba Acampamento lista os atletas; nenhum clique repetido concede
@@ -88,8 +100,12 @@ ganho ilimitado.
 
 ---
 
-## 2. Épico B — Contrato exclusivo com promoção  🡒 **fazer primeiro**
+## 2. Épico B — Contrato exclusivo com promoção
 
+> ✅ **IMPLEMENTADO.** `js/services/contract-service.js` gerencia propostas,
+> aceite, vigência, corte por derrotas e renovação. `OfferService.generateWeekly()`
+> respeita a exclusividade. Ver seções B4 e seção 9 sobre o estado atual.
+>
 > *"Não acho legal lutar no Pride e no Global só porque sou atleta nacional.
 > Deveria escolher lutar em apenas uma, de minha escolha, e melhor contrato."*
 
@@ -128,8 +144,9 @@ fighter.promotionContract = {
   status: 'active',        // 'active' | 'expired' | 'released' | 'terminated'
 };
 ```
-Propostas ficam em `gameState` doc `{ id: 'contractOffers', offers: [...] }` —
-**não** criar store novo, para não bumpar a versão do IndexedDB.
+Propostas ficam em `gameState` docs com chave `contract-offer-{fighterId}`,
+cada um com `{ id, fighterId, offers: [...], expiresAt }` — **não** criar
+store novo, para não bumpar a versão do IndexedDB.
 
 ### Mudanças
 | Arquivo | O que muda |
@@ -156,7 +173,12 @@ contrato (nada a derivar).
 
 ## 3. Épico A — Retenção: brigar para não perder o atleta
 
-> *"Eles simplesmente levam os meus atletas, sem uma oportunidade de tentar
+> ✅ **IMPLEMENTADO.** `js/services/retention-service.js` gerencia sondagens,
+> respostas (renegociar, bônus, promessa, deixar ir), resolução e recompra.
+> `RivalGymService.processWeek()` agora gera approaches em vez de transferir
+> direto. Prazo de resposta: `APPROACH_DEADLINE_WEEKS = 2` no código.
+>
+> > *"Eles simplesmente levam os meus atletas, sem uma oportunidade de tentar
 > trazer eles de volta, ou renegociar contrato."*
 
 ### Problema
@@ -212,6 +234,12 @@ Sondagens em `gameState` doc `{ id: 'retention', approaches: [...] }`.
 
 ## 4. Épico C — Atributos expandidos (8 → 24)
 
+> ✅ **IMPLEMENTADO.** `Fighter.expandAttributes()` gera os 24 atributos com
+> derivação + ruído gaussiano. `SimulationEngine._calcRoundPerformance()` e
+> `_genRoundStats()` leem todos os 24. `_checkRoundFinish()` usa `power`,
+> `submissionOffense/Defense`, `durability`. Scouting revela os expandidos
+> no nível 2+. Patch de migração: `expandedAttributes` em `GameController`.
+>
 > *"Gostaria de mais estatísticas para os lutadores, não apenas essas 8."*
 
 ### Princípio inegociável
@@ -373,30 +401,36 @@ dos épicos anteriores, acontece muita coisa.
 
 ---
 
-## 9. Ordem recomendada
+## 9. Estado atual e ordem recomendada
+
+### O que já foi implementado
+- **P0 B1, B2** — resolvidos (camp filtra por gymId, lesão não é mais permanente)
+- **P0 B3** — mitigado (cooldown, custo, heavy bloqueado sem luta), redesign completo pendente
+- **Épico B** — contratos exclusivos com promoção ✅
+- **Épico A** — retenção contra academias rivais ✅  
+- **Épico C** — atributos expandidos para 24 ✅
+
+### Próximos passos (ordem recomendada)
 
 ```
-P0 (bugs)  →  B (contrato exclusivo)  →  A (retenção)  →  C (atributos)
-           →  D (camp)  →  E (o corpo)  →  F (narrativa)  →  backlog
+Epic D (camp real)  →  P0 B3 (exploit final)  →  Epic E (o corpo)
+                     →  Epic F (narrativa)  →  backlog
 ```
 
-**Por quê nesta ordem:** B e A são as duas maiores frustrações relatadas e se
-encaixam (o contrato te dá alavancagem; a retenção te dá agência). C é a mais
-arriscada porque mexe na simulação e nos rankings — só depois que o loop
-estiver certo. D e E querem o espaço de atributos mais rico que C entrega.
-F precisa que tudo tenha acontecido para ter o que narrar.
+**Por quê nesta ordem:** O camp (D) é a maior reclamação restante e bloqueia
+o B3 completo. E (corpo) adiciona profundidade pós-luta e longevidade. F
+precisa que tudo tenha acontecido para ter o que narrar.
 
 ---
 
 ## 10. Decisões em aberto (precisam do dono do produto)
 
-1. **Contrato:** quantas lutas por contrato (3? 4?). Exclusividade total, ou
-   permitir co-promoção em casos raros?
-2. **Retenção:** quantas semanas de prazo para reagir a uma sondagem?
-3. **Atributos:** 24 é o número certo? Mostrar todos na ficha ou só por grupo?
+1. **Contrato:** ✅ **DECIDIDO** — 3 a 8 lutas (baseado em popularidade), exclusividade total, implementado.
+2. **Retenção:** `APPROACH_DEADLINE_WEEKS = 2` no código. Subir para 3?
+3. **Atributos:** ✅ **DECIDIDO** — 24 implementados, todos lidos na simulação.
 4. **Balanceamento pendente:** com $35.000 de caixa inicial, dissecar um
    adversário custa $12.000 (1.500 + 3.500 + 7.000). Está caro demais no
-   começo?
+   começo? (Ainda aberto)
 5. **Chance de título:** o piso atual é 2 vitórias na promoção + ser o
    desafiante mandatório. Com suspensões de 8–16 semanas, isso dá ~1 ano de
-   carreira. Rápido ou lento demais?
+   carreira. Rápido ou lento demais? (Ainda aberto)

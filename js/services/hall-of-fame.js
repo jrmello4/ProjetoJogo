@@ -1,3 +1,6 @@
+// Hall da Fama — G5 versão enriquecida com estatísticas de carreira.
+// Calcula elegibilidade com base em marcos (vitórias, OVR, ranking) e
+// gera um verbete de carreira completo no momento da indução.
 export class HallOfFame {
   static checkEligibility(fighter) {
     const reasons = [];
@@ -22,6 +25,22 @@ export class HallOfFame {
   }
 
   static induct(fighter) {
+    const finishes = (fighter.fights || []).filter(f => f.method && !f.method.startsWith('Decision'));
+    const decisions = (fighter.fights || []).filter(f => f.method && f.method.startsWith('Decision'));
+    const kos = finishes.filter(f => f.method === 'KO' || f.method === 'TKO');
+    const subs = finishes.filter(f => f.method === 'Submission');
+
+    // Maior streak da carreira
+    let maxStreak = 0;
+    let currentStreak = 0;
+    for (const f of (fighter.fights || [])) {
+      if (f.won) { currentStreak++; maxStreak = Math.max(maxStreak, currentStreak); }
+      else currentStreak = 0;
+    }
+
+    // Enriquecer com cinturões
+    const belts = fighter.beltsHeld || [];
+
     return {
       id: 'hof-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
       fighterId: fighter.id,
@@ -29,10 +48,27 @@ export class HallOfFame {
       nationality: fighter.nationality,
       weightClass: fighter.weightClass,
       record: { ...fighter.record },
+      totalFights: fighter.totalFights || 0,
       peakRating: fighter.overallRating,
       popularity: fighter.popularity,
       inductionDate: new Date().toISOString(),
       achievements: this._getAchievements(fighter),
+
+      // G5: estatísticas enriquecidas
+      careerStats: {
+        kos,
+        subs,
+        decisions,
+        finishes: finishes.length,
+        finishRate: fighter.totalFights > 0 ? Math.round((finishes.length / fighter.totalFights) * 100) : 0,
+        maxWinStreak: maxStreak,
+        titlesWon: fighter.titlesWon || 0,
+        belts,
+        careerEarnings: fighter.careerEarnings || 0,
+        fightNightBonuses: fighter.fightNightBonuses || 0,
+        performanceBonuses: fighter.performanceBonuses || 0,
+        ageAtInduction: fighter.age || 0,
+      },
     };
   }
 
@@ -49,7 +85,7 @@ export class HallOfFame {
 
     // Streak
     let streak = 0;
-    for (const f of fighter.fights) {
+    for (const f of (fighter.fights || [])) {
       if (f.won) streak++;
       else break;
     }
@@ -58,6 +94,10 @@ export class HallOfFame {
 
     // Champion status
     if (fighter.ranking === 1) achievements.push('Campeão da divisão');
+
+    // G5: bônus
+    if ((fighter.titlesWon || 0) >= 5) achievements.push('Pentacampeão');
+    if ((fighter.titlesWon || 0) >= 3) achievements.push('Tricampeão');
 
     return achievements;
   }

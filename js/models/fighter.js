@@ -39,10 +39,27 @@ export class Fighter {
     this.trainingFocus = data.trainingFocus || 'striking'; // foco individual de treino semanal
     this.availableFromAbsWeek = data.availableFromAbsWeek || 0; // suspensão médica pós-luta
     this.lastTrainedAbsWeek = data.lastTrainedAbsWeek || 0; // cooldown semanal do acampamento
+    this.lastFightAbsWeek = data.lastFightAbsWeek || 0; // Épico F2: última semana com luta
     this.promotionContract = data.promotionContract || null; // contrato exclusivo com promoção (Épico B)
     this.loyalty = data.loyalty ?? 50; // 0-100, Épico A — retenção
     this.purseShare = data.purseShare ?? 0.8; // fração da bolsa que fica com o atleta (1 - managerCut)
     this.promises = data.promises || []; // { kind, deadlineAbsWeek, madeAtAbsWeek, kept }
+
+    // Épico D: configuração do acampamento semanal (persistida, não botão manual)
+    this.campConfig = data.campConfig || null; // { intensity, spec, sparringPartnerId } ou null
+    this.campProcessedThisWeek = data.campProcessedThisWeek || false; // já foi processado no loop semanal
+
+    // Épico F2: expectativas dos atletas
+    this.expectation = data.expectation || null; // { kind: 'title_shot'|'move_up_tier'|'more_fights'|'better_pay', sinceAbsWeek, urgency: 1-3 }
+    this.lastExpectationCheck = data.lastExpectationCheck || 0;
+
+    // Épico F4: academias por onde passou (para detecção de reencontro)
+    this.previousGymIds = data.previousGymIds || [];
+
+    // G5: tracking de carreira
+    this.careerEarnings = data.careerEarnings || 0;
+    this.fightNightBonuses = data.fightNightBonuses || 0;
+    this.performanceBonuses = data.performanceBonuses || 0;
 
     // Cartel por promoção: { [promoId]: { wins, losses } }. Chance de título
     // exige vitórias DENTRO da promoção — cartel de outro circuito não conta.
@@ -227,9 +244,17 @@ export class Fighter {
   }
 
   evolve() {
+    const age = this.age || 30;
+
+    // E3: declínio por idade — após ~33 anos, o corpo começa a cair
+    if (age >= 33) {
+      this._applyAgeDecline(age);
+      return;
+    }
+
     const rate = Math.min(0.95, (this.hidden.evolution / 100) * (this.hidden.discipline / 100) * 1.3);
     const potentialGap = (this.hidden.potential - this.averageSkill) * 0.15;
-    const isYoung = (this.age || 30) < 30;
+    const isYoung = age < 30;
 
     for (const key of Object.keys(this.attributes)) {
       const growth = Math.random() < rate
@@ -246,6 +271,42 @@ export class Fighter {
       Math.round(this.attributes.fightIQ + (Math.random() * 2 + 0.5)),
       0, 99
     );
+  }
+
+  // Épico E3: declínio anual após ~33 anos
+  _applyAgeDecline(age) {
+    // A taxa de declínio aumenta com a idade
+    // 33-35: declínio leve, 36-38: moderado, 39+: acelerado
+    let declineRate;
+    if (age >= 40) declineRate = 0.7;
+    else if (age >= 37) declineRate = 0.5;
+    else if (age >= 35) declineRate = 0.3;
+    else declineRate = 0.15;
+
+    // determination retarda o declínio
+    const determinationFactor = 1 - (this.hidden?.determination || 50) / 300;
+    declineRate *= determinationFactor;
+
+    // Atributos físicos declinam mais que os técnicos
+    const physicalAttrs = ['power', 'speed', 'cardio', 'durability', 'recovery', 'strength', 'chin'];
+    const skillAttrs = ['boxing', 'kickboxing', 'muayThai', 'wrestling', 'bjj', 'footwork', 'headMovement',
+      'clinch', 'takedowns', 'takedownDefense', 'groundControl', 'submissionOffense', 'submissionDefense'];
+
+    for (const key of Object.keys(this.attributes)) {
+      let attrDecline = declineRate;
+      if (physicalAttrs.includes(key)) attrDecline *= 1.4;
+      if (skillAttrs.includes(key)) attrDecline *= 0.7;
+      if (key === 'fightIQ' || key === 'composure') attrDecline *= 0.3; // mente declina lentamente
+
+      const decay = Math.random() < 0.8
+        ? Math.random() * attrDecline * 2 + 1
+        : 0;
+
+      this.attributes[key] = clamp(
+        Math.round(this.attributes[key] - decay),
+        1, 99
+      );
+    }
   }
 
   recover() {

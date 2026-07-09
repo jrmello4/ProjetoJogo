@@ -1,5 +1,6 @@
 import { Gaussian } from '../utils/gaussian.js';
 import { CORNER_INSTRUCTIONS, GAME_PLANS, GAME_PLAN_EDGE } from '../config/game-config.js';
+import { clamp } from '../utils/helpers.js';
 
 export class SimulationEngine {
   // Styles make fights. O plano de jogo é lido contra o adversário REAL —
@@ -184,7 +185,30 @@ export class SimulationEngine {
     winner.applyPostFightEffects();
     loser.applyPostFightEffects();
 
+    // E2: dano acumulado — cada derrota por KO/TKO raspa chin e durability permanentemente
+    this._applyAccumulatedDamage(winner, loser, result);
+
     return result;
+  }
+
+  // Épico E2: derrota por KO/TKO causa dano permanente
+  static _applyAccumulatedDamage(winner, loser, result) {
+    const method = result.method;
+    if (!method || method.startsWith('Decision')) return;
+
+    // Quem perdeu por nocaute sofre dano
+    const loserPerf = loser.id === result.fighterAId
+      ? { score: result.totalScoreA }
+      : { score: result.totalScoreB };
+
+    if (method === 'KO' || method === 'TKO') {
+      const damage = method === 'KO'
+        ? Math.floor(Math.random() * 5) + 3  // 3-7 pontos
+        : Math.floor(Math.random() * 3) + 1; // 1-3 pontos
+
+      loser.attributes.chin = clamp(loser.attributes.chin - damage, 1, 99);
+      loser.attributes.durability = clamp(loser.attributes.durability - Math.floor(damage * 0.7), 1, 99);
+    }
   }
 
   static _calcRoundPerformance(fighter, opponent, isBigEvent, staminaFactor, cornerMod = null, plan = null, planEdge = 0) {

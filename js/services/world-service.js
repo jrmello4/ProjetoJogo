@@ -276,6 +276,7 @@ export class WorldService {
 
     gym.addTransaction(absWeekNow, `Comissão — ${fighter.name} (${promo.short})`, gymCut);
     gym.totalPurseEarnings += gymCut;
+    fighter.careerEarnings = (fighter.careerEarnings || 0) + totalPurse;
 
     if (won) {
       gym.wins++;
@@ -314,6 +315,10 @@ export class WorldService {
         );
       }
     }
+
+    // Épico F2: registrar última semana de luta
+    fighter.lastFightAbsWeek = absWeekNow;
+    await this.fighterCtrl.updateFighter(fighter);
 
     booking.status = OFFER_STATUS.COMPLETED;
     booking.resultId = result.id;

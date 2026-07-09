@@ -160,6 +160,17 @@
 .rank-row--mine { background: var(--accent-subtle); }
 .rank-row--mine .rank-number { color: var(--red-ink); }
 
+.rank-row-sm {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.rank-row-sm:hover { background: var(--bg-hover); }
+
 .rank-streak {
   font-family: var(--font-mono);
   font-size: 0.625rem;
@@ -482,6 +493,16 @@
    ========================================================================== */
 
 .belt-mark { filter: saturate(1.1); }
+
+/* G7: marca tipográfica de cinturão — polígono em estrela/octógono dourado */
+.belt-mark-icon {
+  display: inline-block;
+  width: 1em;
+  height: 0.85em;
+  background: var(--gold, #FFD700);
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  vertical-align: middle;
+}
 
 /* Faixa do pôster quando há cinturão em jogo */
 .poster-title-strap {

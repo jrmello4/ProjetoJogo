@@ -103,6 +103,15 @@ export class RosterView {
 
         ${statusLine}
 
+        ${f.expectation ? `
+          <div class="mt-2">
+            <span class="badge ${f.expectation.urgency >= 3 ? 'badge-danger' : f.expectation.urgency >= 2 ? 'badge-warning' : 'badge-info'}" style="font-size:0.65rem">
+              ${f.expectation.kind === 'title_shot' ? 'Quer chance de título' : f.expectation.kind === 'move_up_tier' ? 'Quer subir de tier' : f.expectation.kind === 'more_fights' ? 'Quer lutar mais' : 'Quer melhor pagamento'}
+              ${f.expectation.urgency >= 2 ? ' · Urgente!' : ''}
+            </span>
+          </div>
+        ` : ''}
+
         <div class="attr-grid mt-3">
           ${renderAttrBar('Striking', f.strikingScore)}
           ${renderAttrBar('Grappling', f.grapplingScore)}

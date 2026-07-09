@@ -19,6 +19,7 @@ import { RivalGym } from '../models/rival-gym.js';
 import { FightOffer } from '../models/fight-offer.js';
 import { Fighter } from '../models/fighter.js';
 import { generateId, clamp } from '../utils/helpers.js';
+import { TrainingCamp } from './training-camp.js';
 import {
   GYM_CONFIG,
   PROMOTIONS,
@@ -29,6 +30,7 @@ import {
   SCOUT_CONFIG,
   TRAINING_FOCUS_META,
   GAME_PLANS,
+  CAMP_CONFIG,
   absWeek,
 } from '../config/game-config.js';
 
@@ -136,6 +138,15 @@ export class GameController {
 
     if (applied.size !== (meta.patches || []).length) {
       await this.db.put('gameState', { ...meta, id: 'meta', patches: [...applied] });
+    }
+
+    // Épico D: resetar campProcessedThisWeek para todos no início de semana
+    const allTeam = await this.getTeam();
+    for (const f of allTeam) {
+      if (f.campProcessedThisWeek) {
+        f.campProcessedThisWeek = false;
+        await this.fighterCtrl.updateFighter(f);
+      }
     }
   }
 
@@ -306,7 +317,32 @@ export class GameController {
     // Épico A: processar retenção — approaches expirados e promessas vencidas
     await this.retentionService.processWeek(now, gym);
 
+    // Épico F2: expectativas dos atletas
+    await this._checkExpectations(now, teamAfterTraining);
+
+    // Épico D: processar acampamento semanal (ganhos + riscos)
+    const campResults = await this._applyWeeklyCamp(now, teamAfterTraining, gym);
+
+    // Cancela lutas se lesão no camp aconteceu
+    if (campResults.canceledFights.length > 0) {
+      const bookings = await this.offerService.getAccepted();
+      for (const cancel of campResults.canceledFights) {
+        const booking = bookings.find(b => b.fighterId === cancel.fighterId);
+        if (booking) {
+          await this.offerService.cancelBooking(booking.id);
+          await this.notifService.add(
+            'warning',
+            'Luta Cancelada',
+            `${cancel.fighterName} lesionou-se no treino pesado. A luta contra ${cancel.opponentName} foi cancelada.`
+          );
+        }
+      }
+    }
+
     const milestonesUnlocked = await this._checkMilestones(world.playerEvents, gym);
+
+    // Épico F3: gerar manchetes da semana
+    await this._generateHeadlines(now, world, teamAfterTraining);
 
     await this.updateGym(gym);
 
@@ -314,7 +350,7 @@ export class GameController {
       await this.notifService.add('warning', '⚠️ Caixa Negativo', 'A academia está no vermelho. Aceite lutas ou reduza a equipe antes que as portas fechem.');
     }
 
-    return { state, now, world, offersCreated, economy, milestonesUnlocked, rivalActivity, sponsorActivity };
+    return { state, now, world, offersCreated, economy, milestonesUnlocked, campResults, rivalActivity, sponsorActivity };
   }
 
   // ===== Simulação de período (fast-forward) =====
@@ -459,6 +495,163 @@ export class GameController {
       fighter.recover();
       await this.fighterCtrl.updateFighter(fighter);
     }
+  }
+
+  // Épico F3: gera manchetes do mundo da semana (vitórias, derrotas, lesões, cinturões)
+  async _generateHeadlines(now, world, team) {
+    const { playerEvents, promotionEvents } = world;
+
+    // Manchetes de eventos do jogador
+    for (const pe of (playerEvents || [])) {
+      const fighter = team.find(f => f.id === pe.fighterId);
+      if (!pe.won && pe.method && (pe.method.startsWith('KO') || pe.method.startsWith('TKO'))) {
+        await this.notifService.add('headline', 'Nocaute', `${fighter?.name || 'Atleta'} foi nocauteado por ${pe.opponentName} no R${pe.round}.`);
+      }
+    }
+
+    // Manchetes de eventos do mundo (promoções)
+    for (const promo of (promotionEvents || [])) {
+      for (const r of (promo.results || []).slice(0, 2)) { // top 2 resultados
+        const headlineParts = [];
+        if (r.method === 'KO') headlineParts.push(`NOCAUTE DE ${r.winnerName.toUpperCase()}`);
+        else if (r.method === 'Submission') headlineParts.push(`Finalização relâmpago: ${r.winnerName} finaliza ${r.loserName}`);
+        else if (r.isTitleFight) headlineParts.push(`Disputa de cinturão: ${r.winnerName} vence ${r.loserName}`);
+
+        if (headlineParts.length > 0) {
+          await this.notifService.add('headline', promo.promotionName, `${headlineParts[0]} — ${r.details || ''}`);
+        }
+      }
+    }
+  }
+
+  // Épico F2: expectativas dos atletas (título, subir de tier, mais lutas, melhor pagamento)
+  async _checkExpectations(now, team) {
+    const promotions = await this.worldService.getPromotions();
+
+    for (const fighter of team) {
+      if (fighter.status === 'injured' || fighter.status === 'retired') continue;
+      if (!fighter.promotionContract && !fighter.organizationId) continue;
+
+      // Checar a cada 4 semanas
+      if (now - (fighter.lastExpectationCheck || 0) < 4) continue;
+
+      const promoId = fighter.promotionContract?.promotionId || fighter.organizationId;
+      const promo = promotions.find(p => p.id === promoId);
+      if (!promo) continue;
+
+      const weeksSinceLastFight = now - (fighter.lastFightAbsWeek || 0);
+      const tier = promo.tier;
+      const fighterTier = fighter.overallRating >= 75 ? 1 : fighter.overallRating >= 60 ? 2 : 3;
+
+      let expectation = null;
+
+      // Atleta de alto nível quer chance de título
+      if (fighterTier <= tier && weeksSinceLastFight >= 12) {
+        expectation = { kind: 'title_shot', sinceAbsWeek: now, urgency: 2 };
+      }
+      // Atleta abaixo do tier da promoção quer subir
+      else if (fighterTier < tier && weeksSinceLastFight >= 8) {
+        expectation = { kind: 'move_up_tier', sinceAbsWeek: now, urgency: 2 };
+      }
+      // Atleta inativo por muito tempo quer lutar
+      else if (weeksSinceLastFight >= 16) {
+        expectation = { kind: 'more_fights', sinceAbsWeek: now, urgency: 3 };
+      }
+      // Atleta de alto desempenho quer melhor pagamento
+      else if (fighter.record.wins >= 3 && fighter.popularity >= 60 && !fighter.expectation) {
+        expectation = { kind: 'better_pay', sinceAbsWeek: now, urgency: 1 };
+      }
+
+      fighter.lastExpectationCheck = now;
+
+      if (expectation) {
+        fighter.expectation = expectation;
+        await this.notifService.add(
+          'warning',
+          'Expectativa',
+          `${fighter.name} quer ${expectation.kind === 'title_shot' ? 'uma chance de título' : expectation.kind === 'move_up_tier' ? 'subir de tier' : expectation.kind === 'more_fights' ? 'lutar mais' : 'melhor pagamento'}.`
+        );
+      } else {
+        fighter.expectation = null;
+      }
+
+      // Urgência aumenta com o tempo: a cada 4 semanas sem resolver, sobe 1
+      if (fighter.expectation && weeksSinceLastFight >= 4) {
+        fighter.expectation.urgency = Math.min(3, (fighter.expectation.urgency || 1) + 1);
+        // Urgência 3: risco de perder o atleta
+        if (fighter.expectation.urgency >= 3 && Math.random() < 0.1) {
+          fighter.loyalty = Math.max(0, fighter.loyalty - 5);
+          fighter.morale = Math.max(0, fighter.morale - 10);
+        }
+      }
+
+      await this.fighterCtrl.updateFighter(fighter);
+    }
+  }
+
+  // Épico D: processa configurações de camp dos atletas no loop semanal
+  async _applyWeeklyCamp(absWeekNow, team, gym) {
+    const results = [];
+    const canceledFights = [];
+
+    for (const fighter of team) {
+      if (fighter.status === 'injured' || fighter.status === 'retired') continue;
+      if (!fighter.campConfig) {
+        fighter.campProcessedThisWeek = false;
+        await this.fighterCtrl.updateFighter(fighter);
+        continue;
+      }
+
+      // Atleta com camp configurado: processar
+      const { intensity } = fighter.campConfig;
+
+      // Cobrar custo semanal do camp
+      const cost = CAMP_CONFIG.WEEKLY_COST[intensity] || 0;
+      if (cost > 0) {
+        if (gym.cash >= cost) {
+          gym.addTransaction(absWeekNow, `Camp: ${fighter.name}`, -cost);
+        } else {
+          // Sem dinheiro: cancela o camp automaticamente
+          fighter.campConfig = null;
+          await this.fighterCtrl.updateFighter(fighter);
+          await this.notifService.add('warning', 'Camp Cancelado', `Camp de ${fighter.name} cancelado por falta de fundos.`);
+          continue;
+        }
+      }
+
+      // Determinar arquétipo do adversário (se tiver luta marcada)
+      let opponentArchetype = null;
+      try {
+        const accepted = await this.offerService.getAccepted();
+        const booking = accepted.find(b => b.fighterId === fighter.id);
+        if (booking) {
+          const opponent = await this.fighterCtrl.getFighter(booking.opponentId);
+          if (opponent) {
+            opponentArchetype = TrainingCamp.opponentArchetype(opponent);
+          }
+        }
+      } catch { /* sem luta marcada */ }
+
+      const result = TrainingCamp.processCamp(fighter, gym, team, absWeekNow, opponentArchetype);
+
+      if (result) {
+        results.push({ fighterId: fighter.id, fighterName: fighter.name, result });
+
+        if (result.canceledFight && result.injured) {
+          const accepted = await this.offerService.getAccepted();
+          const booking = accepted.find(b => b.fighterId === fighter.id);
+          canceledFights.push({
+            fighterId: fighter.id,
+            fighterName: fighter.name,
+            opponentName: booking?.opponentName || 'desconhecido',
+          });
+        }
+      }
+
+      await this.fighterCtrl.updateFighter(fighter);
+    }
+
+    return { results, canceledFights };
   }
 
   async setTrainingFocus(fighterId, focus) {

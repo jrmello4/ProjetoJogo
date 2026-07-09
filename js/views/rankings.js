@@ -61,7 +61,7 @@ export class RankingsView {
       ${promos.map(p => `
         <div class="card mb-2 belt-board" data-reveal>
           <div class="card-header">
-            <span class="card-title">🏆 ${p.name}</span>
+            <span class="card-title"><span class="belt-mark-icon"></span> ${p.name}</span>
             <span class="badge ${p.tier === 1 ? 'badge-danger' : p.tier === 2 ? 'badge-warning' : 'badge-info'}">${TIER_LABELS[p.tier]}</span>
           </div>
           <div class="belt-grid">
@@ -79,12 +79,29 @@ export class RankingsView {
       ? `<div class="belt-contender">Desafiante nº1 · ${b.topContender.name}${isMine(b.topContender) ? ' (seu)' : ''}</div>`
       : '';
 
+    // G2: top 5 desafiantes
+    const contendersList = b.contenders && b.contenders.length > 1
+      ? `
+        <div class="belt-contenders mt-2">
+          <div class="text-xs text-muted mb-1">Desafiantes:</div>
+          ${b.contenders.slice(0, 5).map((c, i) => `
+            <div class="rank-row rank-row-sm" data-fighter-click="${c.id}">
+              <span class="rank-number" style="font-size:0.55rem">#${i + 1}</span>
+              <span class="text-xs" style="flex:1">${c.name}${isMine(c) ? ' (seu)' : ''}</span>
+              <span class="text-xs text-muted">${c.record.wins}-${c.record.losses} · ${c.overallRating}</span>
+            </div>
+          `).join('')}
+        </div>
+      `
+      : '';
+
     if (!b.champion) {
       return `
         <div class="belt-slot belt-slot--vacant">
           <div class="belt-division">${getWeightClassName(b.weightClass)}</div>
           <div class="belt-champion belt-champion--vacant">Vago</div>
           ${nextInLine}
+          ${contendersList}
         </div>
       `;
     }
@@ -99,6 +116,7 @@ export class RankingsView {
           ${b.defenses > 0 ? ` · ${b.defenses} defesa${b.defenses === 1 ? '' : 's'}` : ''}
         </div>
         ${nextInLine}
+        ${contendersList}
         ${mine ? '<span class="badge badge-danger belt-mine-tag">Sua academia</span>' : ''}
       </div>
     `;
@@ -120,7 +138,7 @@ export class RankingsView {
               <span class="rank-number">#${i + 1}</span>
               <span class="text-sm font-bold" style="flex:1">
                 ${c.fighter.nationality?.code ? getNationalityFlag(c.fighter.nationality.code) + ' ' : ''}${c.fighter.name}
-                ${(c.fighter.titlesWon || 0) > 0 ? '<span class="belt-mark ml-1" title="Já foi campeão">🏆</span>' : ''}
+                ${(c.fighter.titlesWon || 0) > 0 ? '<span class="belt-mark ml-1" title="Já foi campeão"><span class="belt-mark-icon"></span></span>' : ''}
                 ${isMine(c.fighter) ? '<span class="badge badge-danger ml-2" style="font-size:0.6rem">SEU</span>' : ''}
               </span>
               <span class="text-xs text-muted">${c.fighter.record.wins}-${c.fighter.record.losses}-${c.fighter.record.draws}</span>

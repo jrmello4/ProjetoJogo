@@ -1,4 +1,4 @@
-import { formatCurrency, formatDate, getWeightClassShort, getWeightClassLabel, getNationalityFlag } from '../utils/helpers.js';
+import { formatCurrency, formatDate, getWeightClassShort, getWeightClassLabel, getNationalityFlag, getAdjacentWeightClasses, clamp } from '../utils/helpers.js';
 
 export class FighterProfileView {
   static render(fighter, fightHistory = []) {
@@ -235,15 +235,15 @@ export class FighterProfileView {
         </div>
       </div>
 
-      <!-- Corte de Peso -->
+      <!-- Épico E1: Corte de Peso e Mudança de Divisão -->
       <div class="card mt-4">
         <div class="card-header">
-          <span class="card-title">Corte de Peso</span>
+          <span class="card-title">Divisão de Peso</span>
         </div>
-        <div class="grid grid-cols-3 gap-4">
+        <div class="grid grid-cols-2 gap-4">
           <div>
-            <div class="text-xs text-muted">Peso Natural Acima</div>
-            <div class="text-sm font-bold">${fighter.weightCut.naturalWeight} lbs</div>
+            <div class="text-xs text-muted">Divisão Atual</div>
+            <div class="text-sm font-bold">${getWeightClassLabel(fighter.weightClass)}</div>
           </div>
           <div>
             <div class="text-xs text-muted">Facilidade de Corte</div>
@@ -252,11 +252,26 @@ export class FighterProfileView {
               <div class="progress-fill ${fighter.weightCut.ease >= 60 ? 'high' : fighter.weightCut.ease >= 40 ? 'medium' : 'low'}" style="width:${fighter.weightCut.ease}%"></div>
             </div>
           </div>
-          <div>
-            <div class="text-xs text-muted">Impacto Estimado</div>
-            <div class="text-sm font-bold">${Math.round(fighter.weightCut.naturalWeight * (1 - fighter.weightCut.ease / 100) * 0.5)} cardio</div>
-          </div>
         </div>
+        ${fighter.status === 'roster' ? (() => {
+          const adj = getAdjacentWeightClasses(fighter.weightClass);
+          const options = [];
+          if (adj.up) options.push({ dir: 'up', label: `Subir para ${getWeightClassShort(adj.up)} (menos peso)`, cost: 5000, attrPenalty: 'power -3, strength -2', attrBonus: 'speed +2, cardio +1' });
+          if (adj.down) options.push({ dir: 'down', label: `Descer para ${getWeightClassShort(adj.down)} (mais peso)`, cost: 3000, attrPenalty: 'speed -2, cardio -2', attrBonus: 'power +2, strength +3' });
+          return options.length > 0 ? `
+            <div class="mt-3">
+              <div class="text-xs text-muted mb-2">Mudar de divisão (custa $${Math.max(...options.map(o => o.cost)).toLocaleString()}):</div>
+              <div class="flex gap-2 flex-wrap">
+                ${options.map(opt => `
+                  <button class="btn btn-sm btn-secondary change-weight-class" data-dir="${opt.dir}" data-fighter="${fighter.id}">
+                    ${opt.label}
+                    <div class="text-xs text-muted mt-1">${opt.attrPenalty} · ${opt.attrBonus}</div>
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+          ` : '';
+        })() : ''}
       </div>
 
       <div class="mt-4">

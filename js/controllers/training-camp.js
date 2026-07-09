@@ -1,103 +1,158 @@
 import { clamp } from '../utils/helpers.js';
-import { GYM_CONFIG } from '../config/game-config.js';
+import { CAMP_CONFIG } from '../config/game-config.js';
 
+// Épico D: Acampamento de verdade.
+// O camp deixa de ser um botão manual e vira uma configuração que roda
+// dentro do loop semanal (_applyWeeklyTraining). Você configura uma vez
+// (intensidade + foco + sparring partner) e o treino acontece semana a
+// semana até a luta — ou até você mudar a configuração.
 export class TrainingCamp {
-  static runCamp(fighter, intensity, specialization, absWeekNow) {
-    const gains = this._calculateGains(intensity, specialization);
-    const risks = this._calculateRisks(intensity, fighter);
+  // ===== Configuração =====
+  // Define o camp para o fighter. Só permitido se ele tem luta marcada
+  // (intensity === 'intense' exige booking; moderate e light também
+  // funcionam sem luta como treino normal aprimorado).
+  static configureCamp(fighter, intensity, spec, sparringPartnerId = null) {
+    fighter.campConfig = {
+      intensity,
+      spec,
+      sparringPartnerId,
+    };
+    fighter.campProcessedThisWeek = false;
+  }
 
-    // Aplicar ganhos de atributos
-    for (const [attr, amount] of Object.entries(gains)) {
-      fighter.attributes[attr] = clamp(fighter.attributes[attr] + amount, 0, 99);
+  static cancelCamp(fighter) {
+    fighter.campConfig = null;
+    fighter.campProcessedThisWeek = false;
+  }
+
+  // ===== Processamento semanal (chamado por _applyWeeklyTraining) =====
+  // Retorna { gains, injured, overtrained, canceledFight }
+  static processCamp(fighter, gym, team, absWeekNow, opponentArchetype = null) {
+    const cfg = fighter.campConfig;
+    if (!cfg) return null;
+
+    const { intensity, spec, sparringPartnerId } = cfg;
+    const gains = this._calcGains(intensity, spec);
+
+    // Bônus de sparring partner
+    let sparringBonus = 0;
+    if (sparringPartnerId) {
+      const partner = team.find(f => f.id === sparringPartnerId);
+      if (partner) {
+        // Bônus de peso próximo
+        if (partner.weightClass === fighter.weightClass) {
+          sparringBonus += CAMP_CONFIG.SPARRING_CLOSE_WEIGHT_BONUS;
+        }
+        // Bônus de arquétipo: se o parceiro imita o adversário
+        if (opponentArchetype) {
+          const partnerArchetype = this._getArchetype(partner);
+          if (partnerArchetype === opponentArchetype) {
+            sparringBonus += CAMP_CONFIG.SPARRING_MATCH_BONUS;
+          }
+        }
+      }
     }
 
-    // Verificar riscos
-    let injured = false;
-    let overtrained = false;
+    // Aplicar ganhos com bônus de sparring
+    for (const [attr, amount] of Object.entries(gains)) {
+      const boosted = Math.round(amount * (1 + sparringBonus));
+      fighter.attributes[attr] = clamp(fighter.attributes[attr] + boosted, 0, 99);
+    }
+
+    // Riscos
+    const risks = this._calcRisks(intensity, fighter);
+    const result = {
+      gains,
+      sparringBonus,
+      injured: false,
+      overtrained: false,
+      canceledFight: false,
+      injuryWeeks: 0,
+    };
 
     if (Math.random() < risks.injuryChance) {
-      injured = true;
+      result.injured = true;
+      const injuryWeeks = 3 + Math.floor(Math.random() * 6); // 3-8 semanas
+      result.injuryWeeks = injuryWeeks;
+
       const prevStatus = fighter.status;
       fighter.status = 'injured';
-      const injuryWeeks = 4 + Math.floor(Math.random() * 5); // 4-8 semanas
       fighter.injury = {
         untilAbsWeek: absWeekNow + injuryWeeks,
-        description: 'Lesionado no treino',
+        description: `Lesionado no treino (${intensity})`,
         resumeStatus: prevStatus,
       };
       fighter.availableFromAbsWeek = fighter.injury.untilAbsWeek;
-      fighter.fatigue = clamp(fighter.fatigue + 30, 0, 100);
+
+      // Lesão intensa cancela a luta
+      if (intensity === 'intense' && CAMP_CONFIG.CAMP_INJURY_CANCELS_FIGHT) {
+        result.canceledFight = true;
+      }
     }
 
     if (Math.random() < risks.overtrainingChance) {
-      overtrained = true;
-      fighter.morale = clamp(fighter.morale - 15, 0, 100);
-      fighter.fatigue = clamp(fighter.fatigue + 20, 0, 100);
+      result.overtrained = true;
+      fighter.morale = clamp(fighter.morale - 12, 0, 100);
+      fighter.fatigue = clamp(fighter.fatigue + 15, 0, 100);
     }
 
-    // Benefício de recuperação
-    fighter.fatigue = clamp(fighter.fatigue - (intensity === 'light' ? 5 : intensity === 'medium' ? 3 : 0), 0, 100);
+    // Fadiga: intensidade alta cansa mais
+    const fatigueCost = intensity === 'light' ? 3 : intensity === 'moderate' ? 8 : 15;
+    fighter.applyFatigue(fatigueCost);
 
-    return {
-      success: true,
-      gains,
-      injured,
-      overtrained,
-    };
+    fighter.campProcessedThisWeek = true;
+    return result;
   }
 
-  static _calculateGains(intensity, specialization) {
-    const multiplier = intensity === 'light' ? 1 : intensity === 'medium' ? 2 : 4;
+  // ===== Helpers =====
+  static _calcGains(intensity, spec) {
+    const mult = CAMP_CONFIG.GAIN_MULTIPLIER[intensity] || 1;
     const gains = {};
 
     const attrMap = {
-      striking: ['boxing', 'kickboxing', 'muayThai'],
-      grappling: ['wrestling', 'bjj'],
-      cardio: ['cardio'],
-      chin: ['chin'],
+      striking: ['boxing', 'kickboxing', 'muayThai', 'power', 'footwork'],
+      grappling: ['wrestling', 'bjj', 'takedowns', 'groundControl'],
+      cardio: ['cardio', 'recovery', 'durability'],
+      chin: ['chin', 'composure'],
     };
 
-    const attrs = attrMap[specialization] || attrMap.striking;
+    const attrs = attrMap[spec] || attrMap.striking;
     for (const attr of attrs) {
-      gains[attr] = Math.floor(multiplier * (0.5 + Math.random()));
+      gains[attr] = Math.floor(mult * (0.3 + Math.random() * 0.7));
     }
 
     return gains;
   }
 
-  static _calculateRisks(intensity, fighter) {
-    let injuryChance = 0;
-    let overtrainingChance = 0;
+  static _calcRisks(intensity, fighter) {
+    let injuryChance = CAMP_CONFIG.INJURY_CHANCE[intensity] || 0.01;
+    let overtrainingChance = CAMP_CONFIG.OVERTRAINING_CHANCE[intensity] || 0.01;
 
-    if (intensity === 'light') {
-      injuryChance = 0.02;
-      overtrainingChance = 0.01;
-    } else if (intensity === 'medium') {
-      injuryChance = 0.08;
-      overtrainingChance = 0.05;
-    } else {
-      injuryChance = 0.20;
-      overtrainingChance = 0.15;
-    }
-
-    // DNA: injuryProne aumenta risco de lesão
-    if (fighter.dna.injuryProne) {
-      injuryChance *= 2.0;
-    }
-
-    // DNA: exceptionalRecovery reduz risco de lesão
-    if (fighter.dna.exceptionalRecovery) {
-      injuryChance *= 0.5;
-    }
-
-    // DNA: emotionallyUnstable aumenta risco de overtraining
-    if (fighter.dna.emotionallyUnstable) {
-      overtrainingChance *= 1.5;
-    }
+    // DNA: injuryProne dobra risco de lesão
+    if (fighter.dna?.injuryProne) injuryChance *= 2.0;
+    if (fighter.dna?.exceptionalRecovery) injuryChance *= 0.5;
+    if (fighter.dna?.emotionallyUnstable) overtrainingChance *= 1.5;
 
     return {
       injuryChance: Math.min(injuryChance, 0.5),
       overtrainingChance: Math.min(overtrainingChance, 0.4),
     };
+  }
+
+  // O arquétipo de um lutador para fins de sparring
+  static _getArchetype(fighter) {
+    if (!fighter) return 'balanced';
+    const striking = fighter.strikingScore;
+    const grappling = fighter.grapplingScore;
+    const gap = striking - grappling;
+    if (gap > 8) return 'striker';
+    if (gap < -8) return 'grappler';
+    return 'balanced';
+  }
+
+  // O arquétipo do adversário baseado no que sabemos dele
+  static opponentArchetype(opponent) {
+    if (!opponent) return null;
+    return this._getArchetype(opponent);
   }
 }

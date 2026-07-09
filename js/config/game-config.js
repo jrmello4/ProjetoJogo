@@ -382,6 +382,23 @@ export function absWeekToLabel(abs) {
   return `Semana ${week}, Ano ${year}`;
 }
 
+// Épico D: configuração do acampamento semanal com sparring partner
+export const CAMP_CONFIG = {
+  // Bônus de ganho de atributos por intensidade
+  GAIN_MULTIPLIER: { light: 1, moderate: 1.5, intense: 2.5 },
+  // Risco base de lesão por intensidade
+  INJURY_CHANCE: { light: 0.01, moderate: 0.05, intense: 0.15 },
+  // Risco base de overtraining por intensidade
+  OVERTRAINING_CHANCE: { light: 0.01, moderate: 0.04, intense: 0.12 },
+  // Bônus de sparring: arquétipo certo vs adversário
+  SPARRING_MATCH_BONUS: 0.25,       // +25% ganho se arquétipo do parceiro == arquétipo do adversário
+  SPARRING_CLOSE_WEIGHT_BONUS: 0.10, // +10% se peso próximo (mesma divisão)
+  // Custo semanal por intensidade
+  WEEKLY_COST: { light: 300, moderate: 600, intense: 1200 },
+  // Lesão no camp cancela a luta? (se intensity === intense e tem luta marcada)
+  CAMP_INJURY_CANCELS_FIGHT: true,
+};
+
 // Data sintética para exibição: início do jogo + semanas decorridas
 export function absWeekToDate(abs, startedAt) {
   const base = startedAt ? new Date(startedAt) : new Date();

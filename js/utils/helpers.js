@@ -39,6 +39,22 @@ export function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
 }
 
+// Épico E1: navegação entre divisões de peso
+const WEIGHT_CLASS_ORDER = [
+  'Strawweight', 'Flyweight', 'Bantamweight', 'Featherweight',
+  'Lightweight', 'Welterweight', 'Middleweight',
+  'Light Heavyweight', 'Heavyweight',
+];
+
+export function getAdjacentWeightClasses(current) {
+  const idx = WEIGHT_CLASS_ORDER.indexOf(current);
+  if (idx === -1) return { up: null, down: null };
+  return {
+    up: idx > 0 ? WEIGHT_CLASS_ORDER[idx - 1] : null,     // subir de divisão (menos peso)
+    down: idx < WEIGHT_CLASS_ORDER.length - 1 ? WEIGHT_CLASS_ORDER[idx + 1] : null, // descer
+  };
+}
+
 // Nomenclatura oficial das divisões em português (padrão UFC Brasil)
 export function getWeightClassLabel(weight) {
   const labels = {

@@ -1,5 +1,6 @@
-import { formatDate, getWeightClassName } from '../utils/helpers.js';
+import { formatDate, getWeightClassName, formatCurrency } from '../utils/helpers.js';
 
+// G5: Hall da Fama enriquecido com estatísticas de carreira
 export class HallOfFameView {
   static render(entries) {
     if (entries.length === 0) {
@@ -15,7 +16,13 @@ export class HallOfFameView {
       `;
     }
 
-    const sorted = [...entries].sort((a, b) => b.peakRating - a.peakRating);
+    const sorted = [...entries].sort((a, b) => {
+      // Ordenar por: número de cinturões > total de lutas
+      const aBelts = a.careerStats?.titlesWon || 0;
+      const bBelts = b.careerStats?.titlesWon || 0;
+      if (aBelts !== bBelts) return bBelts - aBelts;
+      return (b.peakRating || 0) - (a.peakRating || 0);
+    });
 
     return `
       <div class="page-header">
@@ -23,36 +30,73 @@ export class HallOfFameView {
         <p>${sorted.length} lendas imortalizadas</p>
       </div>
 
-      <div class="grid grid-cols-3 gap-4">
+      <div class="hof-gallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1rem">
         ${sorted.map((entry, i) => `
-          <div class="card hof-card">
-            <div class="text-center mb-2">
-              <span class="text-xs font-bold" style="color:${i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : '#CD7F32'}">
-                #${i + 1}
+          <div class="card hof-card" data-reveal>
+            <div class="card-header">
+              <span class="card-title">
+                #${i + 1} · ${entry.name}
+                <span class="badge badge-info" style="font-size:0.55rem">${getWeightClassName(entry.weightClass)}</span>
               </span>
             </div>
-            <div class="text-center">
-              <div class="font-bold text-lg">${entry.name}</div>
-              <div class="text-xs text-muted">${entry.nationality?.name || ''} · ${getWeightClassName(entry.weightClass)}</div>
-            </div>
-            <div class="grid grid-cols-2 gap-2 mt-3">
-              <div class="text-center">
-                <div class="text-xs text-muted">Recorde</div>
-                <div class="font-bold">${entry.record.wins}-${entry.record.losses}-${entry.record.draws}</div>
+            <div class="card-body">
+              <div class="grid grid-cols-3 gap-3 text-center">
+                <div>
+                  <div class="text-xs text-muted">Recorde</div>
+                  <div class="font-bold text-lg">${entry.record.wins}-${entry.record.losses}-${entry.record.draws}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-muted">OVR Pico</div>
+                  <div class="font-bold text-lg">${entry.peakRating}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-muted">Finalizações</div>
+                  <div class="font-bold text-lg">${entry.careerStats?.finishRate || 0}%</div>
+                </div>
               </div>
-              <div class="text-center">
-                <div class="text-xs text-muted">OVR Pico</div>
-                <div class="font-bold">${entry.peakRating}</div>
+
+              ${entry.careerStats ? `
+                <div class="grid grid-cols-3 gap-2 mt-3 text-center">
+                  <div>
+                    <div class="text-xs text-muted">Cinturões</div>
+                    <div class="font-bold">${entry.careerStats.titlesWon}</div>
+                  </div>
+                  <div>
+                    <div class="text-xs text-muted">Maior Streak</div>
+                    <div class="font-bold">${entry.careerStats.maxWinStreak}</div>
+                  </div>
+                  <div>
+                    <div class="text-xs text-muted">Ganhos</div>
+                    <div class="font-bold" style="font-size:0.75rem">${formatCurrency(entry.careerStats.careerEarnings)}</div>
+                  </div>
+                </div>
+                <div class="grid grid-cols-3 gap-2 mt-2 text-center">
+                  <div>
+                    <div class="text-xs text-muted">Lutas Totais</div>
+                    <div class="font-bold">${(entry.careerStats?.finishes || 0) + (entry.careerStats?.decisions?.length || 0)}</div>
+                  </div>
+                  <div>
+                    <div class="text-xs text-muted">Bônus</div>
+                    <div class="font-bold">${(entry.careerStats?.fightNightBonuses || 0) + (entry.careerStats?.performanceBonuses || 0)}</div>
+                  </div>
+                  <div>
+                    <div class="text-xs text-muted">Finalizações</div>
+                    <div class="font-bold">KO/TKO: ${entry.careerStats?.kos?.length || 0} · Sub: ${entry.careerStats?.subs?.length || 0}</div>
+                  </div>
+                </div>
+              ` : ''}
+
+              <div class="mt-3">
+                <div class="text-xs text-muted mb-1">Conquistas</div>
+                <div class="flex gap-1 flex-wrap">
+                  ${(entry.achievements || []).map(a =>
+                    `<span class="badge badge-success text-xs">${a}</span>`
+                  ).join('')}
+                </div>
               </div>
             </div>
-            <div class="mt-3">
-              <div class="text-xs text-muted mb-1">Conquistas</div>
-              ${entry.achievements.map(a => `
-                <span class="badge badge-success text-xs block mb-1">${a}</span>
-              `).join('')}
-            </div>
-            <div class="text-xs text-muted text-center mt-2">
-              Induzido em ${formatDate(entry.inductionDate)}
+            <div class="card-footer text-xs text-muted" style="text-align:center">
+              Induzido em ${formatDate(entry.inductionDate)} · ${entry.careerStats?.ageAtInduction || '?'} anos
             </div>
           </div>
         `).join('')}

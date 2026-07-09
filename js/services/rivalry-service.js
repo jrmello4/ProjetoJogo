@@ -66,4 +66,37 @@ export class RivalryService {
     const all = await this.db.getAll('rivalries');
     return all.filter(r => r.active);
   }
+
+  // Épico F1: a provocação na coletiva de imprensa esquenta a rivalidade
+  // antes da luta acontecer. Quanto maior o hype, maior o heat gerado.
+  // Se não existe rivalidade ainda, cria uma com intensity baseada no hype.
+  async addPressConferenceHeat(fighterAId, fighterBId, hypeLevel, promotionId = null) {
+    const existing = await this.getRivalryBetween(fighterAId, fighterBId);
+    const intensityGain = Math.ceil(hypeLevel / 8); // hype 15 → +2, hype 25 → +4
+
+    if (existing) {
+      const rivalry = new Rivalry(existing);
+      const oldIntensity = rivalry.intensity;
+      rivalry.increaseIntensity(intensityGain);
+      const heatLabel = rivalry.intensity > oldIntensity ? 'intensificou' : 'permanece';
+      rivalry.addEvent('press_conference', `Provocação na coletiva — hype ${hypeLevel} (${heatLabel} para ${rivalry.intensity})`);
+      await this.db.put('rivalries', rivalry);
+      return rivalry;
+    }
+
+    // Hype mínimo para criar rivalidade pré-luta
+    if (hypeLevel < 15) return null;
+
+    const rivalry = new Rivalry({
+      id: 'rvl-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
+      fighterAId,
+      fighterBId,
+      intensity: Math.min(intensityGain, 3),
+      type: hypeLevel >= 22 ? 'personal' : 'competitive',
+      history: [{ type: 'press_conference', description: `Rivalidade nascida na coletiva — provocação gerou hype ${hypeLevel}` }],
+    });
+
+    await this.db.put('rivalries', rivalry);
+    return rivalry;
+  }
 }

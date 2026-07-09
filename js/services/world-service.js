@@ -8,10 +8,12 @@ import { HallOfFame } from './hall-of-fame.js';
 import { generateId } from '../utils/helpers.js';
 import {
   GYM_CONFIG,
+  RIVAL_GYMS,
   WORLD_CONFIG,
   CORE_WEIGHT_CLASSES,
   TITLE_CONFIG,
   TITLE_ROLE,
+  HYPE_PURSE_RATIO,
   absWeekToDate,
   computeSuspensionWeeks,
 } from '../config/game-config.js';
@@ -73,6 +75,8 @@ export class WorldService {
 
     await this._refillFreeAgents();
     await this._processYearEnd(absWeekNow);
+    // G1: verificar cinturões interinos (toda semana)
+    await this._checkInterimTitles(absWeekNow, promotions);
 
     return { playerEvents };
   }
@@ -269,12 +273,17 @@ export class WorldService {
     const fighter = fight.fighterA; // lutador do jogador é sempre o córner A
     const won = result.winnerId === fighter.id;
 
-    const totalPurse = booking.purse + (won ? booking.winBonus : 0);
+    // Épico F1: hype da coletiva vira bônus na bolsa
+    const hypeBonus = (fighter.pcHype || 0) * HYPE_PURSE_RATIO;
+    const totalPurse = booking.purse + (won ? booking.winBonus : 0) + hypeBonus;
+    // Limpa o hype após usar — não acumular para a próxima luta
+    fighter.pcHype = 0;
+
     // Épico A: usa purseShare do atleta em vez de managerCut fixo da academia
     const managerCut = 1 - (fighter.purseShare ?? 0.8);
     const gymCut = Math.round(totalPurse * managerCut);
 
-    gym.addTransaction(absWeekNow, `Comissão — ${fighter.name} (${promo.short})`, gymCut);
+    gym.addTransaction(absWeekNow, `Comissão — ${fighter.name} (${promo.short})${hypeBonus > 0 ? ' (c/ hype)' : ''}`, gymCut);
     gym.totalPurseEarnings += gymCut;
     fighter.careerEarnings = (fighter.careerEarnings || 0) + totalPurse;
 
@@ -284,7 +293,7 @@ export class WorldService {
       let rep = GYM_CONFIG.REP_PER_WIN + (GYM_CONFIG.REP_TIER_BONUS[promo.tier] || 0);
       if (isFinish) rep += GYM_CONFIG.REP_PER_FINISH;
       gym.updateReputation(rep);
-      await this.notifService.add('success', '🏆 Vitória!', `${fighter.name} venceu ${result.winnerId === result.fighterAId ? result.fighterBName : result.fighterAName} por ${result.method} no ${promo.nextEventName()}. Comissão: $${gymCut.toLocaleString()}.`);
+      await this.notifService.add('success', '🏆 Vitória!', `${fighter.name} venceu ${result.winnerId === result.fighterAId ? result.fighterBName : result.fighterAName} por ${result.method} no ${promo.nextEventName()}. Comissão: $${gymCut.toLocaleString()}.${hypeBonus > 0 ? ` ($${hypeBonus.toLocaleString()} de bônus de hype)` : ''}`);
     } else {
       gym.losses++;
       gym.updateReputation(GYM_CONFIG.REP_PER_LOSS);
@@ -453,6 +462,53 @@ export class WorldService {
     }
   }
 
+  // G1: verifica cinturões interinos.
+  // G1: verifica cinturões interinos.
+  // 1. Se campeão está lesionado 12+ semanas → cria cinturão interino
+  // 2. Se interino existe e campeão original já se recuperou → promove interino a definitivo
+  async _checkInterimTitles(absWeekNow, promotions) {
+    const all = await this.fighterCtrl.getAllFighters();
+
+    for (const promo of promotions) {
+      for (const wc of CORE_WEIGHT_CLASSES) {
+        const champId = promo.championOf(wc);
+        if (!champId) continue;
+        const champ = all.find(f => f.id === champId);
+        if (!champ) continue;
+
+        // FASE 1: Criar interino (só quando campeão está lesionado 12+ semanas)
+        if (champ.status === 'injured') {
+          const injuryEnd = champ.availableFromAbsWeek || 0;
+          const weeksOut = Math.max(0, injuryEnd - absWeekNow);
+          if (weeksOut >= 12 && !promo.interimChampionOf(wc)) {
+            const contenders = await this.titleService.contenderRanking(promo, wc);
+            const top = contenders[0];
+            if (top && top.id !== champId) {
+              promo.crownInterim(top.id, wc, absWeekNow);
+              await this.notifService.add('headline', 'Cinturão Interino',
+                `${promo.short} criou cinturão interino dos ${wc}! ${top.name} é o campeão interino enquanto ${champ.name} se recupera.`);
+            }
+          }
+        }
+
+        // FASE 2: Promover interino (roda independente do status do campeão)
+        // O campeão original pode já ter se recuperado (status !== 'injured')
+        // ou pode nunca mais voltar. Se o interino existe, promove.
+        const interimId = promo.interimChampionOf(wc);
+        if (interimId && champ && champ.status !== 'injured') {
+          const promotedId = promo.promoteInterim(wc);
+          if (promotedId) {
+            const name = all.find(f => f.id === promotedId)?.name || 'Desafiante';
+            await this.notifService.add('headline', 'Cinturão Definitivo',
+              `${promo.short} promoveu ${name} a campeão definitivo dos ${wc}!`);
+          }
+        }
+      }
+    }
+    for (const promo of promotions) {
+      await this.db.put('organization', promo);
+    }
+  }
   // Virada de ano (semana 52): aposentadorias e nova safra de prospectos
   async _processYearEnd(absWeekNow) {
     if (absWeekNow % 52 !== 0) return;
@@ -488,7 +544,15 @@ export class WorldService {
         }
 
         if (wasGymFighter) {
-          await this.notifService.add('info', 'Aposentadoria', `${f.name} pendurou as luvas aos ${age} anos. Obrigado por tudo, campeão.`);
+          await this.notifService.add('hall-of-fame', '🏆 Aposentadoria',
+            `${f.name} pendurou as luvas aos ${age} anos após uma carreira histórica. Clique para ver a cerimônia.`);
+          // Marca o último aposentado para a tela de cerimônia
+          const gameState = await this.db.get('gameState', 'state');
+          if (gameState) {
+            gameState.meta = gameState.meta || {};
+            gameState.meta.lastRetirementFighterId = f.id;
+            await this.db.put('gameState', gameState);
+          }
         }
         if (vacated.length > 0) {
           await this.notifService.add('info', 'Cinturão Vago', `${f.name} se aposentou como campeão. O cinturão ${vacated[0].promotionShort} está vago.`);
@@ -500,12 +564,55 @@ export class WorldService {
 
     const count = WORLD_CONFIG.DRAFT_MIN +
       Math.floor(Math.random() * (WORLD_CONFIG.DRAFT_MAX - WORLD_CONFIG.DRAFT_MIN + 1));
+    const prospects = [];
     for (let i = 0; i < count; i++) {
       const weightClass = CORE_WEIGHT_CLASSES[Math.floor(Math.random() * CORE_WEIGHT_CLASSES.length)];
       const prospect = DataGenerator.generateProspect(weightClass);
       prospect.id = generateId();
-      await this.db.put('fighters', prospect);
+      prospects.push(prospect);
     }
-    await this.notifService.add('success', 'Nova Safra', `${count} jovens prospectos chegaram ao mercado. Olho neles antes das academias rivais.`);
+
+    // Fase 1: distribui prospects para rivais (40%) ou como agentes livres
+    const rivalGyms = RIVAL_GYMS.filter(g => g.id !== GYM_CONFIG.ID);
+    let distributed = 0;
+    for (const p of prospects) {
+      if (rivalGyms.length > 0 && Math.random() < 0.4) {
+        const rival = rivalGyms[Math.floor(Math.random() * rivalGyms.length)];
+        p.gymId = rival.id;
+        p.status = 'roster';
+        p.organizationId = rival.promotionId || null;
+        distributed++;
+      }
+      await this.db.put('fighters', p);
+    }
+
+    // Fase 1: teto de populacao — aposenta veteranos IA irrelevantes se excedeu
+    const allNow = await this.fighterCtrl.getAllFighters();
+    const activeCount = allNow.filter(f => f.status !== 'retired' && f.status !== 'dead').length;
+    if (activeCount > WORLD_CONFIG.POPULATION_CAP) {
+      const toTrim = activeCount - WORLD_CONFIG.POPULATION_CAP;
+      const candidates = allNow
+        .filter(f => f.gymId !== GYM_CONFIG.ID && (f.age || 28) >= 32 && f.overallRating < 60)
+        .sort((a, b) => (a.overallRating || 0) - (b.overallRating || 0));
+      let trimmed = 0;
+      for (const c of candidates) {
+        if (trimmed >= toTrim) break;
+        if (c.status !== 'retired') {
+          c.status = 'retired';
+          c.organizationId = null;
+          await this.db.put('fighters', c);
+          trimmed++;
+        }
+      }
+    }
+
+    // Fase 1: registra a safra no doc worldGen
+    const worldGen = (await this.db.get('gameState', 'worldGen')) || { id: 'worldGen', lastGenAbsWeek: 0, totalGenerated: 0 };
+    worldGen.lastGenAbsWeek = absWeekNow;
+    worldGen.totalGenerated = (worldGen.totalGenerated || 0) + count;
+    await this.db.put('gameState', worldGen);
+
+    const msg = `${count} jovens prospectos chegaram ao mercado${distributed > 0 ? ` (${distributed} ja contratados por academias rivais)` : ''}.`;
+    await this.notifService.add('success', 'Nova Safra', msg);
   }
 }

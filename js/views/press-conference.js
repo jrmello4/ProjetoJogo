@@ -49,18 +49,23 @@ export class PressConferenceView {
     `;
   }
 
-  static renderSummary(effects, totalHype) {
+  static renderSummary(effects, totalHype, hypeBonus = 0) {
     return `
       <div class="card">
         <div class="card-header">
           <span class="card-title">Resumo da Conferência</span>
         </div>
-        <div class="grid grid-cols-3 gap-4">
+        <div class="grid grid-cols-2 gap-4">
           <div>
             <div class="text-xs text-muted">Hype Total</div>
             <div class="text-lg font-bold text-success">+${totalHype}</div>
           </div>
+          <div>
+            <div class="text-xs text-muted">Bônus na Bolsa</div>
+            <div class="text-lg font-bold text-belt">+$${hypeBonus.toLocaleString()}</div>
+          </div>
         </div>
+        <p class="text-xs text-muted mt-2">O hype gerado na coletiva aumenta o valor da bolsa da luta.</p>
       </div>
     `;
   }

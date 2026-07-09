@@ -127,6 +127,24 @@ export const OFFER_CONFIG = {
   WIN_BONUS_RATIO: 0.5,
 };
 
+// Épico F1: cada ponto de hype gerado na coletiva vale este valor
+// em dólar de bônus na bolsa da luta (purse + winBonus).
+export const HYPE_PURSE_RATIO = 50;
+
+// Épico F2: penalidades e pesos de expectativas de atletas
+export const EXPECTATION_CONFIG = {
+  // Dano semanal de moral/loyalty quando expectativa em urgência 3 está ativa
+  MORALE_DAMAGE_URGENT: 5,   // -5 de morale por semana
+  LOYALTY_DAMAGE_URGENT: 2,  // -2 de loyalty por semana
+
+  // Bônus de chance de ser sondado por rival (sobre a base)
+  RIVAL_APPROACH_BONUS: 0.15,   // +15% se tem expectativa urgente
+  RIVAL_RETENTION_PENALTY: 0.15, // -15% na chance de reter
+
+  // A cada quantas semanas reavaliar (existente: 4)
+  CHECK_INTERVAL: 4,
+};
+
 export const WORLD_CONFIG = {
   FREE_AGENT_POOL: 14,
   FREE_AGENT_MIN: 8,
@@ -143,6 +161,10 @@ export const WORLD_CONFIG = {
   // Draft anual (semana 52)
   DRAFT_MIN: 5,
   DRAFT_MAX: 10,
+
+  // Fase 1: teto de população — acima disto, veteranos irrelevantes são
+  // aposentados forçadamente para evitar degradação da performance.
+  POPULATION_CAP: 300,
 };
 
 export const TIER_LABELS = {

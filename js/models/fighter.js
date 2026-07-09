@@ -72,6 +72,8 @@ export class Fighter {
     this.morale = data.morale || 75;
     this.fatigue = data.fatigue || 0;
     this.createdAt = data.createdAt;
+    // Épico F1: hype acumulado na coletiva de imprensa — vira bônus na bolsa
+    this.pcHype = data.pcHype || 0;
   }
 
   _defaultDNA() {

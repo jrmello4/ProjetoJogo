@@ -16,6 +16,10 @@ export class ThreeFaceOff {
     this.camera = null;
     this.renderer = null;
     this.clock = new THREE.Clock();
+    this.disposed = false;
+    this._rafId = null;
+    this._lastFrame = 0;
+    this._onResizeBound = () => this.onResize();
     this.init();
   }
 
@@ -35,7 +39,7 @@ export class ThreeFaceOff {
       powerPreference: 'high-performance',
     });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.setClearColor(0x000000, 0);
     this.container.appendChild(this.renderer.domElement);
 
@@ -45,7 +49,7 @@ export class ThreeFaceOff {
     this.createGround();
     this.createParticles();
 
-    window.addEventListener('resize', () => this.onResize());
+    window.addEventListener('resize', this._onResizeBound);
     this.animate();
   }
 
@@ -208,7 +212,20 @@ export class ThreeFaceOff {
   }
 
   animate() {
-    requestAnimationFrame(() => this.animate());
+    if (this.disposed) return;
+
+    // Se a navegação removeu o canvas do DOM, encerra o loop junto
+    if (!this.renderer.domElement.isConnected) {
+      this.dispose();
+      return;
+    }
+
+    this._rafId = requestAnimationFrame(() => this.animate());
+
+    // Cena decorativa: 30fps é suficiente
+    const nowMs = performance.now();
+    if (nowMs - this._lastFrame < 33) return;
+    this._lastFrame = nowMs;
 
     const elapsed = this.clock.getElapsedTime();
 
@@ -230,6 +247,13 @@ export class ThreeFaceOff {
   }
 
   dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    if (this._rafId !== null) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = null;
+    }
+    window.removeEventListener('resize', this._onResizeBound);
     if (this.renderer) {
       this.renderer.dispose();
       if (this.renderer.domElement.parentNode) {

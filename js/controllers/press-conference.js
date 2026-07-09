@@ -47,10 +47,17 @@ export class PressConference {
     fighter.morale = clamp(fighter.morale + Math.round(effects.morale * multiplier), 0, 100);
     fighter.popularity = clamp(fighter.popularity + Math.round(effects.popularity * multiplier), 0, 100);
 
+    // Épico F1: acumula hype gerado na coletiva — vai virar bônus na bolsa
+    const hypeDelta = Math.round((effects.hype || 0) * multiplier);
+    fighter.pcHype = (fighter.pcHype || 0) + hypeDelta;
+
     return effects;
   }
 
   static getTotalHype(effects) {
     return effects.hype || 0;
   }
+
+  // Épico F1: nível mínimo de hype para gerar rivalidade/heat
+  static get RIVALRY_HYPE_THRESHOLD() { return 15; }
 }

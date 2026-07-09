@@ -28,7 +28,16 @@ export class ThreeArena {
     this.rotationVelocity = 0;
     this.autoRotate = true;
     this.clock = new THREE.Clock();
+    this.disposed = false;
+    this._rafId = null;
+    this._lastFrame = 0;
+    this._windowListeners = [];
     this.init();
+  }
+
+  _onWindow(type, handler, opts) {
+    window.addEventListener(type, handler, opts);
+    this._windowListeners.push([type, handler]);
   }
 
   init() {
@@ -50,7 +59,7 @@ export class ThreeArena {
       powerPreference: 'high-performance',
     });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.setClearColor(0x000000, 0);
@@ -77,11 +86,11 @@ export class ThreeArena {
       this.autoRotate = false;
     });
 
-    window.addEventListener('mouseup', () => {
+    this._onWindow('mouseup', () => {
       this.isDragging = false;
     });
 
-    window.addEventListener('mousemove', (e) => {
+    this._onWindow('mousemove', (e) => {
       if (this.isDragging) {
         const delta = e.clientX - this.prevMouseX;
         this.targetRotY += delta * 0.005;
@@ -102,11 +111,11 @@ export class ThreeArena {
       this.autoRotate = false;
     });
 
-    window.addEventListener('touchend', () => {
+    this._onWindow('touchend', () => {
       this.isDragging = false;
     });
 
-    window.addEventListener('touchmove', (e) => {
+    this._onWindow('touchmove', (e) => {
       if (this.isDragging) {
         const delta = e.touches[0].clientX - this.prevMouseX;
         this.targetRotY += delta * 0.005;
@@ -116,7 +125,7 @@ export class ThreeArena {
     });
 
     // Resize
-    window.addEventListener('resize', () => this.onResize());
+    this._onWindow('resize', () => this.onResize());
 
     // Start animation loop
     this.animate();
@@ -132,7 +141,7 @@ export class ThreeArena {
     spotRed.position.set(0, 12, 0);
     spotRed.target.position.set(0, 0, 0);
     spotRed.castShadow = true;
-    spotRed.shadow.mapSize.set(1024, 1024);
+    spotRed.shadow.mapSize.set(512, 512);
     this.scene.add(spotRed);
     this.scene.add(spotRed.target);
 
@@ -380,7 +389,21 @@ export class ThreeArena {
   }
 
   animate() {
-    requestAnimationFrame(() => this.animate());
+    if (this.disposed) return;
+
+    // Navegação troca o innerHTML do mainContent sem avisar a cena;
+    // quando o canvas sai do DOM, o loop precisa morrer junto.
+    if (!this.renderer.domElement.isConnected) {
+      this.dispose();
+      return;
+    }
+
+    this._rafId = requestAnimationFrame(() => this.animate());
+
+    // Cena decorativa: 30fps é suficiente e corta o custo de GPU pela metade
+    const nowMs = performance.now();
+    if (nowMs - this._lastFrame < 33) return;
+    this._lastFrame = nowMs;
 
     const elapsed = this.clock.getElapsedTime();
 
@@ -431,6 +454,19 @@ export class ThreeArena {
   }
 
   dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+
+    if (this._rafId !== null) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = null;
+    }
+
+    this._windowListeners.forEach(([type, handler]) => {
+      window.removeEventListener(type, handler);
+    });
+    this._windowListeners = [];
+
     if (this.renderer) {
       this.renderer.dispose();
       if (this.renderer.domElement.parentNode) {

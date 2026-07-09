@@ -1,8 +1,46 @@
 const STORES = ['fighters', 'organization', 'events', 'fights', 'rivalries', 'hallOfFame', 'offers'];
+const SLOT_COUNT = 6;
 
 export class SaveService {
   constructor(db) {
     this.db = db;
+    this.currentSlot = parseInt(localStorage.getItem('mmaManagerCurrentSlot') || '1', 10);
+  }
+
+  slotKey(slotIndex) {
+    return `mmaManagerSave_${slotIndex || this.currentSlot}`;
+  }
+
+  setSlot(slotIndex) {
+    this.currentSlot = slotIndex;
+    localStorage.setItem('mmaManagerCurrentSlot', String(slotIndex));
+  }
+
+  async getSlotInfo(slotIndex) {
+    const key = this.slotKey(slotIndex);
+    const json = localStorage.getItem(key);
+    if (!json) return { slot: slotIndex, exists: false };
+    try {
+      const data = JSON.parse(json);
+      const state = (data.gameState || []).find(s => s.id === 'state');
+      return {
+        slot: slotIndex, exists: true,
+        week: state?.week || '?', year: state?.year || '?',
+        gymName: state?.gymName || 'Desconhecido',
+        exportedAt: data.exportedAt || null,
+        rosterSize: data.fighters?.filter(f => f.status === 'gym').length || 0,
+      };
+    } catch {
+      return { slot: slotIndex, exists: true, corrupted: true };
+    }
+  }
+
+  async listSlots() {
+    const slots = [];
+    for (let i = 1; i <= SLOT_COUNT; i++) {
+      slots.push(await this.getSlotInfo(i));
+    }
+    return slots;
   }
 
   async exportSave() {
@@ -10,48 +48,46 @@ export class SaveService {
     for (const store of STORES) {
       data[store] = await this.db.getAll(store);
     }
-    // gameState guarda vários singletons (state, gym, milestones, meta)
     data.gameState = await this.db.getAll('gameState');
     return JSON.stringify(data, null, 2);
   }
 
   async importSave(json) {
     const data = JSON.parse(json);
-
     for (const store of STORES) {
       await this.db.clear(store);
-      for (const item of data[store] || []) {
-        await this.db.add(store, item);
-      }
+      for (const item of data[store] || []) await this.db.add(store, item);
     }
-
     await this.db.clear('gameState');
     const gameStates = Array.isArray(data.gameState) ? data.gameState : [data.gameState].filter(Boolean);
-    for (const gs of gameStates) {
-      await this.db.put('gameState', gs);
-    }
-
+    for (const gs of gameStates) await this.db.put('gameState', gs);
     return true;
   }
 
   async resetGame() {
-    for (const store of STORES) {
-      await this.db.clear(store);
-    }
+    for (const store of STORES) await this.db.clear(store);
     await this.db.clear('notifications');
     await this.db.clear('gameState');
   }
 
-  async saveSave() {
+  async saveSave(slotIndex) {
+    const idx = slotIndex || this.currentSlot;
     const json = await this.exportSave();
-    localStorage.setItem('mmaManagerSave', json);
+    localStorage.setItem(this.slotKey(idx), json);
+    this.setSlot(idx);
     return true;
   }
 
-  async loadSave() {
-    const json = localStorage.getItem('mmaManagerSave');
-    if (!json) throw new Error('Nenhum save encontrado');
+  async loadSave(slotIndex) {
+    const idx = slotIndex || this.currentSlot;
+    const json = localStorage.getItem(this.slotKey(idx));
+    if (!json) throw new Error(`Nenhum save encontrado no slot ${idx}`);
+    this.setSlot(idx);
     return this.importSave(json);
+  }
+
+  async deleteSave(slotIndex) {
+    localStorage.removeItem(this.slotKey(slotIndex));
   }
 
   async getSaveInfo() {
@@ -62,8 +98,7 @@ export class SaveService {
       rosterSize: fighters.filter(f => f.status === 'gym').length,
       freeAgents: fighters.filter(f => f.status === 'free').length,
       totalEvents: events.length,
-      week: state?.week || 1,
-      year: state?.year || 1,
+      week: state?.week || 1, year: state?.year || 1,
     };
   }
 }

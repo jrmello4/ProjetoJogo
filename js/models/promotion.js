@@ -16,6 +16,9 @@ export class Promotion {
 
     // Cinturões: { [weightClass]: fighterId | null }. null = vago.
     this.champions = data.champions || {};
+    // G1: Cinturões interinos — campeão lesionado há 12+ semanas
+    this.interimChampions = data.interimChampions || {};
+    this.interimTitleAbsWeek = data.interimTitleAbsWeek || {};
     // Defesas do campeão ATUAL de cada divisão (zera na troca de mãos).
     this.titleDefenses = data.titleDefenses || {};
     this.titleFightsHosted = data.titleFightsHosted ?? 0;
@@ -35,6 +38,11 @@ export class Promotion {
     return this.champions[weightClass] || null;
   }
 
+  // G1: campeão interino (enquanto o verdadeiro está lesionado)
+  interimChampionOf(weightClass) {
+    return this.interimChampions[weightClass] || null;
+  }
+
   isChampion(fighterId, weightClass) {
     return !!fighterId && this.champions[weightClass] === fighterId;
   }
@@ -48,12 +56,39 @@ export class Promotion {
     const retained = this.champions[weightClass] === fighterId;
     this.champions[weightClass] = fighterId;
     this.titleDefenses[weightClass] = retained ? this.defensesOf(weightClass) + 1 : 0;
+    // Se o interino era o campeão que venceu, limpa o interino
+    if (this.interimChampions[weightClass] === fighterId) {
+      this.clearInterim(weightClass);
+    }
     return { retained, defenses: this.titleDefenses[weightClass] };
+  }
+
+  // G1: coroa campeão interino
+  crownInterim(fighterId, weightClass, absWeek) {
+    this.interimChampions[weightClass] = fighterId;
+    this.interimTitleAbsWeek[weightClass] = absWeek;
+  }
+
+  // G1: promove interino a campeão definitivo (se o verdadeiro não voltar)
+  promoteInterim(weightClass) {
+    const interimId = this.interimChampions[weightClass];
+    if (!interimId) return null;
+    this.champions[weightClass] = interimId;
+    this.titleDefenses[weightClass] = 0; // novo campeão, defesas zeram
+    this.clearInterim(weightClass);
+    return interimId;
+  }
+
+  // G1: limpa status de interino
+  clearInterim(weightClass) {
+    this.interimChampions[weightClass] = null;
+    this.interimTitleAbsWeek[weightClass] = null;
   }
 
   vacate(weightClass) {
     this.champions[weightClass] = null;
     this.titleDefenses[weightClass] = 0;
+    this.clearInterim(weightClass);
   }
 
   // Divisões em que este lutador tem cinturão nesta promoção

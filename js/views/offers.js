@@ -198,7 +198,7 @@ export class OffersView {
           <div class="card mb-2 ${o.isTitleFight ? 'offer-card--title' : ''}" data-reveal>
             <div class="flex items-center justify-between mb-3">
               <div>
-                <div class="text-sm font-bold">${o.isTitleFight ? '<span class="belt-mark">🏆</span> ' : ''}${fighter ? fighter.name : '—'} vs ${o.opponentName}${o.isReencounter ? ' <span class="badge badge-danger" style="font-size:0.55rem">REENCONTRO</span>' : ''}</div>
+                <div class="text-sm font-bold">${o.isTitleFight ? '<span class="belt-mark">🏆</span> ' : ''}${fighter ? fighter.name : '—'} vs ${o.opponentName}${o.isReencounter ? ' <span class="badge badge-danger" style="font-size:0.65rem">⚔️ REENCONTRO</span>' : ''}</div>
                 <div class="text-xs text-muted">${o.promotionName} · ${formatCurrency(o.purse)} + ${formatCurrency(o.winBonus)} por vitória</div>
               </div>
               <span class="badge ${weeksOut <= 1 ? 'badge-danger' : 'badge-warning'}">${weeksOut <= 0 ? 'Esta semana!' : `em ${weeksOut} sem`}</span>

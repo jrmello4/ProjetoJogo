@@ -1,5 +1,5 @@
 import { clamp, generateId } from '../utils/helpers.js';
-import { RIVAL_GYM_CONFIG, GYM_CONFIG } from '../config/game-config.js';
+import { RIVAL_GYM_CONFIG, GYM_CONFIG, EXPECTATION_CONFIG } from '../config/game-config.js';
 
 // Épico A: retenção de atletas contra assédio de academias rivais.
 //
@@ -43,9 +43,14 @@ export class RetentionService {
       const rival = rivalGyms[Math.floor(Math.random() * rivalGyms.length)];
       const repEdge = Math.min(RIVAL_GYM_CONFIG.POACH_REP_EDGE_CAP,
         Math.max(0, rival.reputation - gym.reputation));
-      const chance = RIVAL_GYM_CONFIG.POACH_BASE_CHANCE
+      let chance = RIVAL_GYM_CONFIG.POACH_BASE_CHANCE
         + ((100 - fighter.morale) / 100) * RIVAL_GYM_CONFIG.POACH_MORALE_WEIGHT
         + (repEdge / 100) * RIVAL_GYM_CONFIG.POACH_REP_WEIGHT;
+
+      // Épico F2: atleta com expectativa urgente é alvo muito mais fácil
+      if (fighter.expectation?.urgency >= 3) {
+        chance += EXPECTATION_CONFIG.RIVAL_APPROACH_BONUS;
+      }
 
       if (Math.random() >= chance) continue;
 
@@ -231,12 +236,17 @@ export class RetentionService {
     const tenureFactor = Math.min(1, ((approach.deadlineAbsWeek - (fighter.gymJoinedAbsWeek || approach.deadlineAbsWeek)) / 52));
 
     // Chance base: 40% + contribuições
-    const retentionChance = 0.4
+    let retentionChance = 0.4
       + (loyaltyFactor * 0.2)   // lealdade adiciona até 20%
       + (moraleFactor * 0.15)   // moral adiciona até 15%
       + (trustFactor * 0.1)     // trust adiciona até 10%
       + (repFactor * 0.1)       // reputação relativa adiciona até 10%
       + (tenureFactor * 0.05);  // tempo de casa adiciona até 5%
+
+    // Épico F2: atleta com expectativa não atendida é mais difícil de reter
+    if (fighter.expectation?.urgency >= 3) {
+      retentionChance -= EXPECTATION_CONFIG.RIVAL_RETENTION_PENALTY;
+    }
 
     // Se o jogador respondeu, bônus adicional
     const responseBonus = approach.response === 'renegotiate' ? 0.15

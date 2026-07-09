@@ -275,14 +275,24 @@ export class DataGenerator {
 
   // Prospecto jovem para a equipe inicial do jogador: cru, mas com
   // potencial alto — o arco "do zero ao campeão" começa aqui.
+  // Fase 1: gera potencial com distribuição gaussiana enviesada pra baixo.
+  // 40%: 55-64 (medíocre), 30%: 65-71 (mediano), 20%: 72-79 (bom), 10%: 80-90 (crack)
+  static _generateGaussianPotential() {
+    const roll = Math.random();
+    if (roll < 0.10) return 80 + Math.floor(Math.random() * 11);
+    if (roll < 0.30) return 72 + Math.floor(Math.random() * 8);
+    if (roll < 0.60) return 65 + Math.floor(Math.random() * 7);
+    return 55 + Math.floor(Math.random() * 10);
+  }
+
   static generateProspect(weightClass) {
     const fighter = DataGenerator.generateFighter(null, {
       weightClass,
       skillRange: [36, 48],
-      age: 20 + Math.floor(Math.random() * 4),
+      age: 18 + Math.floor(Math.random() * 6),
       maxFights: 4,
     });
-    fighter.hidden.potential = 65 + Math.floor(Math.random() * 26); // 65-90
+    fighter.hidden.potential = DataGenerator._generateGaussianPotential();
     fighter.hidden.evolution = 25 + Math.floor(Math.random() * 20);
     fighter.popularity = 5 + Math.floor(Math.random() * 10);
     return fighter;

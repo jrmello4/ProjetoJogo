@@ -207,6 +207,12 @@ export class OfferService {
       await this.db.put('offers', offer);
       targetedOpponentIds.add(opponent.id);
       busyFighterIds.add(fighter.id);
+
+      // Épico F3: notificação de reencontro
+      if (isReencounter) {
+        await this.notifService.add('headline', 'Reencontro!',
+          `${opponent.name} (ex-integrante da sua academia) pode cruzar seu caminho contra ${fighter.name}! A rivalidade está armada.`);
+      }
       created.push(offer);
 
       await this.notifService.add('offer', '📩 Nova Oferta de Luta', `${promo.name} quer ${fighter.name} contra ${opponent.name} — bolsa de $${purse.toLocaleString()}.`);

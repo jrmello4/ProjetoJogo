@@ -3,6 +3,7 @@ import { DashboardView } from './views/dashboard.js';
 import { RosterView } from './views/roster.js';
 import { MarketView } from './views/market.js';
 import { EventsView } from './views/events.js';
+import { LiveFightHubView } from './views/live-fight-hub.js';
 import { OffersView } from './views/offers.js';
 import { AcademyView } from './views/academy.js';
 import { FighterProfileView } from './views/fighter-profile.js';
@@ -10,6 +11,7 @@ import { TrainingCampView } from './views/training-camp.js';
 import { RivalriesView } from './views/rivalries.js';
 import { PressConferenceView } from './views/press-conference.js';
 import { HallOfFameView } from './views/hall-of-fame.js';
+import { RetirementCeremonyView } from './views/retirement-ceremony.js';
 import { RankingsView } from './views/rankings.js';
 import { FinanceView } from './views/finance.js';
 import { RankingService } from './services/ranking.js';
@@ -26,7 +28,7 @@ import { ThreeBackground } from './three-background.js';
 import { motion } from './motion/motion-engine.js';
 import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, absWeekToLabel, GYM_CONFIG } from './config/game-config.js';
 import { getWeightClassName, formatCurrency, getAdjacentWeightClasses } from './utils/helpers.js';
-import { CAMP_CONFIG, absWeek } from './config/game-config.js';
+import { CAMP_CONFIG, HYPE_PURSE_RATIO, absWeek } from './config/game-config.js';
 
 class App {
   constructor() {
@@ -212,6 +214,9 @@ class App {
       case 'hall-of-fame':
         await this.renderHallOfFame();
         break;
+      case 'retirement':
+        await this.renderRetirementCeremony();
+        break;
       case 'notifications':
         await this.renderNotifications();
         break;
@@ -330,9 +335,21 @@ class App {
       `${absWeekToLabel(now)}. Fluxo da academia: ${economy.net >= 0 ? '+' : ''}$${economy.net.toLocaleString()}${offersCreated.length > 0 ? ` · ${offersCreated.length} nova${offersCreated.length === 1 ? '' : 's'} oferta${offersCreated.length === 1 ? '' : 's'} de luta` : ''}.`
     );
 
-    // Se um atleta da academia lutou, mostra o recap completo do card
+    // Se um atleta da academia lutou, mostra o Live Fight Hub
     const featured = world.playerEvents[0];
     if (featured) {
+      const playerResult = featured.playerResults?.[0];
+      if (playerResult) {
+        const fA = await this.game.fighterCtrl.getFighter(playerResult.fighterAId);
+        const fB = await this.game.fighterCtrl.getFighter(playerResult.fighterBId);
+        if (fA && fB) {
+          const html = LiveFightHubView.render(fA, fB, playerResult);
+          await LayoutView.render(html);
+          this._playLiveHub(featured.results, featured.playerFighterIds);
+          return;
+        }
+      }
+      // fallback: broadcast completo
       const html = EventsView.renderLiveSimulation(featured.event, featured.results, featured.playerFighterIds);
       await LayoutView.render(html);
       this._playLiveBroadcast();
@@ -699,6 +716,61 @@ class App {
     });
   }
 
+  // Fase 2: Live Fight Hub — revelação temporizada round a round
+  _playLiveHub(allResults, playerFighterIds) {
+    const statusText = document.getElementById('liveStatusText');
+    const rounds = document.querySelectorAll('.live-round');
+    const summary = document.getElementById('liveHubSummary');
+    const skipBtn = document.getElementById('skipLiveHubBtn');
+    let roundIdx = 0;
+    let beatIdx = 0;
+    let timer = null;
+
+    const finish = () => {
+      clearTimeout(timer);
+      rounds.forEach(r => r.style.display = 'block');
+      // Collapse all beat containers
+      rounds.forEach(r => {
+        const beatsDiv = r.querySelector('.live-round-beats');
+        if (beatsDiv) beatsDiv.querySelectorAll('.live-beat').forEach(b => b.style.display = 'flex');
+      });
+      if (summary) summary.style.display = 'block';
+      if (statusText) statusText.textContent = 'Luta encerrada';
+      if (skipBtn) skipBtn.style.display = 'none';
+    };
+
+    const showBeat = () => {
+      const round = rounds[roundIdx];
+      if (!round) { finish(); return; }
+      const beats = round.querySelectorAll('.live-beat');
+      if (!beats.length || beatIdx >= beats.length) {
+        // All beats done — move to next round after a pause
+        timer = setTimeout(() => {
+          roundIdx++;
+          beatIdx = 0;
+          if (roundIdx >= rounds.length) { finish(); return; }
+          rounds[roundIdx].style.display = 'block';
+          if (statusText) {
+            statusText.textContent = `Round ${roundIdx + 1} de ${rounds.length}`;
+          }
+          timer = setTimeout(showBeat, 400);
+        }, 800);
+        return;
+      }
+      beats[beatIdx].style.display = 'flex';
+      beatIdx++;
+      timer = setTimeout(showBeat, 600);
+    };
+
+    if (rounds.length === 0) { finish(); return; }
+
+    // Show first round
+    rounds[0].style.display = 'block';
+    if (statusText) statusText.textContent = `Round 1 de ${rounds.length}`;
+
+    skipBtn?.addEventListener('click', finish);
+    timer = setTimeout(showBeat, 1200);
+  }
   _playLiveBroadcast() {
     const status = document.getElementById('liveStatus');
     const fights = Array.from(document.querySelectorAll('#liveFights .live-fight'));
@@ -960,30 +1032,85 @@ class App {
     await LayoutView.render(html);
   }
 
-  async renderNotifications() {
+  // ===== G5: Cerimônia de Aposentadoria =====
+  async renderRetirementCeremony() {
+    const gameState = await this.game.db.get('gameState', 'state');
+    const fighterId = gameState?.meta?.lastRetirementFighterId;
+    if (!fighterId) {
+      await this.renderHallOfFame();
+      return;
+    }
+
+    const entry = await this.game.db.get('hallOfFame', fighterId);
+    if (!entry) {
+      await this.renderHallOfFame();
+      return;
+    }
+
+    const html = RetirementCeremonyView.render(entry);
+    await LayoutView.render(html);
+
+    document.getElementById('viewFullCareerBtn')?.addEventListener('click', () => {
+      // Mostra o card do atleta no Hall da Fama — navega para lá
+      this.navigateTo('hall-of-fame');
+    });
+
+    document.getElementById('backToHallBtn')?.addEventListener('click', () => {
+      this.navigateTo('hall-of-fame');
+    });
+  }
+
+  async renderNotifications(category = 'all') {
     const notifications = await this.notificationService.getAll();
     const unreadCount = notifications.filter(n => !n.read).length;
-    const html = NotificationsView.render(notifications, unreadCount);
+    const html = NotificationsView.render(notifications, unreadCount, category);
     await LayoutView.render(html);
+
+    // Abas de categoria
+    document.querySelectorAll('.notif-cat-btn').forEach(btn => {
+      btn.addEventListener('click', () => this.renderNotifications(btn.dataset.cat));
+    });
+
+    // G5: navega para cerimônia ao clicar em notificação de hall-of-fame
+    document.querySelectorAll('.nav-link[data-view="retirement"]').forEach(link => {
+      link.addEventListener('click', (e) => {
+        if (e.target.closest('.notif-mark-read, .notif-mark-all')) return;
+        this.navigateTo('retirement');
+      });
+    });
   }
 
   async handleSaveLoad() {
     const saveInfo = await this.saveService.getSaveInfo();
-    const hasSave = localStorage.getItem('mmaManagerSave') !== null;
-    const html = NotificationsView.renderSaveLoad(saveInfo, hasSave);
+    const slots = await this.saveService.listSlots();
+    const currentSlot = this.saveService.currentSlot;
+    const html = NotificationsView.renderSaveLoad(saveInfo, slots, currentSlot);
     await LayoutView.render(html);
 
-    document.querySelectorAll('.save-load-btn').forEach(btn => {
+    document.querySelectorAll('.slot-save-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (btn.dataset.action === 'save') {
-          await this.saveService.saveSave();
-          this.notificationService.add('success', 'Save', 'Jogo salvo com sucesso!');
-          this.renderDashboard();
-        } else if (btn.dataset.action === 'load') {
-          await this.saveService.loadSave();
-          this.notificationService.add('success', 'Load', 'Jogo carregado com sucesso!');
-          this.renderDashboard();
-        }
+        const slot = parseInt(btn.dataset.slot, 10);
+        await this.saveService.saveSave(slot);
+        this.notificationService.add('success', 'Save', `Jogo salvo no slot ${slot}!`);
+        this.handleSaveLoad();
+      });
+    });
+
+    document.querySelectorAll('.slot-load-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const slot = parseInt(btn.dataset.slot, 10);
+        await this.saveService.loadSave(slot);
+        this.notificationService.add('success', 'Load', `Jogo carregado do slot ${slot}!`);
+        window.location.reload();
+      });
+    });
+
+    document.querySelectorAll('.slot-delete-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const slot = parseInt(btn.dataset.slot, 10);
+        await this.saveService.deleteSave(slot);
+        this.notificationService.add('info', 'Delete', `Save do slot ${slot} deletado.`);
+        this.handleSaveLoad();
       });
     });
   }
@@ -1036,12 +1163,34 @@ class App {
         if (next) {
           next.style.display = 'block';
         } else {
-          const totalHype = PressConference.getTotalHype(option.effects);
-          const summary = PressConferenceView.renderSummary(option.effects, totalHype);
+          // Épico F1: hype acumulado de TODAS as perguntas
+          const totalHype = fighterA.pcHype || 0;
+          const hypeBonus = totalHype * HYPE_PURSE_RATIO;
+          await this.game.fighterCtrl.updateFighter(fighterA);
+
+          // Épico F1: hype alto gera rivalidade/heat entre os lutadores
+          if (totalHype >= PressConference.RIVALRY_HYPE_THRESHOLD && booking && fighterB?.id) {
+            const rivalry = await this.rivalryService.addPressConferenceHeat(
+              fighterA.id, fighterB.id, totalHype, booking.promotionId
+            );
+            if (rivalry) {
+              this.notificationService.add('info', 'Rivalidade',
+                `A provocação na coletiva acirrou a rivalidade entre ${fighterA.name} e ${fighterB.name}! (Intensidade: ${rivalry.intensityLabel})`);
+            }
+          }
+
+          const summary = PressConferenceView.renderSummary(null, totalHype, hypeBonus);
           document.getElementById('pressConferenceSummary').innerHTML = summary;
           document.getElementById('pressConferenceSummary').style.display = 'block';
           document.getElementById('pcSimulateBtn').style.display = 'none';
-          this.notificationService.add('success', 'Imprensa', `Conferência de imprensa de ${fighterA.name} concluída!`);
+
+          if (totalHype > 0) {
+            this.notificationService.add('success', 'Hype!',
+              `${fighterA.name} gerou hype +${totalHype} na coletiva. Bônus de ${formatCurrency(hypeBonus)} na bolsa da luta!`);
+          } else {
+            this.notificationService.add('info', 'Imprensa',
+              `Conferência de imprensa de ${fighterA.name} concluída.`);
+          }
         }
       });
     });

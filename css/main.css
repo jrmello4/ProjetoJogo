@@ -971,3 +971,24 @@ tbody tr:hover td { background: var(--bg-hover); }
     scroll-behavior: auto !important;
   }
 }
+
+/* ==========================================================================
+   G7: Icon set — substitui emoji por marcas tipográficas consistentes.
+   ========================================================================== */
+[class^="icon-"]::before {
+  display: inline-block; font-style: normal; font-weight: 400;
+  line-height: 1; text-align: center; vertical-align: middle;
+}
+.icon-trophy::before { content: "\01F3C6"; }
+.icon-swords::before { content: "\2694"; }
+.icon-bell::before { content: "\01F514"; }
+.icon-heart::before { content: "\2665"; color: var(--red-ink); }
+.icon-star::before { content: "\2605"; color: var(--belt-ink); }
+.icon-chart::before { content: "\01F4C8"; }
+.icon-money::before { content: "\01F4B0"; }
+.icon-skull::before { content: "\2620"; color: var(--ash); }
+.icon-check::before { content: "\2713"; color: var(--money); font-weight: 700; }
+.icon-cross::before { content: "\2715"; color: var(--red-ink); }
+.icon-alert::before { content: "\26A0"; color: #f1c40f; }
+.icon-arrow::before { content: "\2192"; }
+.icon-medal::before { content: "\25CF"; color: var(--belt-ink); }

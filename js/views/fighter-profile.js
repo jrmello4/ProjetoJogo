@@ -203,6 +203,29 @@ export class FighterProfileView {
             </div>
             <div class="text-xs text-muted mt-2">${fighter.morale}%</div>
           </div>
+
+          <div class="mt-4">
+            <div class="card-title mb-2">Lealdade</div>
+            <div class="progress-bar" style="height:10px">
+              <div class="progress-fill ${fighter.loyalty >= 70 ? 'high' : fighter.loyalty >= 40 ? 'medium' : 'low'}" style="width:${fighter.loyalty}%"></div>
+            </div>
+            <div class="text-xs text-muted mt-2">${fighter.loyalty}%</div>
+          </div>
+
+          ${fighter.expectation ? `
+          <div class="mt-4">
+            <div class="card-title mb-2">Expectativa</div>
+            <div class="text-sm">
+              <span class="badge ${fighter.expectation.urgency >= 3 ? 'badge-danger' : fighter.expectation.urgency >= 2 ? 'badge-warning' : 'badge-info'}">
+                ${fighter.expectation.kind === 'title_shot' ? 'Quer chance de título' : fighter.expectation.kind === 'move_up_tier' ? 'Quer subir de tier' : fighter.expectation.kind === 'more_fights' ? 'Quer lutar mais' : 'Quer melhor pagamento'}
+                ${fighter.expectation.urgency >= 2 ? ' · Urgente!' : ''}
+              </span>
+            </div>
+            ${fighter.expectation.urgency >= 3 ? `
+              <div class="text-danger text-xs mt-1">⚠️ Perde moral/lealdade semanalmente. Alvo fácil de rivais.</div>
+            ` : ''}
+          </div>
+          ` : ''}
         </div>
       </div>
 
@@ -273,6 +296,35 @@ export class FighterProfileView {
           ` : '';
         })() : ''}
       </div>
+
+      <!-- G3: Gráfico de carreira (OVR ao longo das lutas) -->
+      ${displayHistory.length > 0 ? `
+      <div class="card mt-4">
+        <div class="card-header">
+          <span class="card-title">📈 Carreira — OVR nas últimas lutas</span>
+        </div>
+        <div style="padding:0.5rem 0">
+          ${displayHistory.slice(0, 15).reverse().map((f, i, arr) => {
+            const ovr = f.fighterRating;
+            if (!ovr) return '';
+            const pct = Math.round((ovr / 100) * 100);
+            const barColor = f.won ? 'high' : 'low';
+            const prev = arr[i - 1];
+            const delta = prev?.fighterRating ? (ovr - prev.fighterRating) : null;
+            const deltaLabel = delta !== null ? (delta > 0 ? `<span class="text-success">+${delta}</span>` : delta < 0 ? `<span class="text-danger">${delta}</span>` : '') : '';
+            return `
+              <div class="flex items-center gap-2 mb-1" style="font-size:0.75rem">
+                <span class="badge ${f.won ? 'badge-success' : 'badge-danger'}" style="min-width:1.5rem;font-size:0.55rem">${f.result}</span>
+                <span style="width:5.5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.opponent}</span>
+                <div class="progress-bar flex-1" style="height:8px;max-width:120px">
+                  <div class="progress-fill ${barColor}" style="width:${pct}%"></div>
+                </div>
+                <span class="font-bold" style="min-width:2rem;text-align:right">${ovr}</span>
+                ${deltaLabel ? `<span style="min-width:2rem">${deltaLabel}</span>` : ''}
+              </div>`;
+          }).filter(Boolean).join('')}
+        </div>
+      </div>` : ''}
 
       <div class="mt-4">
         ${historyHtml}

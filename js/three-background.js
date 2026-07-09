@@ -17,6 +17,9 @@ export class ThreeBackground {
     this.renderer = null;
     this.particles = null;
     this.clock = new THREE.Clock();
+    this.disposed = false;
+    this._rafId = null;
+    this._lastFrame = 0;
     this.init();
   }
 
@@ -34,7 +37,7 @@ export class ThreeBackground {
       powerPreference: 'low-power',
     });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.setPixelRatio(1);
     this.renderer.setClearColor(0x000000, 0);
 
     // Insert canvas behind everything
@@ -99,7 +102,21 @@ export class ThreeBackground {
   }
 
   animate() {
-    requestAnimationFrame(() => this.animate());
+    if (this.disposed) return;
+    this._rafId = requestAnimationFrame(() => this.animate());
+
+    // Fundo decorativo: 30fps basta
+    const nowMs = performance.now();
+    if (nowMs - this._lastFrame < 33) return;
+    this._lastFrame = nowMs;
+
+    // Cada troca de tela apaga o innerHTML do container e leva o canvas
+    // junto — religa em vez de renderizar num canvas desconectado.
+    const canvas = this.renderer.domElement;
+    if (!canvas.isConnected) {
+      if (!this.container.isConnected) return; // container sumiu: não renderiza
+      this.container.insertBefore(canvas, this.container.firstChild);
+    }
 
     const elapsed = this.clock.getElapsedTime();
 
@@ -117,6 +134,12 @@ export class ThreeBackground {
   }
 
   dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    if (this._rafId !== null) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = null;
+    }
     if (this.renderer) {
       this.renderer.dispose();
       if (this.renderer.domElement.parentNode) {

@@ -67,6 +67,12 @@ export class DashboardView {
         <span class="poster-belt">🏆</span>
       </div>` : '';
 
+    // Épico F3: reencontro aparece no pôster independente de ser title fight
+    const reencounterStrap = booking.isReencounter ? `
+      <div class="poster-title-strap" style="background:linear-gradient(135deg, var(--red), #c0392b)">
+        <span>⚔️ REENCONTRO — ${booking.opponentName} foi da sua academia!</span>
+      </div>` : '';
+
     return `
       <section class="poster ${booking.isTitleFight ? 'poster--title' : ''}">
         ${arena}
@@ -75,6 +81,7 @@ export class DashboardView {
           <h1 class="visually-hidden">${gym.name} — ${weekLabel}</h1>
 
           ${titleStrap}
+          ${reencounterStrap}
 
           <div class="poster-billing">
             <span class="poster-promo">${booking.promotionName}</span>

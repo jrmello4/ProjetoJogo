@@ -31,6 +31,7 @@ import {
   TRAINING_FOCUS_META,
   GAME_PLANS,
   CAMP_CONFIG,
+  EXPECTATION_CONFIG,
   absWeek,
 } from '../config/game-config.js';
 
@@ -136,6 +137,15 @@ export class GameController {
       applied.add('expandedAttributes');
     }
 
+
+    // Fase 1: inicializa doc worldGen para rastrear regeneração do mundo
+    if (!applied.has('worldRegen')) {
+      const existing = await this.db.get('gameState', 'worldGen');
+      if (!existing) {
+        await this.db.put('gameState', { id: 'worldGen', lastGenAbsWeek: 0, totalGenerated: 0 });
+      }
+      applied.add('worldRegen');
+    }
     if (applied.size !== (meta.patches || []).length) {
       await this.db.put('gameState', { ...meta, id: 'meta', patches: [...applied] });
     }
@@ -343,6 +353,8 @@ export class GameController {
 
     // Épico F3: gerar manchetes da semana
     await this._generateHeadlines(now, world, teamAfterTraining);
+    // Épico F3: callouts de IA provocando atletas do jogador
+    await this._generateCallouts(now, teamAfterTraining);
 
     await this.updateGym(gym);
 
@@ -497,7 +509,7 @@ export class GameController {
     }
   }
 
-  // Épico F3: gera manchetes do mundo da semana (vitórias, derrotas, lesões, cinturões)
+  // Épico F3: gera manchetes do mundo da semana — vitórias, upsets, lesões, cinturões
   async _generateHeadlines(now, world, team) {
     const { playerEvents, promotionEvents } = world;
 
@@ -505,23 +517,72 @@ export class GameController {
     for (const pe of (playerEvents || [])) {
       const fighter = team.find(f => f.id === pe.fighterId);
       if (!pe.won && pe.method && (pe.method.startsWith('KO') || pe.method.startsWith('TKO'))) {
-        await this.notifService.add('headline', 'Nocaute', `${fighter?.name || 'Atleta'} foi nocauteado por ${pe.opponentName} no R${pe.round}.`);
+        await this.notifService.add('headline', 'Nocaute Sofrido', `${fighter?.name || 'Atleta'} foi nocauteado por ${pe.opponentName} no R${pe.round}.`);
+      }
+      if (pe.won && pe.method && pe.method.startsWith('KO')) {
+        await this.notifService.add('headline', 'Nocaute!', `${fighter?.name || 'Atleta'} nocauteou ${pe.opponentName} no R${pe.round}!`);
+      }
+      if (pe.won && pe.method && pe.method.startsWith('Submission')) {
+        await this.notifService.add('headline', 'Finalização!', `${fighter?.name || 'Atleta'} finalizou ${pe.opponentName} no R${pe.round}!`);
       }
     }
 
     // Manchetes de eventos do mundo (promoções)
     for (const promo of (promotionEvents || [])) {
-      for (const r of (promo.results || []).slice(0, 2)) { // top 2 resultados
+      for (const r of (promo.results || []).slice(0, 3)) { // top 3 resultados
         const headlineParts = [];
-        if (r.method === 'KO') headlineParts.push(`NOCAUTE DE ${r.winnerName.toUpperCase()}`);
-        else if (r.method === 'Submission') headlineParts.push(`Finalização relâmpago: ${r.winnerName} finaliza ${r.loserName}`);
-        else if (r.isTitleFight) headlineParts.push(`Disputa de cinturão: ${r.winnerName} vence ${r.loserName}`);
+        if (r.method === 'KO') headlineParts.push(`💥 NOCAUTE: ${r.winnerName} destrói ${r.loserName} no R${r.round}`);
+        else if (r.method === 'Submission') headlineParts.push(`🔄 Finalização: ${r.winnerName} finaliza ${r.loserName} no R${r.round}`);
+        else if (r.isTitleFight) headlineParts.push(`🏆 Disputa de cinturão: ${r.winnerName} vence ${r.loserName}`);
+
+        // Upset detection: underdog wins (lower OVR)
+        if (r.winnerOvr && r.loserOvr && r.loserOvr > r.winnerOvr + 8) {
+          headlineParts.push(`⚠️ SURPRESA: ${r.winnerName} (OVR ${r.winnerOvr}) vence ${r.loserName} (OVR ${r.loserOvr})`);
+        }
 
         if (headlineParts.length > 0) {
-          await this.notifService.add('headline', promo.promotionName, `${headlineParts[0]} — ${r.details || ''}`);
+          await this.notifService.add('headline', promo.promotionName, `${headlineParts[0]}`);
         }
       }
     }
+  }
+
+  // Épico F3: gera callouts de lutadores de IA provocando os atletas do jogador
+  async _generateCallouts(now, team) {
+    const promotions = await this.worldService.getPromotions();
+    if (!promotions.length) return;
+
+    // Chance semanal de callout: ~30%
+    if (Math.random() > 0.3) return;
+
+    // Pega um atleta do time elegível (não lesionado, ativo)
+    const eligible = team.filter(f => f.status !== 'injured' && f.status !== 'retired');
+    if (!eligible.length) return;
+
+    const target = eligible[Math.floor(Math.random() * eligible.length)];
+
+    // Pega um lutador de IA de qualquer lugar
+    const allFighters = await this.fighterCtrl.getAll();
+    const callouters = allFighters.filter(f =>
+      f.id !== target.id &&
+      f.status !== 'retired' &&
+      f.weightClass === target.weightClass &&
+      f.popularity >= 30
+    );
+
+    if (!callouters.length) return;
+
+    const caller = callouters[Math.floor(Math.random() * callouters.length)];
+    const calloutPhrases = [
+      `${caller.name} provocou ${target.name}: "Eu enfrento qualquer um, inclusive ele."`,
+      `${caller.name} disse em entrevista que ${target.name} "não está pronto para o próximo nível."`,
+      `${caller.name} quer uma chance contra ${target.name}: "Quero mostrar quem manda na divisão."`,
+      `${caller.name} criticou a última atuação de ${target.name}: "Eu teria finalizado no primeiro round."`,
+      `${caller.name} mandou um salve: "${target.name}, para de fugir e aceita uma luta."`,
+    ];
+
+    const phrase = calloutPhrases[Math.floor(Math.random() * calloutPhrases.length)];
+    await this.notifService.add('headline', 'Callout', phrase);
   }
 
   // Épico F2: expectativas dos atletas (título, subir de tier, mais lutas, melhor pagamento)
@@ -532,8 +593,27 @@ export class GameController {
       if (fighter.status === 'injured' || fighter.status === 'retired') continue;
       if (!fighter.promotionContract && !fighter.organizationId) continue;
 
-      // Checar a cada 4 semanas
-      if (now - (fighter.lastExpectationCheck || 0) < 4) continue;
+      // === FASE 1: DANO SEMANAL (roda toda semana, independente do CHECK_INTERVAL) ===
+      if (fighter.expectation?.urgency >= 3) {
+        const oldMorale = fighter.morale;
+        const oldLoyalty = fighter.loyalty;
+        fighter.morale = Math.max(0, fighter.morale - EXPECTATION_CONFIG.MORALE_DAMAGE_URGENT);
+        fighter.loyalty = Math.max(0, fighter.loyalty - EXPECTATION_CONFIG.LOYALTY_DAMAGE_URGENT);
+        // Só notifica se houve dano real (evita spam quando já está em 0)
+        if (fighter.morale < oldMorale || fighter.loyalty < oldLoyalty) {
+          await this.notifService.add(
+            'warning',
+            'Insatisfação',
+            `${fighter.name} está frustrado(a) com a falta de ${fighter.expectation.kind === 'title_shot' ? 'chance de título' : fighter.expectation.kind === 'move_up_tier' ? 'progressão de carreira' : fighter.expectation.kind === 'more_fights' ? 'lutas' : 'melhor pagamento'}. Moral: -${EXPECTATION_CONFIG.MORALE_DAMAGE_URGENT}, Lealdade: -${EXPECTATION_CONFIG.LOYALTY_DAMAGE_URGENT}.`
+          );
+        }
+      }
+
+      // === FASE 2: REAVALIAÇÃO (a cada CHECK_INTERVAL semanas) ===
+      if (now - (fighter.lastExpectationCheck || 0) < EXPECTATION_CONFIG.CHECK_INTERVAL) {
+        await this.fighterCtrl.updateFighter(fighter);
+        continue;
+      }
 
       const promoId = fighter.promotionContract?.promotionId || fighter.organizationId;
       const promo = promotions.find(p => p.id === promoId);
@@ -575,14 +655,9 @@ export class GameController {
         fighter.expectation = null;
       }
 
-      // Urgência aumenta com o tempo: a cada 4 semanas sem resolver, sobe 1
+      // Urgência aumenta com o tempo na reavaliação
       if (fighter.expectation && weeksSinceLastFight >= 4) {
         fighter.expectation.urgency = Math.min(3, (fighter.expectation.urgency || 1) + 1);
-        // Urgência 3: risco de perder o atleta
-        if (fighter.expectation.urgency >= 3 && Math.random() < 0.1) {
-          fighter.loyalty = Math.max(0, fighter.loyalty - 5);
-          fighter.morale = Math.max(0, fighter.morale - 10);
-        }
       }
 
       await this.fighterCtrl.updateFighter(fighter);

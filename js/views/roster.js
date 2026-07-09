@@ -109,6 +109,11 @@ export class RosterView {
               ${f.expectation.kind === 'title_shot' ? 'Quer chance de título' : f.expectation.kind === 'move_up_tier' ? 'Quer subir de tier' : f.expectation.kind === 'more_fights' ? 'Quer lutar mais' : 'Quer melhor pagamento'}
               ${f.expectation.urgency >= 2 ? ' · Urgente!' : ''}
             </span>
+            ${f.expectation.urgency >= 3 ? `
+              <div class="text-danger text-xs mt-1">
+                ⚠️ Expectativa não atendida — perde moral/lealdade a cada semana. Alvo fácil de rivais!
+              </div>
+            ` : ''}
           </div>
         ` : ''}
 
@@ -119,7 +124,7 @@ export class RosterView {
           ${renderAttrBar('Fight IQ', f.attributes.fightIQ)}
         </div>
 
-        <div class="grid grid-cols-2 gap-3 mt-3">
+        <div class="grid grid-cols-3 gap-3 mt-3">
           <div>
             <div class="text-xs text-muted mb-1">Fadiga</div>
             <div class="progress-bar" style="height:6px">
@@ -130,6 +135,12 @@ export class RosterView {
             <div class="text-xs text-muted mb-1">Moral</div>
             <div class="progress-bar" style="height:6px">
               <div class="progress-fill ${f.morale >= 70 ? 'high' : f.morale >= 40 ? 'medium' : 'low'}" style="width:${f.morale}%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="text-xs text-muted mb-1">Lealdade</div>
+            <div class="progress-bar" style="height:6px">
+              <div class="progress-fill ${f.loyalty >= 70 ? 'high' : f.loyalty >= 40 ? 'medium' : 'low'}" style="width:${f.loyalty}%"></div>
             </div>
           </div>
         </div>

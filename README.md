@@ -4,7 +4,7 @@
 
 As promoções são controladas pela IA: elas realizam os próprios eventos, coroam campeões e mandam ofertas de luta para os seus atletas. Você decide quais lutas aceitar, o que cada um treina, quanto investir em estudar o adversário — e, no meio do combate, o que gritar do córner.
 
-![Jogo em pt-BR](https://img.shields.io/badge/idioma-pt--BR-green) ![PWA](https://img.shields.io/badge/PWA-instal%C3%A1vel-blue) ![Sem backend](https://img.shields.io/badge/backend-nenhum-lightgrey)
+![Jogo em pt-BR](https://img.shields.io/badge/idioma-pt--BR-green) ![Sem backend](https://img.shields.io/badge/backend-nenhum-lightgrey)
 
 > 📋 **O que falta construir está em [`docs/PRD.md`](docs/PRD.md)** — fonte de verdade do roadmap, dos bugs conhecidos e das convenções do projeto.
 >
@@ -51,7 +51,15 @@ pode servir um `.js` antigo **sem erro visível** depois de editar o arquivo.
 - **JavaScript puro (ES Modules)** — sem framework, sem build, sem npm
 - **IndexedDB** para o save (migrações aditivas via `gameState.meta.patches`)
 - **Three.js** na arena do pôster · **GSAP + Lenis** nas animações
-- **PWA** instalável e offline
+
+## Publicar no itch.io
+
+O jogo é 100% client-side (sem backend, save em IndexedDB) — dá pra subir como
+projeto HTML no itch.io. Suba um zip com `index.html`, `css/`, `js/` e
+`assets/` na raiz (não precisa de `server.js`, que é só conveniência de
+desenvolvimento local). Depois de publicar, cole a URL da página em
+`SHARE_URL` no topo de `js/app.js` pra ela aparecer nos textos de
+compartilhamento de resultado de luta e Hall da Fama.
 
 ## Design
 

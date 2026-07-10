@@ -30,6 +30,11 @@ import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS
 import { getWeightClassName, formatCurrency, getAdjacentWeightClasses } from './utils/helpers.js';
 import { CAMP_CONFIG, HYPE_PURSE_RATIO, absWeek } from './config/game-config.js';
 
+// Depois de publicar no itch.io, cole a URL da página do jogo aqui pra ela
+// aparecer nos textos de compartilhamento (resultado de luta, Hall da Fama).
+// Vazio = compartilha só o texto, sem link.
+const SHARE_URL = '';
+
 class App {
   constructor() {
     this.game = new GameController();
@@ -431,7 +436,7 @@ class App {
           document.getElementById('hubBackBtn')?.addEventListener('click', () => this.renderDashboard());
           document.getElementById('shareFightBtn')?.addEventListener('click', () => {
             const fText = `${playerResult._won ? '🏆' : '😔'} ${fA.name} ${playerResult._won ? 'venceu' : 'perdeu'} por ${playerResult.method} no R${playerResult.round}!`;
-            const shareText = `${fText}\n💰 Bolsa: $${(playerResult._purse || 0).toLocaleString()} | Comissão: $${(playerResult._gymCut || 0).toLocaleString()}\n📊 Recorde: ${fA.record.wins}-${fA.record.losses}-${fA.record.draws}\n\nJogue MMA Manager: ${window.location.origin}/landing.html`;
+            const shareText = `${fText}\n💰 Bolsa: $${(playerResult._purse || 0).toLocaleString()} | Comissão: $${(playerResult._gymCut || 0).toLocaleString()}\n📊 Recorde: ${fA.record.wins}-${fA.record.losses}-${fA.record.draws}${SHARE_URL ? `\n\nJogue MMA Manager: ${SHARE_URL}` : ''}`;
             if (navigator.share) {
               navigator.share({ title: 'MMA Manager', text: shareText });
             } else {
@@ -1217,9 +1222,9 @@ class App {
     await LayoutView.render(html);
 
     document.querySelector('.hall-of-fame-share')?.addEventListener('click', () => {
-      const text = `Acabei de imortalizar ${entries.length} lendas no MMA Manager!\n\nConstrua dinastias. Destrua legados.\n👉 ${window.location.origin}/landing.html`;
+      const text = `Acabei de imortalizar ${entries.length} lendas no MMA Manager!\n\nConstrua dinastias. Destrua legados.${SHARE_URL ? `\n👉 ${SHARE_URL}` : ''}`;
       if (navigator.share) {
-        navigator.share({ title: 'MMA Manager', text, url: `${window.location.origin}/landing.html` });
+        navigator.share(SHARE_URL ? { title: 'MMA Manager', text, url: SHARE_URL } : { title: 'MMA Manager', text });
       } else {
         navigator.clipboard.writeText(text).then(() => {
           this.notificationService?.add('success', 'Compartilhar', 'Link copiado! Envie para um amigo fã de MMA.');

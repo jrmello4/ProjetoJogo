@@ -1,8 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
   <rect width="128" height="128" rx="24" fill="#08080a"/>
-  <polygon points="64,14 99,29 114,64 99,99 64,114 29,99 14,64 29,29"
-           fill="none" stroke="#e8234a" stroke-width="7" stroke-linejoin="round"/>
-  <polygon points="64,32 86,41 95,64 86,87 64,96 42,87 33,64 42,41"
-           fill="none" stroke="#e8b84a" stroke-width="3" stroke-linejoin="round" opacity="0.85"/>
-  <circle cx="64" cy="64" r="7" fill="#f4f2ef"/>
+  <g transform="translate(64,64)">
+    <g transform="translate(-4,0)">
+      <path d="M -40 -20 q -14 0 -14 14 l 0 18 q 0 14 14 14 l 20 0 q 12 0 12 -12 l 0 -6 q 9 3 9 -8 q 0 -14 -14 -14 z" fill="#c8202f"/>
+      <path d="M -40 -6 q -6 0 -6 6 q 0 6 6 6 l 20 0 q 4 0 4 -6 q 0 -6 -4 -6 z" fill="#a01824"/>
+      <ellipse cx="-2" cy="-16" rx="7" ry="9" fill="#c8202f"/>
+    </g>
+    <g transform="translate(4,0)">
+      <path d="M 40 20 q 14 0 14 -14 l 0 -18 q 0 -14 -14 -14 l -20 0 q -12 0 -12 12 l 0 6 q -9 -3 -9 8 q 0 14 14 14 z" fill="#c9a227"/>
+      <path d="M 40 6 q 6 0 6 -6 q 0 -6 -6 -6 l -20 0 q -4 0 -4 6 q 0 6 4 6 z" fill="#9a7a1d"/>
+      <ellipse cx="2" cy="16" rx="7" ry="9" fill="#c9a227"/>
+    </g>
+  </g>
 </svg>

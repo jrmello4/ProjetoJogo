@@ -430,7 +430,7 @@ class App {
         if (fA && fB) {
           const html = LiveFightHubView.render(fA, fB, playerResult);
           await LayoutView.render(html);
-          this._playLiveHub(featured.results, featured.playerFighterIds);
+          this._playLiveHub(featured.results, featured.playerFighterIds, fA, fB);
           // Sem este bind o botão do resumo é um beco sem saída — o jogador
           // termina a luta e fica preso na tela do hub.
           document.getElementById('hubBackBtn')?.addEventListener('click', () => this.renderDashboard());
@@ -816,7 +816,7 @@ class App {
   }
 
   // Fase 2: Live Fight Hub — revelação temporizada round a round
-  _playLiveHub(allResults, playerFighterIds) {
+  _playLiveHub(allResults, playerFighterIds, fighterA = null, fighterB = null) {
     const statusText = document.getElementById('liveStatusText');
     const statusCard = document.getElementById('liveHubStatus');
     const rounds = document.querySelectorAll('.live-round');
@@ -835,7 +835,7 @@ class App {
     try {
       import('./three-faceoff.js').then(mod => {
         if (!cancelled && faceOff) {
-          threeFaceOff = new mod.ThreeFaceOff('hubFaceOff', null, null);
+          threeFaceOff = new mod.ThreeFaceOff('hubFaceOff', fighterA, fighterB);
         }
       }).catch(() => {});
     } catch {}
@@ -918,7 +918,10 @@ class App {
       }
 
       beatIdx++;
-      gsap.delayedCall(0.45, showBeat);
+      // Beats de impacto respiram: o desfecho pausa mais que o resto pra o
+      // flash/shake assentarem antes do próximo passo. Beat comum = 0.45s.
+      const nextDelay = beatType === 'finish' ? 1.6 : beatType === 'knockdown' ? 0.9 : 0.45;
+      gsap.delayedCall(nextDelay, showBeat);
     };
 
     if (rounds.length === 0 || cancelled) { finish(); return; }

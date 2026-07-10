@@ -6,12 +6,38 @@ import * as THREE from 'three';
  * Responde a eventos de luta (knockdown, KO, vitória) com reações visuais.
  */
 export class ThreeFaceOff {
-  constructor(containerId, fighterA, fighterB) {
+  // Cor estável por lutador. Sem lutador → cor base do corner (vermelho/azul).
+  // Com lutador, varia levemente o tom a partir de um hash do id/nome, mantendo
+  // a família de cor do corner para não quebrar a leitura "vermelho vs azul".
+  static _fighterColor(fighter, baseHex) {
+    if (!fighter) return baseHex;
+    const key = String(fighter.id ?? fighter.name ?? '');
+    if (!key) return baseHex;
+    let h = 0;
+    for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) & 0xffff;
+    const base = new THREE.Color(baseHex);
+    const hsl = { h: 0, s: 0, l: 0 };
+    base.getHSL(hsl);
+    // desloca o matiz em ±0.04 e a luminosidade em ±0.06 — variação sutil
+    const hue = (hsl.h + ((h % 100) / 100 - 0.5) * 0.08 + 1) % 1;
+    const light = Math.min(0.7, Math.max(0.3, hsl.l + (((h >> 8) % 100) / 100 - 0.5) * 0.12));
+    return new THREE.Color().setHSL(hue, hsl.s, light).getHex();
+  }
+
+  constructor(containerId, fighterA = null, fighterB = null) {
     this.container = document.getElementById(containerId);
     if (!this.container) {
       console.warn('ThreeFaceOff: container not found');
       return;
     }
+
+    // Corner vermelho (esquerda) = fighterA (atleta do jogador, por convenção
+    // do WorldService); azul (direita) = fighterB. Sem lutadores, cai nas cores
+    // genéricas de sempre. Cor da nacionalidade tem prioridade se existir.
+    this.fighterA = fighterA;
+    this.fighterB = fighterB;
+    this.redColor = ThreeFaceOff._fighterColor(fighterA, 0xc41e3a);
+    this.blueColor = ThreeFaceOff._fighterColor(fighterB, 0x3a5a8a);
 
     this.scene = null;
     this.camera = null;
@@ -47,8 +73,8 @@ export class ThreeFaceOff {
     this.container.appendChild(this.renderer.domElement);
 
     this.createLights();
-    this.createFighterSilhouette(-1.5, 0xc41e3a); // Red side
-    this.createFighterSilhouette(1.5, 0x3a5a8a);  // Blue side
+    this.createFighterSilhouette(-1.5, this.redColor);  // Red corner = fighterA
+    this.createFighterSilhouette(1.5, this.blueColor);  // Blue corner = fighterB
     this.createGround();
     this.createParticles();
 
@@ -61,14 +87,14 @@ export class ThreeFaceOff {
     this.scene.add(ambient);
 
     // Red spotlight (left fighter)
-    this.redSpot = new THREE.SpotLight(0xc41e3a, 3, 15, Math.PI / 6, 0.6, 1);
+    this.redSpot = new THREE.SpotLight(this.redColor, 3, 15, Math.PI / 6, 0.6, 1);
     this.redSpot.position.set(-3, 5, 2);
     this.redSpot.target.position.set(-1.5, 1, 0);
     this.scene.add(this.redSpot);
     this.scene.add(this.redSpot.target);
 
     // Blue spotlight (right fighter)
-    this.blueSpot = new THREE.SpotLight(0x3a5a8a, 3, 15, Math.PI / 6, 0.6, 1);
+    this.blueSpot = new THREE.SpotLight(this.blueColor, 3, 15, Math.PI / 6, 0.6, 1);
     this.blueSpot.position.set(3, 5, 2);
     this.blueSpot.target.position.set(1.5, 1, 0);
     this.scene.add(this.blueSpot);

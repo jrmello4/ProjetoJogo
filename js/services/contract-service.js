@@ -1,5 +1,5 @@
-import { generateId, clamp } from '../utils/helpers.js';
-import { OFFER_CONFIG, PROMOTIONS, GYM_CONFIG } from '../config/game-config.js';
+import { generateId, clamp, formatCurrency } from '../utils/helpers.js';
+import { OFFER_CONFIG, PROMOTIONS, GYM_CONFIG, TIER_LABELS } from '../config/game-config.js';
 
 // Ciclo de vida dos contratos exclusivos com promoções (Épico B).
 // Fluxo: proposta → aceite → vigência → expiração/corte/rescisão.
@@ -20,23 +20,24 @@ export class ContractService {
     return 3;
   }
 
-  // Gera propostas de contrato quando o lutador atinge os gates de tier
+  // Gera propostas de contrato quando o lutador atinge os gates de tier.
+  // Sem contrato, o lutador só recebe lutas avulsas do circuito regional
+  // (OfferService cai pro tier 3 incondicionalmente) — isto aqui é o único
+  // caminho pra tirá-lo de lá. `_currentTier` já devolve o tier MAIS ALTO
+  // cujo gate de vitórias/popularidade o lutador bate (1 = elite); a
+  // proposta é para ESSE tier, não um acima dele.
   async generateOffers(fighter, absWeekNow, gym) {
     if (fighter.promotionContract?.status === 'active') return; // já tem contrato
 
-    const tier = this._currentTier(fighter);
-    if (tier <= 1) return; // já está no topo, não sobe mais
+    const targetTier = this._currentTier(fighter);
+    if (targetTier >= 3) return; // ainda não bate nem o gate de tier 2
 
-    // Só gera proposta se atingiu gate do próximo tier
-    const nextTier = tier - 1;
-    const gate = OFFER_CONFIG.TIER_GATES[nextTier];
-    if (!gate) return;
-
-    const eligible = this._checkGate(fighter, nextTier, gate, gym?.reputation || 50);
-    if (!eligible) return;
+    const gate = OFFER_CONFIG.TIER_GATES[targetTier];
+    const eligible = this._checkGate(fighter, targetTier, gate, gym?.reputation || 50);
+    if (!eligible) return; // bate wins/popularidade mas a reputação da academia ainda não acompanha
 
     // Buscar promoções do tier alvo
-    const promos = PROMOTIONS.filter(p => p.tier === nextTier);
+    const promos = PROMOTIONS.filter(p => p.tier === targetTier);
     if (promos.length === 0) return;
 
     // Gera uma proposta por promoção
@@ -122,7 +123,7 @@ export class ContractService {
   }
 
   // Consome uma luta do contrato - chamado após settlePlayerFight
-  async consumeFight(fighterId, won) {
+  async consumeFight(fighterId, won, gym = null, absWeekNow = null) {
     const fighter = await this.fighterCtrl.getFighter(fighterId);
     if (!fighter || !fighter.promotionContract) return;
 
@@ -142,14 +143,56 @@ export class ContractService {
       return;
     }
 
-    // Contrato expirou - tentar renovação automática
+    // Contrato expirou - verificar se o lutador já bate o gate do tier
+    // acima antes de renovar automaticamente no mesmo tier de sempre.
     if (contract.fightsRemaining <= 0) {
       contract.status = 'expired';
-      await this._autoRenew(fighter);
+      await this._handleExpiration(fighter, gym, absWeekNow ?? contract.signedAtAbsWeek);
       return;
     }
 
     await this.fighterCtrl.updateFighter(fighter);
+  }
+
+  // Ao expirar um contrato: se o cartel/popularidade do lutador já bate o
+  // gate do tier acima, gera propostas do tier de cima (+ opção de renovar
+  // no atual) em vez de renovar sozinho para sempre no mesmo tier — sem
+  // isso, um campeão que nunca perde 2 seguidas jamais era reavaliado e
+  // ficava preso no tier em que assinou o primeiro contrato.
+  async _handleExpiration(fighter, gym, absWeekNow) {
+    const oldContract = fighter.promotionContract;
+    const targetTier = oldContract.tier - 1;
+    const gate = targetTier >= 1 ? OFFER_CONFIG.TIER_GATES[targetTier] : null;
+    const eligible = gate && this._checkGate(fighter, targetTier, gate, gym?.reputation ?? 50);
+
+    if (!eligible) {
+      await this._autoRenew(fighter);
+      return;
+    }
+
+    const currentPromo = PROMOTIONS.find(p => p.id === oldContract.promotionId);
+    const higherPromos = PROMOTIONS.filter(p => p.tier === targetTier);
+    const offers = higherPromos.map(promo => this._buildProposal(fighter, promo, absWeekNow));
+    if (currentPromo) {
+      offers.push(this._buildProposal(fighter, currentPromo, absWeekNow));
+    }
+
+    const key = `contract-offer-${fighter.id}`;
+    await this.db.put('gameState', {
+      id: key,
+      fighterId: fighter.id,
+      offers,
+      createdAt: absWeekNow,
+      expiresAt: absWeekNow + 3,
+    });
+
+    await this.fighterCtrl.updateFighter(fighter);
+
+    await this.notifService.add(
+      'contract',
+      '🎉 Chance de Subir de Tier!',
+      `${fighter.name} encerrou o contrato com ${oldContract.promotionName} credenciado para o próximo nível. Proposta(s) de ${TIER_LABELS[targetTier]} chegaram — escolha na aba Ofertas.`
+    );
   }
 
   // Corte por duas derrotas seguidas
@@ -289,8 +332,4 @@ export class ContractService {
     };
   }
 
-}
-
-function formatCurrency(v) {
-  return 'R$ ' + v.toLocaleString('pt-BR');
 }

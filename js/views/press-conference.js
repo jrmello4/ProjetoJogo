@@ -1,5 +1,19 @@
 export class PressConferenceView {
-  static render(scenarios, fighterA, fighterB, event) {
+  static render(scenarios, fighterA, fighterB, event, hasFight = true) {
+    if (!hasFight) {
+      return `
+        <div class="page-header">
+          <h2>Conferência de Imprensa</h2>
+          <p>${event.name}</p>
+        </div>
+        <div class="card">
+          <div class="empty-state">
+            <p>Nenhuma luta marcada — sem coletiva de imprensa por enquanto. Aceite uma oferta na aba Ofertas para gerar hype antes do evento.</p>
+          </div>
+        </div>
+      `;
+    }
+
     return `
       <div class="page-header">
         <h2>Conferência de Imprensa</h2>
@@ -43,7 +57,7 @@ export class PressConferenceView {
 
       <div class="mt-4">
         <button class="btn btn-primary pc-simulate" id="pcSimulateBtn" style="display:none">
-          Simular Evento
+          Voltar ao Dashboard
         </button>
       </div>
     `;
@@ -62,7 +76,7 @@ export class PressConferenceView {
           </div>
           <div>
             <div class="text-xs text-muted">Bônus na Bolsa</div>
-            <div class="text-lg font-bold text-belt">+$${hypeBonus.toLocaleString()}</div>
+            <div class="text-lg font-bold" style="color:var(--gold)">+$${hypeBonus.toLocaleString()}</div>
           </div>
         </div>
         <p class="text-xs text-muted mt-2">O hype gerado na coletiva aumenta o valor da bolsa da luta.</p>

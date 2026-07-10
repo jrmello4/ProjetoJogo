@@ -295,11 +295,18 @@ export class GameController {
   // cornerHooks (opcional): instruções de córner ao vivo para a luta do
   // jogador nesta semana. Omitido durante simulateWeeks (fast-forward).
   async processWeek(cornerHooks = null) {
-    const state = await this.seasonService.advanceWeek();
-    const now = absWeek(state);
+    // A semana só é gravada como avançada no FIM do tick (ver
+    // commitWeekAdvance abaixo) — não aqui. A luta ao vivo do jogador
+    // (cornerHooks) pode ficar minutos esperando o jogador clicar entre
+    // rounds; se a aba recarregar ou o tick falhar nesse meio tempo, o
+    // contador de semana não pode já ter avançado no banco, senão a
+    // próxima visita parece ter "pulado no tempo" com a luta que acabou
+    // de ser vista nunca tendo sido salva de verdade.
+    const nextWeekState = await this.seasonService.peekNextWeek();
+    const now = absWeek(nextWeekState);
     const gym = await this.getGym();
 
-    const world = await this.worldService.processWeek(now, state.startedAt, gym, cornerHooks);
+    const world = await this.worldService.processWeek(now, nextWeekState.startedAt, gym, cornerHooks);
 
     await this.offerService.expireOld(now);
     const team = await this.getTeam();
@@ -325,7 +332,7 @@ export class GameController {
     const rivalActivity = await this.rivalGymService.processWeek(now, gym, teamAfterTraining);
 
     // Épico A: processar retenção — approaches expirados e promessas vencidas
-    await this.retentionService.processWeek(now, gym);
+    const retentionResolutions = await this.retentionService.processWeek(now, gym);
 
     // Épico F2: expectativas dos atletas
     await this._checkExpectations(now, teamAfterTraining);
@@ -362,7 +369,10 @@ export class GameController {
       await this.notifService.add('warning', '⚠️ Caixa Negativo', 'A academia está no vermelho. Aceite lutas ou reduza a equipe antes que as portas fechem.');
     }
 
-    return { state, now, world, offersCreated, economy, milestonesUnlocked, campResults, rivalActivity, sponsorActivity };
+    // Tudo rodou sem erro — agora sim grava o avanço de semana de verdade.
+    const state = await this.seasonService.commitWeekAdvance(nextWeekState.week, nextWeekState.year);
+
+    return { state, now, world, offersCreated, economy, milestonesUnlocked, campResults, rivalActivity, retentionResolutions, sponsorActivity };
   }
 
   // ===== Simulação de período (fast-forward) =====
@@ -444,8 +454,19 @@ export class GameController {
         milestonesUnlocked.push(...summary.milestonesUnlocked);
 
         rivalSignings += summary.rivalActivity.signings.length;
-        if (summary.rivalActivity.poached) {
-          poachedFighters.push({ ...summary.rivalActivity.poached, absWeek: summary.now });
+        // Só conta como perda real quando a sondagem foi de fato resolvida
+        // como "saiu" (Épico A) — a sondagem em si (rivalActivity.poached)
+        // não significa que o atleta foi embora, só que a academia rival
+        // demonstrou interesse; usar aquele sinal aqui inflava o resumo com
+        // o mesmo atleta "perdido" várias vezes mesmo quando ele ficou.
+        for (const resolution of summary.retentionResolutions || []) {
+          if (resolution.outcome === 'left') {
+            poachedFighters.push({
+              fighterName: resolution.fighterName,
+              gymName: resolution.rivalGymName,
+              absWeek: summary.now,
+            });
+          }
         }
       }
     } finally {

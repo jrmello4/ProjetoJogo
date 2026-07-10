@@ -171,6 +171,20 @@ export const WORLD_CONFIG = {
   POPULATION_CAP: 300,
 };
 
+// Fase 1b: escada de tiers pra lutadores de IA (espelha o Épico B do
+// jogador — sem isto, os elencos de Nacional/Elite ficam fixos desde o
+// bootstrap do mundo pra sempre, e um prospecto regional nunca sobe).
+// Roda uma vez por ano, junto com o draft de prospectos.
+export const TIER_MOVEMENT_CONFIG = {
+  // Quantas promoções por tier (acima) cada promoção pode receber por ano —
+  // mantém a subida gradual, não uma inundação de novatos de uma vez.
+  MAX_PROMOTIONS_PER_YEAR: 3,
+  // Quantos lutadores uma promoção relega por ano quando está cheia e
+  // precisa abrir vaga pra quem subiu — é a reciclagem: sempre tem alguém
+  // descendo quando alguém sobe.
+  MAX_RELEGATIONS_PER_YEAR: 3,
+};
+
 export const TIER_LABELS = {
   1: 'Elite Mundial',
   2: 'Nacional',

@@ -1,4 +1,4 @@
-import { clamp, generateId } from '../utils/helpers.js';
+import { clamp, generateId, formatCurrency } from '../utils/helpers.js';
 import { RIVAL_GYM_CONFIG, GYM_CONFIG, EXPECTATION_CONFIG } from '../config/game-config.js';
 
 // Épico A: retenção de atletas contra assédio de academias rivais.
@@ -93,6 +93,11 @@ export class RetentionService {
     const approaches = await this._loadApproaches();
     const approach = approaches.find(a => a.id === approachId);
     if (!approach || approach.resolved) return { success: false, outcome: 'not_found' };
+    // Uma resposta por sondagem — renegotiate/stay_bonus/promise só ficam
+    // "resolvidos" na semana seguinte (ver processWeek), então sem esta
+    // guarda o jogador podia clicar a mesma opção várias vezes e empilhar
+    // o bônus (ex.: +5% de purseShare a cada clique em "Renegociar").
+    if (approach.response) return { success: false, outcome: 'already_responded' };
 
     if (absWeekNow > approach.deadlineAbsWeek) {
       approach.resolved = true;
@@ -158,7 +163,7 @@ export class RetentionService {
       return {
         success: false,
         outcome: 'insufficient_funds',
-        message: `Bônus de permanência custa R$${bonus.toLocaleString('pt-BR')}. Saldo insuficiente.`,
+        message: `Bônus de permanência custa ${formatCurrency(bonus)}. Saldo insuficiente.`,
       };
     }
 
@@ -169,7 +174,7 @@ export class RetentionService {
     return {
       success: true,
       outcome: 'bonus_paid',
-      message: `${fighter.name} recebeu R$${bonus.toLocaleString('pt-BR')} de bônus de permanência. Lealdade e moral subiram bastante.`,
+      message: `${fighter.name} recebeu ${formatCurrency(bonus)} de bônus de permanência. Lealdade e moral subiram bastante.`,
     };
   }
 
@@ -334,7 +339,7 @@ export class RetentionService {
       if (!fighter.promises || fighter.promises.length === 0) continue;
 
       for (const promise of fighter.promises) {
-        if (promise.kept) continue;
+        if (promise.resolved) continue;
 
         // Verificar se a promessa foi cumprida
         let fulfilled = false;
@@ -352,6 +357,7 @@ export class RetentionService {
 
         if (fulfilled) {
           promise.kept = true;
+          promise.resolved = true;
           fighter.loyalty = clamp(fighter.loyalty + 20, 0, 100);
           gym.trust = clamp(gym.trust + 10, 0, 100);
 
@@ -365,6 +371,7 @@ export class RetentionService {
         } else if (absWeekNow > promise.deadlineAbsWeek) {
           // Promessa quebrada — não cumprida dentro do prazo
           promise.kept = false;
+          promise.resolved = true;
           fighter.loyalty = clamp(fighter.loyalty - 25, 0, 100);
           gym.trust = clamp(gym.trust - 10, 0, 100);
 
@@ -394,7 +401,7 @@ export class RetentionService {
 
     const cost = Math.round(5000 + fighter.overallRating * 400 + (fighter.popularity || 0) * 100);
     if (gym.cash < cost) {
-      return { success: false, message: `Recomprar ${fighter.name} custa R$${cost.toLocaleString('pt-BR')}. Saldo insuficiente.` };
+      return { success: false, message: `Recomprar ${fighter.name} custa ${formatCurrency(cost)}. Saldo insuficiente.` };
     }
 
     // Chance base: 30% + moral do atleta na rival + relacionamento anterior
@@ -413,7 +420,7 @@ export class RetentionService {
       return {
         success: true,
         cost,
-        message: `${fighter.name} voltou! Custo: R$${cost.toLocaleString('pt-BR')}.`,
+        message: `${fighter.name} voltou! Custo: ${formatCurrency(cost)}.`,
       };
     }
 

@@ -23,10 +23,11 @@ export class SaveService {
     try {
       const data = JSON.parse(json);
       const state = (data.gameState || []).find(s => s.id === 'state');
+      const gym = (data.gameState || []).find(s => s.id === 'gym');
       return {
         slot: slotIndex, exists: true,
         week: state?.week || '?', year: state?.year || '?',
-        gymName: state?.gymName || 'Desconhecido',
+        gymName: gym?.name || 'Desconhecido',
         exportedAt: data.exportedAt || null,
         rosterSize: data.fighters?.filter(f => f.status === 'gym').length || 0,
       };

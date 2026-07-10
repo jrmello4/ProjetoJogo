@@ -24,7 +24,7 @@ export class HallOfFame {
     };
   }
 
-  static induct(fighter, inductionDateISO = null) {
+  static induct(fighter, inductionDateISO = null, belts = null) {
     const finishes = (fighter.fights || []).filter(f => f.method && !f.method.startsWith('Decision'));
     const decisions = (fighter.fights || []).filter(f => f.method && f.method.startsWith('Decision'));
     const kos = finishes.filter(f => f.method === 'KO' || f.method === 'TKO');
@@ -38,8 +38,9 @@ export class HallOfFame {
       else currentStreak = 0;
     }
 
-    // Enriquecer com cinturões
-    const belts = fighter.beltsHeld || [];
+    // Enriquecer com cinturões — vêm de TitleService.vacateBeltsOf(), já que
+    // o cinturão vive na Promotion, não no Fighter (ver world-service.js).
+    belts = belts || [];
 
     return {
       id: 'hof-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),

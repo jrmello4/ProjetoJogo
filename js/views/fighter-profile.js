@@ -1,4 +1,5 @@
 import { formatCurrency, formatDate, getWeightClassShort, getWeightClassLabel, getNationalityFlag, getAdjacentWeightClasses, clamp } from '../utils/helpers.js';
+import { GYM_CONFIG } from '../config/game-config.js';
 
 export class FighterProfileView {
   // G3: gráfico de carreira — OVR do atleta em cada luta (fighterRating é
@@ -89,29 +90,38 @@ export class FighterProfileView {
         </div>
       `;
 
-    const contractHtml = fighter.contract
+    const contractHtml = fighter.promotionContract?.status === 'active'
       ? `
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Contrato</span>
+            <span class="card-title">Contrato · ${fighter.promotionContract.promotionName}</span>
           </div>
           <div class="grid grid-cols-3 gap-4">
             <div>
               <div class="text-xs text-muted">Bolsa/Luta</div>
-              <div class="text-sm font-bold">${formatCurrency(fighter.contract.pursePerFight)}</div>
+              <div class="text-sm font-bold">${formatCurrency(fighter.promotionContract.basePurse)}</div>
             </div>
             <div>
               <div class="text-xs text-muted">Lutas Restantes</div>
-              <div class="text-sm font-bold">${fighter.contract.fightsRemaining}</div>
+              <div class="text-sm font-bold">${fighter.promotionContract.fightsRemaining}/${fighter.promotionContract.fightsTotal}</div>
             </div>
             <div>
               <div class="text-xs text-muted">Bônus Vitória</div>
-              <div class="text-sm font-bold">${formatCurrency(fighter.contract.victoryBonus)}</div>
+              <div class="text-sm font-bold">${formatCurrency(fighter.promotionContract.winBonus)}</div>
             </div>
           </div>
         </div>
       `
-      : '';
+      : fighter.promotionContract?.status === 'expired'
+        ? `
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Contrato</span>
+          </div>
+          <div class="text-sm text-warning">📋 Contrato com ${fighter.promotionContract.promotionName} expirado — aguardando renovação.</div>
+        </div>
+      `
+        : '';
 
     return `
       <div class="page-header">
@@ -141,7 +151,7 @@ export class FighterProfileView {
         <div class="card">
           <div class="card-title">Status</div>
           <div class="stat-value" style="font-size:1.25rem">
-            <span class="badge ${fighter.status === 'roster' ? 'badge-success' : 'badge-warning'}">${fighter.status === 'roster' ? 'Contratado' : 'Agente Livre'}</span>
+            <span class="badge ${fighter.gymId === GYM_CONFIG.ID ? 'badge-success' : fighter.status === 'roster' ? 'badge-info' : 'badge-warning'}">${fighter.gymId === GYM_CONFIG.ID ? 'Sua Academia' : fighter.status === 'roster' ? 'Contratado' : 'Agente Livre'}</span>
           </div>
           <div class="stat-label">Fadiga: ${fighter.fatigue}% · Moral: ${fighter.morale}%</div>
         </div>
@@ -323,7 +333,7 @@ export class FighterProfileView {
             </div>
           </div>
         </div>
-        ${fighter.status === 'roster' ? (() => {
+        ${fighter.gymId === GYM_CONFIG.ID ? (() => {
           const adj = getAdjacentWeightClasses(fighter.weightClass);
           const options = [];
           if (adj.up) options.push({ dir: 'up', label: `Subir para ${getWeightClassShort(adj.up)} (menos peso)`, cost: 5000, attrPenalty: 'power -3, strength -2', attrBonus: 'speed +2, cardio +1' });

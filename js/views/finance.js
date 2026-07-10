@@ -3,10 +3,17 @@ import { absWeekToLabel } from '../config/game-config.js';
 
 // Finanças da academia: caixa, fluxo semanal e extrato (ledger).
 export class FinanceView {
-  static render(gym, teamSize) {
+  static render(gym, team) {
+    const teamSize = Array.isArray(team) ? team.length : (team || 0);
     const expenses = gym.weeklyExpenses(teamSize);
     const income = gym.weeklyIncome();
     const net = income.total - expenses.total;
+
+    // Épico A: o corte real é 1 - fighter.purseShare (varia por atleta
+    // conforme renegociações de retenção), não mais o managerCut fixo da
+    // academia — média do elenco atual pra dar uma noção honesta.
+    const cuts = Array.isArray(team) ? team.map(f => 1 - (f.purseShare ?? (1 - gym.managerCut))) : [];
+    const avgCut = cuts.length > 0 ? cuts.reduce((a, b) => a + b, 0) / cuts.length : gym.managerCut;
 
     // Fôlego: semanas até o caixa zerar só com o fluxo fixo (sem bolsas)
     const runway = net < 0 ? Math.floor(gym.cash / Math.abs(net)) : Infinity;
@@ -45,7 +52,7 @@ export class FinanceView {
         <div class="card stat-card">
           <div class="card-header"><span class="card-title">Comissões Totais</span></div>
           <div class="stat-value text-success">${formatCurrency(gym.totalPurseEarnings)}</div>
-          <div class="stat-label">${Math.round(gym.managerCut * 100)}% de cada bolsa</div>
+          <div class="stat-label">~${Math.round(avgCut * 100)}% média de cada bolsa</div>
         </div>
         <div class="card stat-card">
           <div class="card-header"><span class="card-title">Fôlego de Caixa</span></div>

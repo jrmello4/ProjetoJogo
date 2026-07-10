@@ -559,10 +559,22 @@
   border-top: 1px solid var(--rule);
 }
 
+/* G2: lista dos top 5 desafiantes de um cinturão */
+.belt-contenders {
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--rule);
+}
+
 /* Oferta de disputa de título */
 .offer-card--title {
   border-top: 2px solid var(--belt);
   background: linear-gradient(180deg, rgba(201, 162, 39, 0.05), transparent 40%);
+}
+
+/* Épico B: proposta de contrato exclusivo — decisão de carreira, não uma luta avulsa */
+.offer-card--contract {
+  border-top: 2px solid var(--blue);
+  background: linear-gradient(180deg, rgba(47, 107, 191, 0.06), transparent 40%);
 }
 
 .offer-title-strap {

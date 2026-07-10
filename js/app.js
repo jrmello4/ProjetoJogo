@@ -861,6 +861,13 @@ class App {
       }
     };
 
+    // Nota: o ritmo round-a-round usa gsap.delayedCall (não tl.call) de
+    // propósito. GSAP3 não tem o argumento "scope" que GSAP2 tinha —
+    // tl.call(fn, null, null, delay) é a assinatura antiga, o 4º argumento
+    // é ignorado silenciosamente, e reagendar novos tl.call() de DENTRO de
+    // um callback que já está rodando na mesma timeline nunca dispara de
+    // novo (testado: a timeline trava depois da 1ª chamada, mesmo esperando
+    // 10s). gsap.delayedCall é um agendamento independente e não sofre disso.
     const showBeat = () => {
       if (cancelled) return;
       const round = rounds[roundIdx];
@@ -869,47 +876,44 @@ class App {
 
       if (!beats.length || beatIdx >= beats.length) {
         // Pausa entre rounds
-        tl.call(() => {
+        gsap.delayedCall(1, () => {
           if (cancelled) return;
           roundIdx++;
           beatIdx = 0;
           if (roundIdx >= rounds.length) { finish(); return; }
           rounds[roundIdx].style.display = 'block';
           if (statusText) statusText.textContent = `Round ${roundIdx + 1} de ${rounds.length}`;
-          tl.call(showBeat, null, null, 0.6);
-        }, null, null, 1);
+          gsap.delayedCall(0.6, showBeat);
+        });
         return;
       }
 
       const beat = beats[beatIdx];
       const beatType = beat.dataset.beatType;
 
-      // Revelar beat com animacao
-      tl.call(() => {
-        if (cancelled) return;
-        beat.style.display = 'flex';
-      }, null, null, 0);
+      // Revelar beat
+      beat.style.display = 'flex';
 
       // Screen shake em knockdown e finish
       if (beatType === 'knockdown') {
-        tl.to(faceOff || document.getElementById('liveHubRounds'), {
+        gsap.to(faceOff || document.getElementById('liveHubRounds'), {
           x: '+=6', duration: 0.04, repeat: 4, yoyo: true, ease: 'power1.inOut',
-        }, 0);
-        if (threeFaceOff?.onKnockdown) tl.call(() => threeFaceOff.onKnockdown(), null, null, 0);
+        });
+        if (threeFaceOff?.onKnockdown) threeFaceOff.onKnockdown();
       } else if (beatType === 'finish') {
-        tl.to(faceOff || document.getElementById('liveHubRounds'), {
+        gsap.to(faceOff || document.getElementById('liveHubRounds'), {
           x: '+=10', duration: 0.05, repeat: 6, yoyo: true, ease: 'power1.inOut',
-        }, 0);
+        });
         // Flash momentâneo
         const flash = document.createElement('div');
         flash.style.cssText = 'position:fixed;inset:0;background:rgba(232,35,74,0.3);pointer-events:none;z-index:999';
         document.body.appendChild(flash);
-        tl.to(flash, { opacity: 0, duration: 0.6, onComplete: () => flash.remove() }, 0);
-        if (threeFaceOff?.onFinish) tl.call(() => threeFaceOff.onFinish(), null, null, 0);
+        gsap.to(flash, { opacity: 0, duration: 0.6, onComplete: () => flash.remove() });
+        if (threeFaceOff?.onFinish) threeFaceOff.onFinish();
       }
 
       beatIdx++;
-      tl.call(showBeat, null, null, 0.45);
+      gsap.delayedCall(0.45, showBeat);
     };
 
     if (rounds.length === 0 || cancelled) { finish(); return; }
@@ -920,16 +924,16 @@ class App {
       .to(subtitle, { opacity: 1, duration: 0.3 }, '-=0.15');
 
     // Show first round
-    tl.call(() => {
+    gsap.delayedCall(0.8, () => {
       if (!cancelled) {
         rounds[0].style.display = 'block';
         if (statusText) statusText.textContent = `Round 1 de ${rounds.length}`;
       }
-    }, null, null, 0.8);
+    });
 
     skipBtn?.addEventListener('click', finish);
 
-    tl.call(showBeat, null, null, 1.2);
+    gsap.delayedCall(1.2, showBeat);
   }
   _playLiveBroadcast() {
     const status = document.getElementById('liveStatus');
@@ -1129,7 +1133,7 @@ class App {
   async renderFinance() {
     const gym = await this.game.getGym();
     const team = await this.game.getTeam();
-    const html = FinanceView.render(gym, team.length);
+    const html = FinanceView.render(gym, team);
     await LayoutView.render(html);
   }
 
@@ -1339,8 +1343,10 @@ class App {
     }
 
     const scenarios = PressConference.getScenarios();
-    const html = PressConferenceView.render(scenarios, fighterA, fighterB, event);
+    const html = PressConferenceView.render(scenarios, fighterA, fighterB, event, !!booking);
     await LayoutView.render(html);
+
+    if (!booking) return; // sem luta marcada: nada para responder, nada a ligar
 
     document.querySelectorAll('.pc-answer').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -1374,7 +1380,9 @@ class App {
           const summary = PressConferenceView.renderSummary(null, totalHype, hypeBonus);
           document.getElementById('pressConferenceSummary').innerHTML = summary;
           document.getElementById('pressConferenceSummary').style.display = 'block';
-          document.getElementById('pcSimulateBtn').style.display = 'none';
+          const simulateBtn = document.getElementById('pcSimulateBtn');
+          simulateBtn.style.display = 'block';
+          simulateBtn.addEventListener('click', () => this.navigateTo('dashboard'));
 
           if (totalHype > 0) {
             this.notificationService.add('success', 'Hype!',

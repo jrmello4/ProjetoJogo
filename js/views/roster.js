@@ -1,6 +1,12 @@
 import { getWeightClassShort, getNationalityFlag, formatCurrency, renderAttrBar } from '../utils/helpers.js';
 import { TRAINING_FOCUS_META } from '../config/game-config.js';
 
+const RETENTION_RESPONSE_LABELS = {
+  renegotiate: 'Renegociação',
+  stay_bonus: 'Bônus de Permanência',
+  promise: 'Promessa',
+};
+
 // Minha Equipe: cartão por atleta com atributos legíveis e o seletor de
 // foco de treino individual — o coração da gestão do treinador.
 export class RosterView {
@@ -23,12 +29,15 @@ export class RosterView {
               </div>
               <span class="badge ${weeksLeft <= 1 ? 'badge-danger' : 'badge-warning'}">${weeksLeft} sem${weeksLeft === 1 ? '' : 's'}</span>
             </div>
-            <div class="flex gap-2" style="flex-wrap:wrap">
+            ${a.response
+              ? `<div class="text-xs text-muted">✅ Você respondeu com "${RETENTION_RESPONSE_LABELS[a.response] || a.response}" — aguardando o atleta decidir.</div>`
+              : `<div class="flex gap-2" style="flex-wrap:wrap">
               <button class="btn btn-sm btn-primary retention-respond" data-approach="${a.id}" data-action="renegotiate">Renegociar</button>
               <button class="btn btn-sm btn-success retention-respond" data-approach="${a.id}" data-action="stay_bonus">Bônus Permanência</button>
               <button class="btn btn-sm btn-info retention-respond" data-approach="${a.id}" data-action="promise">Fazer Promessa</button>
               <button class="btn btn-sm btn-secondary retention-respond" data-approach="${a.id}" data-action="let_go">Deixar Ir</button>
-            </div>
+            </div>`
+            }
           </div>
         `;
       }).join('')}
@@ -160,7 +169,7 @@ export class RosterView {
           ${f.promotionContract?.status === 'active'
             ? `<span class="text-muted">📋 ${f.promotionContract.promotionName} · ${f.promotionContract.fightsRemaining}/${f.promotionContract.fightsTotal} lutas</span>`
             : f.promotionContract?.status === 'expired'
-              ? `<span class="text-warning">📋 Contato expirado — aguardando renovação</span>`
+              ? `<span class="text-warning">📋 Contrato expirado — aguardando renovação</span>`
               : `<span class="text-muted">📋 Sem contrato exclusivo</span>`
           }
         </div>

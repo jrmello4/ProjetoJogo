@@ -16,36 +16,21 @@ export class LayoutView {
 
     if (animate) {
       return new Promise((resolve) => {
-        const commit = () => {
-          if (seq !== LayoutView._renderSeq) return resolve();
-          LayoutView._renderSeq++; // invalida commits duplicados deste mesmo render
+        if (seq !== LayoutView._renderSeq) return resolve();
+        LayoutView._renderSeq++; // invalida commits duplicados deste mesmo render
 
-          // O fallback abaixo pode commitar antes do tween de saída terminar
-          // (rAF estrangulado: aba em segundo plano, resize, jank). Sem matar
-          // o tween aqui, ele retoma depois do commit e leva a opacidade de
-          // volta a 0 — tela em branco com o HTML já no DOM.
-          gsap.killTweensOf(mainContent);
-
-          mainContent.innerHTML = content;
-          gsap.set(mainContent, { opacity: 1, y: 0 });
-          motion.scrollToTop();
-          motion.animatePageEnter(mainContent);
-          riveManager.mountAll(mainContent);
-          this._animateStats(mainContent);
-          resolve();
-        };
-
+        // Nunca animar a opacidade do próprio #mainContent: um render
+        // concorrente que mate essa tween deixaria o contêiner preso em
+        // opacity:0 — tela em branco com o HTML já no DOM. A entrada é
+        // toda feita pelos filhos (data-reveal) via animatePageEnter.
         gsap.killTweensOf(mainContent);
-        gsap.to(mainContent, {
-          opacity: 0,
-          y: -12,
-          duration: 0.2,
-          ease: 'power2.in',
-          onComplete: commit,
-        });
 
-        // rAF pausa em abas em segundo plano — garante o commit mesmo sem animação
-        setTimeout(commit, 350);
+        mainContent.innerHTML = content;
+        motion.scrollToTop();
+        motion.animatePageEnter(mainContent);
+        riveManager.mountAll(mainContent);
+        this._animateStats(mainContent);
+        resolve();
       });
     }
 

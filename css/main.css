@@ -67,7 +67,7 @@
   --gold-glow:      rgba(201, 162, 39, 0.22);
 
   --success: var(--money);
-  --warning: var(--belt);
+  --warning: var(--belt-ink);
   --danger:  var(--red-ink);
 
   --border:       rgba(243, 239, 233, 0.09);
@@ -454,6 +454,9 @@ body {
 
 .btn-warning { background: var(--belt); color: #14110f; border-color: var(--belt); }
 .btn-warning:hover:not(:disabled) { filter: brightness(1.12); }
+
+.btn-info { background: var(--blue); color: #fff; border-color: var(--blue); }
+.btn-info:hover:not(:disabled) { background: var(--blue-bright); border-color: var(--blue-bright); }
 
 .btn-sm { padding: 0.4rem 0.75rem; font-size: 0.6875rem; letter-spacing: 0.05em; }
 .btn-lg { padding: 0.875rem 1.75rem; font-size: 0.8125rem; }
@@ -918,7 +921,9 @@ tbody tr:hover td { background: var(--bg-hover); }
 .text-right { text-align: right; }
 
 .text-muted { color: var(--ash); }
+.text-secondary { color: var(--text-secondary); }
 .text-success { color: var(--money); }
+.text-warning { color: var(--warning); }
 .text-danger { color: var(--red-ink); }
 .font-bold { font-weight: 700; }
 

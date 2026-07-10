@@ -14,6 +14,9 @@ import {
   TITLE_CONFIG,
   TITLE_ROLE,
   HYPE_PURSE_RATIO,
+  PROMOTIONS,
+  OFFER_CONFIG,
+  TIER_MOVEMENT_CONFIG,
   absWeekToDate,
   computeSuspensionWeeks,
 } from '../config/game-config.js';
@@ -368,7 +371,7 @@ export class WorldService {
     // Épico B: consumir luta do contrato exclusivo. `null` = empate — não
     // reseta nem incrementa derrotas seguidas (não é vitória nem derrota).
     if (this.contractService) {
-      await this.contractService.consumeFight(fighter.id, isDraw ? null : won);
+      await this.contractService.consumeFight(fighter.id, isDraw ? null : won, gym, absWeekNow);
     }
   }
 
@@ -578,7 +581,7 @@ export class WorldService {
         if (eligibility.eligible) {
           const existing = await this.db.get('hallOfFame', f.id);
           if (!existing) {
-            const entry = HallOfFame.induct(f, inGameNowISO);
+            const entry = HallOfFame.induct(f, inGameNowISO, vacated);
             entry.id = f.id;
             await this.db.put('hallOfFame', entry);
           }
@@ -616,19 +619,30 @@ export class WorldService {
       prospects.push(prospect);
     }
 
-    // Fase 1: distribui prospects para rivais (40%) ou como agentes livres
+    // Fase 1: todo prospecto entra no circuito regional com roster ATIVO —
+    // sem isso eles nunca aparecem em evento nenhum (_buildAiCard/_findReplacement
+    // só olham status==='roster') e ficam "soltos" pra sempre, sem cartel,
+    // sem chance de subir. RIVAL_GYMS não tem promoção própria — a academia
+    // rival só empresta o gymId; quem decide se ele luta é a promoção regional.
+    const tier3Promos = PROMOTIONS.filter(p => p.tier === 3);
     const rivalGyms = RIVAL_GYMS.filter(g => g.id !== GYM_CONFIG.ID);
     let distributed = 0;
     for (const p of prospects) {
+      p.status = 'roster';
+      p.organizationId = tier3Promos[Math.floor(Math.random() * tier3Promos.length)].id;
       if (rivalGyms.length > 0 && Math.random() < 0.4) {
         const rival = rivalGyms[Math.floor(Math.random() * rivalGyms.length)];
         p.gymId = rival.id;
-        p.status = 'roster';
-        p.organizationId = rival.promotionId || null;
         distributed++;
       }
       await this.db.put('fighters', p);
     }
+
+    // Fase 1b: escada de tiers — promove destaques do regional pro Nacional
+    // e do Nacional pra Elite, relegando os piores de cima pra abrir vaga.
+    // Sem isso o elenco de Nacional/Elite fica fixo desde o bootstrap do
+    // mundo pra sempre (só envelhece e aposenta, nunca recebe sangue novo).
+    await this._processTierMovement(absWeekNow);
 
     // Fase 1: teto de populacao — aposenta veteranos IA irrelevantes se excedeu
     const allNow = await this.fighterCtrl.getAllFighters();
@@ -662,6 +676,102 @@ export class WorldService {
 
     const msg = `${count} jovens prospectos chegaram ao mercado${distributed > 0 ? ` (${distributed} ja contratados por academias rivais)` : ''}.`;
     await this.notifService.add('success', 'Nova Safra', msg);
+  }
+
+  // Fase 1b: escada de tiers pra lutadores de IA — espelha o Épico B do
+  // jogador (ContractService), mas pra quem a IA controla. Sobe do tier
+  // mais baixo pro mais alto (3→2→1) pra um lutador recém-promovido já
+  // poder, em tese, ser avaliado de novo daqui a um ano.
+  async _processTierMovement(absWeekNow) {
+    const promotions = await this.getPromotions();
+    const byTier = { 1: [], 2: [], 3: [] };
+    for (const p of promotions) (byTier[p.tier] || []).push(p);
+
+    await this._promoteTier(byTier[3], byTier[2], OFFER_CONFIG.TIER_GATES[2]);
+    await this._promoteTier(byTier[2], byTier[1], OFFER_CONFIG.TIER_GATES[1]);
+  }
+
+  // Promove os destaques de `fromPromos` (que batem `gate`) pra `toPromos`,
+  // relegando os piores de `toPromos` de volta pra `fromPromos` quando a
+  // promoção de cima já está no teto de elenco — sempre tem alguém descendo
+  // quando alguém sobe, pra não inflar o elenco sem limite.
+  async _promoteTier(fromPromos, toPromos, gate) {
+    if (fromPromos.length === 0 || toPromos.length === 0 || !gate) return;
+
+    const candidates = [];
+    for (const promo of fromPromos) {
+      const roster = await this.db.getIndex('fighters', 'organizationId', promo.id);
+      for (const data of roster) {
+        const f = new Fighter(data);
+        // O jogador sobe de tier via ContractService, não por aqui.
+        if (f.status !== 'roster' || f.gymId === GYM_CONFIG.ID) continue;
+        const meetsWins = (f.record?.wins || 0) >= gate.wins;
+        const meetsPop = (f.popularity || 0) >= gate.popularity;
+        if (!meetsWins && !meetsPop) continue;
+        candidates.push(f);
+      }
+    }
+    if (candidates.length === 0) return;
+
+    candidates.sort((a, b) => b.overallRating - a.overallRating);
+
+    let cursor = 0;
+    const maxPerPromo = TIER_MOVEMENT_CONFIG.MAX_PROMOTIONS_PER_YEAR;
+
+    for (const toPromo of toPromos) {
+      if (cursor >= candidates.length) break;
+
+      let roomLeft = toPromo.rosterSize - (await this._activeRosterCount(toPromo.id));
+      const wanted = Math.min(maxPerPromo, candidates.length - cursor);
+      if (roomLeft < wanted) {
+        roomLeft += await this._relegateWorst(toPromo, fromPromos, TIER_MOVEMENT_CONFIG.MAX_RELEGATIONS_PER_YEAR);
+      }
+
+      let promotedHere = 0;
+      while (promotedHere < maxPerPromo && roomLeft > 0 && cursor < candidates.length) {
+        const f = candidates[cursor];
+        f.organizationId = toPromo.id;
+        await this.fighterCtrl.updateFighter(f);
+        cursor++;
+        promotedHere++;
+        roomLeft--;
+      }
+
+      if (promotedHere > 0) {
+        await this.notifService.add(
+          'info',
+          '📈 Acesso',
+          `${promotedHere} lutador${promotedHere === 1 ? '' : 'es'} subiu${promotedHere === 1 ? '' : 'ram'} do circuito pro ${toPromo.short}.`
+        );
+      }
+    }
+  }
+
+  async _activeRosterCount(promotionId) {
+    const roster = await this.db.getIndex('fighters', 'organizationId', promotionId);
+    return roster.filter(f => f.status === 'roster').length;
+  }
+
+  // Relega os piores lutadores (menor OVR, exceto campeões atuais) de
+  // `promo` pra uma das `targetPromos` (tier abaixo) — abre vaga.
+  async _relegateWorst(promo, targetPromos, maxCount) {
+    if (targetPromos.length === 0) return 0;
+    const roster = await this.db.getIndex('fighters', 'organizationId', promo.id);
+    const champions = new Set(Object.values(promo.champions || {}).filter(Boolean));
+    const active = roster
+      .map(d => new Fighter(d))
+      .filter(f => f.status === 'roster' && f.gymId !== GYM_CONFIG.ID && !champions.has(f.id))
+      .sort((a, b) => a.overallRating - b.overallRating);
+
+    let relegated = 0;
+    for (const f of active) {
+      if (relegated >= maxCount) break;
+      const target = targetPromos[Math.floor(Math.random() * targetPromos.length)];
+      f.organizationId = target.id;
+      await this.fighterCtrl.updateFighter(f);
+      relegated++;
+    }
+    return relegated;
   }
 
   // Fase 1: mantém o store 'fighters' limitado. Aposentados de IA sem relevância

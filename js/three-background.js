@@ -54,7 +54,8 @@ export class ThreeBackground {
 
     this.createParticles();
 
-    window.addEventListener('resize', () => this.onResize());
+    this._onResizeBound = () => this.onResize();
+    window.addEventListener('resize', this._onResizeBound);
     this.animate();
   }
 
@@ -139,6 +140,10 @@ export class ThreeBackground {
     if (this._rafId !== null) {
       cancelAnimationFrame(this._rafId);
       this._rafId = null;
+    }
+    if (this._onResizeBound) {
+      window.removeEventListener('resize', this._onResizeBound);
+      this._onResizeBound = null;
     }
     if (this.renderer) {
       this.renderer.dispose();

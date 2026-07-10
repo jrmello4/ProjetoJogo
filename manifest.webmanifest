@@ -1,7 +1,7 @@
 {
-  "name": "MMA Manager — War Room Simulator",
+  "name": "MMA Manager — Modo Treinador",
   "short_name": "MMA Manager",
-  "description": "Gerencie sua própria organização de MMA: contrate lutadores, monte cards, promova eventos e domine o cenário.",
+  "description": "Você é dono e treinador de uma academia de MMA: recrute atletas, estude adversários e comande o córner ao vivo entre os rounds.",
   "lang": "pt-BR",
   "start_url": "./index.html",
   "scope": "./",

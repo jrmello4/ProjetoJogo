@@ -50,16 +50,11 @@
   </text>
 
   <!-- Subtitle -->
-  <text x="600" y="530" font-family="IBM Plex Sans, sans-serif" font-size="18" font-weight="400"
-        fill="#6b6358" text-anchor="middle" letter-spacing="2">RECRUTE · TREINE · LUTE · CONSTRUA UM IMPÉRIO</text>
+  <text x="600" y="536" font-family="IBM Plex Sans, sans-serif" font-size="28" font-weight="500"
+        fill="#a09888" text-anchor="middle" letter-spacing="2">RECRUTE · TREINE · COMANDE O CÓRNER</text>
 
   <!-- Logo bottom right -->
   <image href="icon.svg" x="1120" y="555" width="40" height="40" opacity="0.6"/>
-
-  <!-- Price tag -->
-  <rect x="880" y="400" width="180" height="44" rx="8" fill="#e8234a" opacity="0.15"/>
-  <text x="970" y="427" font-family="Archivo, sans-serif" font-size="16" font-weight="700"
-        fill="#e8234a" text-anchor="middle">EARLY ACCESS · R$29,90</text>
 
   <!-- Line separator -->
   <line x1="200" y1="460" x2="1000" y2="460" stroke="rgba(232,226,217,0.06)" stroke-width="1"/>

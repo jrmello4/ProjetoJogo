@@ -4,8 +4,8 @@
     {
       "name": "mma-manager",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["server.js", "8341"],
-      "port": 8341
+      "runtimeArgs": ["server.js"],
+      "autoPort": true
     }
   ]
 }

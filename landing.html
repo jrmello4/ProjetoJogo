@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Comande sua própria academia de MMA. Recrute, treine, lute e construa um império nas 5 divisões de peso.">
+  <meta name="description" content="Gerencie lutadores de MMA e comande o córner ao vivo entre os rounds — recrute, treine e construa uma dinastia nas 5 divisões.">
   <meta name="theme-color" content="#14110f">
 
   <!-- OG tags -->
-  <meta property="og:title" content="MMA Manager — Comande sua academia de MMA">
-  <meta property="og:description" content="Recrute lutadores, monte o card perfeito, dê instruções de córner ao vivo. 24 atributos, 6 promoções, 5 divisões.">
+  <meta property="og:title" content="MMA Manager — Modo Treinador">
+  <meta property="og:description" content="Gerencie lutadores de MMA e comande o córner ao vivo entre os rounds.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="assets/og-image.svg">
   <meta property="og:image:width" content="1200">
@@ -16,11 +16,11 @@
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="MMA Manager — Comande sua academia de MMA">
-  <meta name="twitter:description" content="Recrute, treine, lute. Instruções de córner ao vivo entre os rounds.">
+  <meta name="twitter:title" content="MMA Manager — Modo Treinador">
+  <meta name="twitter:description" content="Gerencie lutadores de MMA e comande o córner ao vivo entre os rounds.">
   <meta name="twitter:image" content="assets/og-image.svg">
 
-  <title>MMA Manager — Comande sua Academia de MMA</title>
+  <title>MMA Manager — Modo Treinador</title>
   <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -111,7 +111,8 @@
     .hero-content { max-width: 640px; }
     .hero h1 { margin-bottom: 1.25rem; }
     .hero h1 span { color: #e8234a; }
-    .hero p { font-size: 1.15rem; margin-bottom: 2rem; }
+    .hero p { font-size: 1.15rem; margin-bottom: 1rem; }
+    .hero-microcopy { font-size: 0.85rem; color: #6b6358; margin-top: 0.85rem; }
     .hero-tag {
       display: inline-block; padding: 0.3rem 0.75rem; border-radius: 4px;
       background: rgba(201,162,39,0.1); color: #c9a227; font-size: 0.75rem;
@@ -125,25 +126,27 @@
     .hero-strip-item .num { font-family: 'Archivo', sans-serif; font-size: 1.5rem; font-weight: 800; color: #f4f2ef; }
     .hero-strip-item .label { font-size: 0.75rem; color: #6b6358; text-transform: uppercase; letter-spacing: 0.05em; }
 
-    /* ===== POSTER PREVIEW ===== */
+    /* ===== SCOUTING PREVIEW (real fog-of-war mechanic, not a fake fight poster) ===== */
     .hero-poster {
       position: relative;
       background: linear-gradient(135deg, rgba(232,35,74,0.06), rgba(201,162,39,0.04));
       border: 1px solid rgba(232,226,217,0.08);
-      border-radius: 12px; padding: 2rem; text-align: center;
+      border-radius: 12px; padding: 2rem; text-align: left;
       max-width: 420px; margin: 0 auto;
     }
-    .hero-poster .octagon {
-      width: 80px; height: 80px; margin: 0 auto 1rem;
-      background: rgba(232,35,74,0.08);
-      clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 2rem; color: rgba(232,35,74,0.3);
+    .scout-label {
+      display: inline-block; padding: 0.25rem 0.6rem; border-radius: 4px;
+      background: rgba(232,35,74,0.12); color: #e8234a; font-family: 'Archivo', sans-serif;
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+      margin-bottom: 1.25rem;
     }
-    .hero-poster .vs { font-family: 'Archivo', sans-serif; font-size: 2.5rem; font-weight: 900; color: rgba(232,226,217,0.15); letter-spacing: -0.05em; }
-    .hero-poster .fighter-name { font-weight: 700; color: #e8e2d9; }
-    .hero-poster .fighter-record { font-size: 0.8rem; color: #6b6358; }
-    .hero-poster .poster-belt { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 3px; background: rgba(201,162,39,0.12); color: #c9a227; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 0.75rem; }
+    .scout-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.85rem; }
+    .scout-attr { width: 92px; flex-shrink: 0; font-size: 0.8rem; color: #a09888; }
+    .scout-bar {
+      flex: 1; height: 10px; border-radius: 4px;
+      background-image: repeating-linear-gradient(135deg, rgba(232,226,217,0.14) 0 6px, rgba(232,226,217,0.04) 6px 12px);
+    }
+    .scout-caption { margin-top: 1.25rem; font-size: 0.8rem; color: #6b6358; max-width: none; }
 
     /* ===== FEATURES ===== */
     .features { background: rgba(255,255,255,0.01); border-top: 1px solid rgba(232,226,217,0.04); border-bottom: 1px solid rgba(232,226,217,0.04); }
@@ -157,6 +160,15 @@
     .feature-icon { font-size: 1.5rem; margin-bottom: 0.75rem; }
     .feature-card h3 { margin-bottom: 0.5rem; font-size: 1rem; }
     .feature-card p { font-size: 0.875rem; }
+
+    /* ===== WHY / EMPATHY ===== */
+    #why blockquote { font-size: clamp(1.35rem, 3vw, 1.9rem); font-weight: 700; font-family: 'Archivo', sans-serif; color: #f4f2ef; margin-bottom: 1.25rem; }
+
+    /* ===== COMPARISON ===== */
+    .compare-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .compare-table th, .compare-table td { padding: 0.85rem 1rem; border-bottom: 1px solid rgba(232,226,217,0.08); text-align: left; }
+    .compare-table th { font-family: 'Archivo', sans-serif; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; color: #6b6358; }
+    .compare-yes { color: #4ade80; font-weight: 700; }
 
     /* ===== PRICING ===== */
     .pricing { text-align: center; }
@@ -187,7 +199,7 @@
     }
     footer .bold-line { font-family: 'Archivo', sans-serif; font-size: 1.1rem; font-weight: 700; color: #f4f2ef; margin-bottom: 0.5rem; }
     footer .sub { color: #6b6358; font-size: 0.85rem; margin-bottom: 1.5rem; }
-    footer .share-prompt { font-size: 0.75rem; color: #4a4438; margin-top: 2rem; }
+    footer .share-prompt { font-size: 0.85rem; color: #a09888; margin-top: 2rem; }
 
     /* ===== RESPONSIVE ===== */
     @media (max-width: 768px) {
@@ -196,6 +208,7 @@
       .hero-strip { gap: 1rem; justify-content: center; }
       .hero-poster { max-width: 100%; }
       section { padding: 3rem 0; }
+      .compare-table { display: block; overflow-x: auto; white-space: nowrap; }
     }
   </style>
 </head>
@@ -222,20 +235,22 @@
     <div class="container">
       <div class="grid-2" style="align-items:center">
         <div class="hero-content">
-          <div class="hero-tag">🎮 Early Access</div>
-          <h1>Comande sua <span>academia</span> de MMA.</h1>
+          <div class="hero-tag">🎮 Jogue grátis, direto do navegador</div>
+          <h1>Três atletas desconhecidos.<br><span>Nenhum cinturão. Ainda.</span></h1>
           <p>
-            Recrute lutadores, monte o card perfeito, dê instruções de córner
-            ao vivo entre os rounds e construa um império nas 5 divisões de peso.
+            Recrute lutadores e escolha o plano de jogo — manter em pé contra um grappler
+            vale +10% por round, levar ao chão custa −8% — depois comande o córner ao vivo,
+            round a round, nas 5 divisões de peso.
           </p>
-          <a href="index.html" class="btn btn-primary btn-lg">Começar Agora — R$14,90</a>
+          <a href="index.html" class="btn btn-primary btn-lg">Jogar Agora — Grátis</a>
+          <p class="hero-microcopy">Sem cadastro, sem cartão. Seu progresso fica salvo no navegador.</p>
           <div class="hero-strip">
             <div class="hero-strip-item">
               <div class="num">24</div>
               <div class="label">Atributos</div>
             </div>
             <div class="hero-strip-item">
-              <div class="num">6</div>
+              <div class="num">5</div>
               <div class="label">Promoções</div>
             </div>
             <div class="hero-strip-item">
@@ -243,60 +258,76 @@
               <div class="label">Divisões</div>
             </div>
             <div class="hero-strip-item">
-              <div class="num">52</div>
-              <div class="label">Semanas/Ano</div>
+              <div class="num">16</div>
+              <div class="label">Sem. de Suspensão</div>
             </div>
           </div>
         </div>
 
-        <!-- POSTER PREVIEW -->
+        <!-- REAL MECHANIC PREVIEW: fog-of-war scouting bars (not a screenshot, not invented stats) -->
         <div class="hero-poster">
-          <div class="octagon">🥊</div>
-          <div class="fighter-name">Luan "Predador" Silva</div>
-          <div class="fighter-record">18-3-0 · 12 finalizações</div>
-          <div class="vs">VS</div>
-          <div class="fighter-name" style="color:#e8234a">Mike "The Hammer" Thompson</div>
-          <div class="fighter-record">22-5-0 · 15 nocautes</div>
-          <div class="poster-belt">🏆 Cinturão Peso Leve em Jogo</div>
+          <div class="scout-label">Sem Scouting</div>
+          <div class="scout-row"><span class="scout-attr">Chin</span><div class="scout-bar"></div></div>
+          <div class="scout-row"><span class="scout-attr">Poder</span><div class="scout-bar"></div></div>
+          <div class="scout-row"><span class="scout-attr">Wrestling</span><div class="scout-bar"></div></div>
+          <div class="scout-row"><span class="scout-attr">Cardio</span><div class="scout-bar"></div></div>
+          <div class="scout-caption">É assim que o adversário aparece até você investir em scouting. Escolher o plano de jogo às cegas custa caro.</div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- FEATURES -->
+  <!-- WHY / EMPATHY (real quotes from actual playtesters — see docs/PRD.md) -->
+  <section id="why" style="text-align:center">
+    <div class="container" style="max-width:640px;margin:0 auto">
+      <p class="text-gold text-sm" style="text-transform:uppercase;letter-spacing:.1em;margin-bottom:1.25rem">Por que existe</p>
+      <blockquote>"Eles simplesmente levam os meus atletas, sem uma oportunidade de tentar trazer eles de volta, ou renegociar contrato."</blockquote>
+      <p style="margin:0 auto">
+        Foi assim que um testador descreveu o que as academias rivais faziam. Virou mecânica:
+        hoje, quando um rival tenta levar seu atleta, você recebe uma sondagem e tem semanas
+        para reagir — renegociar, dar um bônus, prometer uma disputa de título, ou deixar ir.
+        Outra reclamação real — <em>"não acho legal lutar no Pride e no Global só porque sou
+        atleta nacional, deveria escolher lutar em apenas uma, de minha escolha, e melhor
+        contrato"</em> — virou o sistema de contrato exclusivo com promoção. O jogo é construído
+        em cima do que quem jogou de verdade sentiu falta.
+      </p>
+    </div>
+  </section>
+
+  <!-- FEATURES (reordenado: o mecanismo mais distintivo primeiro) -->
   <section class="features" id="features">
     <div class="container">
-      <h2 class="text-center mb-2">O jogo de gerenciamento de MMA<br>que você sempre quis</h2>
+      <h2 class="text-center mb-2">O sim de MMA que te obriga a decidir<br>no meio do round — não só antes da luta</h2>
       <div class="grid-3 mt-4">
         <div class="feature-card">
-          <div class="feature-icon">🧠</div>
-          <h3>24 Atributos</h3>
-          <p>Boxe, chão, força, velocidade, resistência, chin, QI de luta — cada lutador é único.</p>
+          <div class="feature-icon">🎯</div>
+          <h3>Ou você estuda, ou luta no escuro</h3>
+          <p>Sem scouting, os atributos do adversário aparecem como faixas hachuradas — você não sabe se ele tem um overhand mortal ou queixo de vidro até já estar levando porrada por causa disso.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🔄</div>
-          <h3>Instruções de Córner ao Vivo</h3>
-          <p>Entre os rounds, escolha o ritmo e a estratégia. Sua decisão define o resultado.</p>
+          <h3>A luta virou porque você mandou virar</h3>
+          <p>60 segundos entre rounds. Seu atleta sangrando, o córner do outro lado gritando também. O que você manda agora decide se ele finaliza no 3º round — ou apaga no 2º.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🧠</div>
+          <h3>Nenhum lutador genérico</h3>
+          <p>Um zurdo com chin de vidro e mão de aço. Um wrestler que não sabe finalizar. Descubra o estilo de cada atleta antes que a divisão inteira descubra por você.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">📋</div>
-          <h3>Contratos Exclusivos</h3>
-          <p>Negocie com 6 promoções, suba de tier, dispute cinturões e gerencie a carreira.</p>
+          <h3>Faça as promoções implorarem pelo seu atleta</h3>
+          <p>Recuse a bolsa ruim. Deixe o card deles capengar sem seu lutador. Negocie o que ele merece — ou veja um rival roubar o cinturão que era dele.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🏥</div>
-          <h3>Dano Acumulado</h3>
-          <p>Cada nocaute deixa marcas. Atletas envelhecem, declinam e precisam se aposentar.</p>
+          <h3>Cada vitória custa um pedaço dele</h3>
+          <p>Aquele nocaute que ganhou o cinturão também deixou uma fratura que nunca cicatriza igual. Você decide quando é hora de aposentar — antes que o corpo dele decida por você.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">⚔️</div>
-          <h3>Rivalidades & Reencontros</h3>
-          <p>Ex-atletas viram oponentes. Revanches escrevem histórias. O Hall da Fama eterniza.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🎯</div>
-          <h3>Scouting & Estudo</h3>
-          <p>Analise oponentes, descubra pontos fracos e monte o plano de jogo perfeito.</p>
+          <h3>Ele nunca esqueceu a última luta</h3>
+          <p>O lutador que você cortou da equipe assina com a academia rival — e reaparece do outro lado do octógono. Revanche aqui não é conteúdo, é vingança.</p>
         </div>
       </div>
     </div>
@@ -327,24 +358,54 @@
     </div>
   </section>
 
+  <!-- COMPARISON -->
+  <section id="comparison">
+    <div class="container">
+      <h2 class="text-center mb-2">MMA Manager vs. as alternativas</h2>
+      <p class="text-xs text-muted text-center mb-2" style="max-width:none">Arraste a tabela para o lado no celular para ver todas as colunas →</p>
+      <div style="overflow-x:auto">
+        <table class="compare-table">
+          <thead>
+            <tr><th></th><th>MMA Manager</th><th>Manager de outro esporte</th><th>Planilha / papel</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Esporte simulado</td><td class="compare-yes">MMA — em pé, chão e clinch</td><td>Futebol, basquete etc.</td><td>Você modela tudo à mão</td></tr>
+            <tr><td>Instrução de córner ao vivo entre rounds</td><td class="compare-yes">Sim</td><td>Sem equivalente</td><td>Não</td></tr>
+            <tr><td>Dano permanente por nocaute (chin/durability)</td><td class="compare-yes">Sim</td><td>Lesões genéricas</td><td>Só se você calcular</td></tr>
+            <tr><td>Contrato exclusivo com uma promoção</td><td class="compare-yes">Sim</td><td>Raramente modelado</td><td>Não</td></tr>
+            <tr><td>Preço</td><td class="compare-yes">Grátis, Early Access</td><td>Varia</td><td>Grátis, custa seu tempo</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- TESTIMONIALS (honesto: sem depoimento inventado) -->
+  <section id="testimonials" style="text-align:center">
+    <div class="container">
+      <h2 class="mb-2">O que quem já jogou diz</h2>
+      <p class="text-center" style="margin:0 auto">Ainda não publicamos depoimentos — o Early Access é recente. Jogou? Manda seu feedback pra gente; os melhores relatos entram aqui.</p>
+    </div>
+  </section>
+
   <!-- PRICING -->
   <section class="pricing" id="pricing">
     <div class="container">
-      <h2 class="mb-2">Early Access</h2>
-      <p class="text-center" style="margin:0 auto 2rem">Compre uma vez. Jogue para sempre. Atualizações vitalícias inclusas.</p>
+      <h2 class="mb-2">Jogue Grátis Agora</h2>
+      <p class="text-center" style="margin:0 auto 2rem">100% grátis durante o Early Access. Sem cartão, sem cadastro — seu save fica salvo no seu navegador.</p>
       <div class="flex-center">
         <div class="pricing-card">
-          <div class="price">R$14,90</div>
-          <div class="price-sub">pagamento único · sem assinatura</div>
+          <div class="price">Grátis</div>
+          <div class="price-sub">Early Access · feedback é bem-vindo</div>
           <ul>
             <li>Acesso completo ao jogo</li>
-            <li>Todas as 6 promoções</li>
+            <li>Todas as 5 promoções</li>
             <li>24 atributos + DNA</li>
             <li>Instruções de córner ao vivo</li>
             <li>Save com 6 slots</li>
-            <li>Atualizações vitalícias</li>
+            <li>Atualizações incluídas enquanto durar o Early Access</li>
           </ul>
-          <a href="index.html" class="btn btn-primary btn-lg" style="width:100%;justify-content:center">Começar Agora</a>
+          <a href="index.html" class="btn btn-primary btn-lg" style="width:100%;justify-content:center">Jogar Agora — Grátis</a>
         </div>
       </div>
     </div>
@@ -355,7 +416,7 @@
     <div class="container">
       <h2>Construa sua dinastia.</h2>
       <p>Recrute, treine, lute. O octógono espera.</p>
-      <a href="index.html" class="btn btn-primary btn-lg">Jogar MMA Manager</a>
+      <a href="index.html" class="btn btn-primary btn-lg">Jogar Agora — Grátis</a>
     </div>
   </section>
 
@@ -363,9 +424,9 @@
   <footer>
     <div class="container">
       <div class="bold-line">Construa dinastias. Destrua legados.</div>
-      <div class="sub">MMA Manager — o simulador de MMA que coloca você no córner.</div>
-      <a href="index.html" class="btn btn-primary">Jogar Agora — R$14,90</a>
-      <div class="share-prompt">Conhece um fã de MMA? Manda esse link pra ele. 👊</div>
+      <div class="sub">Cada round é uma decisão. Cada decisão, uma carreira.</div>
+      <a href="index.html" class="btn btn-primary">Jogar Agora — Grátis</a>
+      <div class="share-prompt">Manda pro amigo que sempre diz que "lutaria diferente" — bota ele pra provar isso do córner. 👊</div>
     </div>
   </footer>
 </body>

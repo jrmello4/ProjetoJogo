@@ -139,7 +139,17 @@ Projeto não publicou pra público ainda (`build-itch.js` é de hoje). Decisão:
 versão pra este corte — só bump de uma constante de versão do save pra
 saves antigos serem rejeitados com mensagem clara em vez de crashar.
 
-### A.6 — Onboarding e criação de personagem
+### A.6 — Como identificar "o lutador do jogador"
+
+Hoje isso é ownership: `fighter.gymId === GYM_CONFIG.ID`. Sem posse de
+academia, vira identidade: `gameState` ganha doc singleton
+`{id: 'career', playerFighterId, ...}`. Todo ponto do código que hoje
+filtra "meu atleta" por `gymId === GYM_CONFIG.ID` passa a comparar
+`fighter.id === career.playerFighterId` — mais simples que antes (chave
+primária, não índice secundário). `FighterController.getTeam(gymId)`
+morre; vira `getPlayerFighter()` (busca direta por id).
+
+### A.7 — Onboarding e criação de personagem
 
 `app.js::_maybeShowOnboarding` hoje pergunta nome da ACADEMIA + dificuldade
 + mostra os 3 atletas iniciais. Novo fluxo (mecânico, não visual — telas
@@ -378,18 +388,20 @@ frase do prompt original). Longo — carreiras que ficam numa academia só
 desenvolvem uma relação técnica quase narrativa; carreiras que trocam
 muito de academia nunca atingem o teto de bônus de sinergia.
 
-### C.3 — Psicologia de momento crítico (COMPLETA DNA já definido, nunca lido)
+### C.3 — Psicologia de momento crítico (ESTENDE leitura de DNA já existente)
 
-**Mecanismo.** `pressurePerformer` e `bigEventNervous` existem em
-`DNA_TRAIT_NAMES` desde já, mas nenhum código consultado os lê. Implementar
-de fato: `SimulationEngine` (não lido em detalhe ainda — ver Seção G.3)
-ganha um cálculo de `pressureLevel` por luta (função de: é luta de
-título, é revanche, é luta em casa/torcida contra, é streak em risco,
-é primeira luta em tier novo). `pressurePerformer` dá bônus multiplicativo
-em `pressureLevel` alto; `bigEventNervous` dá penalidade; sem nenhum dos
-dois, pressão alta é neutra. Isto faz duas coisas: (1) entrega o que os
-docs do projeto já prometiam faz tempo, (2) dá função real pro traço além
-de aparecer como badge no perfil.
+**Mecanismo.** Correção após ler `controllers/simulation.js`:
+`pressurePerformer`/`bigEventNervous` JÁ são lidos em
+`SimulationEngine._calcRoundPerformance` (±10% flat quando `isBigEvent`) —
+não é código morto como uma leitura inicial sugeriu. O que falta: hoje
+"big event" é binário (`promo.tier === 1`, decidido em
+`world-service.js::_runEvent`). Passa a ser um `pressureLevel` gradiente
+(0-100) somando peso por: luta de título, revanche, sequência em risco,
+primeira luta num tier novo, rivalidade `grudge` (D.3). `pressurePerformer`/
+`bigEventNervous` escalam com esse gradiente em vez do flat ±10%;
+`composureFactor` (já calculado em `_calcRoundPerformance`, hoje só
+aplicado dentro do `if (isBigEvent)`) passa a aplicar sempre, também
+escalando com `pressureLevel` em vez de tudo-ou-nada.
 
 **Conecta com:** auto-descoberta (B.1 — esses dois traços só se
 descobrem EXATAMENTE num momento de pressão alta, o que faz a descoberta
@@ -595,9 +607,9 @@ wins/losses/coaches-como-compra; ganha specialties/headCoach/philosophy).
 aceitar um `targetType: 'academy'|'manager'` pra servir também C.1).
 `services/world-service.js` (todo ponto que checa `GYM_CONFIG.ID`/
 `gym.cash`/`gym.addTransaction` — são ~8 pontos, listados na Seção A.2).
-`controllers/simulation.js` — **não lido ainda nesta rodada de
-brainstorming**; precisa de leitura antes de implementar C.3 (pressão) —
-primeiro item da lista de tarefas de implementação.
+`controllers/simulation.js` (`isBigEvent` binário → `pressureLevel`
+gradiente, C.3; `_calcRoundPerformance` já faz quase tudo, é extensão
+pontual, não reescrita).
 `app.js` (remove rotas market/roster, reescreve onboarding pra criação de
 personagem A.6, atualiza toda leitura de `gym`→`fighter.cash`).
 `config/game-config.js` (`GYM_CONFIG`→ dividido entre config de `Academy`

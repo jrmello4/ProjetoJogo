@@ -34,17 +34,20 @@ export class SimulationEngine {
   }
 
   // cornerHooks (opcional): { onRoundEnd: async ({round, roundResult, totalScoreA, totalScoreB}) => instructionKey }
-  // Só afeta o córner A (sempre o lutador da academia, por convenção do WorldService).
+  // Só afeta o córner A (sempre o lutador do jogador, por convenção do WorldService).
   // Sem cornerHooks, o comportamento é idêntico ao automático de sempre.
   // gamePlanKey: escolhido antes da luta, vale por todos os rounds; a
   // instrução de córner ajusta por cima, round a round.
   // `dateISO`: data-no-jogo da luta (derivada da semana atual). Sem ela, todo
   // evento simulado num fast-forward levava o relógio real — e "todo mundo lutava
   // no mesmo dia". O chamador (WorldService) passa absWeekToDate(semana).
-  static async simulateFight(fighterA, fighterB, isBigEvent = false, cornerHooks = null, gamePlanKey = 'balanced', dateISO = null) {
-    // Formato MMA: lutas normais são 3 rounds; eventos grandes (tier 1 —
-    // main events e títulos) vão a 5. Antes era 5 fixo pra todo mundo.
-    const maxRounds = isBigEvent ? 5 : 3;
+  // `fiveRounds`: formato real do MMA — main events/títulos vão a 5 rounds,
+  // o resto vai a 3. `pressureLevel` (0-100, §C.3): o quanto esta luta pesa
+  // psicologicamente — título, reencontro, sequência em risco. Escala
+  // `pressurePerformer`/`bigEventNervous`/composure em vez de tudo-ou-nada;
+  // antes disto, "pressão" era o mesmo booleano que decidia rounds (isBigEvent).
+  static async simulateFight(fighterA, fighterB, fiveRounds = false, cornerHooks = null, gamePlanKey = 'balanced', dateISO = null, pressureLevel = 0) {
+    const maxRounds = fiveRounds ? 5 : 3;
     const rounds = [];
     let totalScoreA = 0, totalScoreB = 0;
 
@@ -74,8 +77,8 @@ export class SimulationEngine {
       const staminaFactorA = Math.max(10, staminaA * (1 - (r - 1) * 0.12) - staminaDebtA);
       const staminaFactorB = Math.max(10, staminaB * (1 - (r - 1) * 0.12) - staminaDebtB);
 
-      const perfA = this._calcRoundPerformance(fighterA, fighterB, isBigEvent, staminaFactorA, cornerModA, plan, planEdge);
-      const perfB = this._calcRoundPerformance(fighterB, fighterA, isBigEvent, staminaFactorB, null);
+      const perfA = this._calcRoundPerformance(fighterA, fighterB, pressureLevel, staminaFactorA, cornerModA, plan, planEdge);
+      const perfB = this._calcRoundPerformance(fighterB, fighterA, pressureLevel, staminaFactorB, null);
 
       // Track total scores for decision
       totalScoreA += perfA.score;
@@ -300,7 +303,7 @@ export class SimulationEngine {
     }
   }
 
-  static _calcRoundPerformance(fighter, opponent, isBigEvent, staminaFactor, cornerMod = null, plan = null, planEdge = 0) {
+  static _calcRoundPerformance(fighter, opponent, pressureLevel, staminaFactor, cornerMod = null, plan = null, planEdge = 0) {
     const corner = cornerMod || CORNER_INSTRUCTIONS.balanced;
     const game = plan || GAME_PLANS.balanced;
     const fatiguePenalty = 1 - (fighter.fatigue / 200);
@@ -373,11 +376,13 @@ export class SimulationEngine {
     // A leitura do adversário: acertar o plano paga, errar cobra.
     let finalScore = (baseScore + noise) * (1 + planEdge * adaptBonus);
 
-    // DNA traits + composure para big events
-    if (isBigEvent) {
-      if (fighter.dna.pressurePerformer) finalScore *= 1.10;
-      if (fighter.dna.bigEventNervous) finalScore *= 0.90;
-      finalScore *= composureFactor;
+    // DNA traits + composure escalam com a pressão da luta (§C.3) em vez
+    // de tudo-ou-nada — um título pesa mais que uma luta regional de tier 1.
+    const pressureFactor = Math.max(0, Math.min(100, pressureLevel || 0)) / 100;
+    if (pressureFactor > 0) {
+      if (fighter.dna.pressurePerformer) finalScore *= 1 + 0.10 * pressureFactor;
+      if (fighter.dna.bigEventNervous) finalScore *= 1 - 0.10 * pressureFactor;
+      finalScore *= 1 + (composureFactor - 1) * pressureFactor;
     }
 
     return {

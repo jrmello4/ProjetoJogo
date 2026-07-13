@@ -200,7 +200,8 @@ export class WorldService {
       const gamePlan = fight.booking?.gamePlan || 'balanced';
 
       const fightDateISO = absWeekToDate(absWeekNow, startedAt).toISOString();
-      const result = await SimulationEngine.simulateFight(fighterA, fighterB, promo.tier === 1, hooks, gamePlan, fightDateISO);
+      const pressureLevel = this._computePressureLevel(fight, promo);
+      const result = await SimulationEngine.simulateFight(fighterA, fighterB, promo.tier === 1, hooks, gamePlan, fightDateISO, pressureLevel);
       result.eventId = eventId;
       result.card = fight.card;
       result.isTitleFight = !!fight.titleWeightClass;
@@ -437,6 +438,22 @@ export class WorldService {
         Math.abs(b.overallRating - fighter.overallRating)
       );
     return candidates[0] || null;
+  }
+
+  // §C.3 — pressão psicológica da luta (0-100): escala pressurePerformer/
+  // bigEventNervous/composure em SimulationEngine em vez do antigo binário
+  // isBigEvent (só tier 1). Sinais disponíveis aqui sem dependência nova:
+  // título em jogo, palco de elite, reencontro, sequência em risco de
+  // qualquer lado. Rivalidade tipo 'grudge' (§D.3) soma quando esse sistema
+  // existir — por ora fica de fora, não há acesso a rivalryService aqui.
+  _computePressureLevel(fight, promo) {
+    let pressure = 0;
+    if (fight.titleWeightClass) pressure += 50;
+    if (promo.tier === 1) pressure += 20;
+    if (fight.booking?.isReencounter) pressure += 15;
+    if ((fight.fighterA.winStreak || 0) >= 3) pressure += 10;
+    if ((fight.fighterB.winStreak || 0) >= 3) pressure += 10;
+    return Math.min(100, pressure);
   }
 
   // Suspensão médica pós-luta: aplicada a TODOS os lutadores (jogador e IA)

@@ -16,6 +16,8 @@ import {
   PROMOTIONS,
   OFFER_CONFIG,
   TIER_MOVEMENT_CONFIG,
+  PERMANENT_SCAR_TABLE,
+  DNA_DISCOVERY_CONFIG,
   absWeekToDate,
   computeSuspensionWeeks,
 } from '../config/game-config.js';
@@ -201,6 +203,14 @@ export class WorldService {
 
       const fightDateISO = absWeekToDate(absWeekNow, startedAt).toISOString();
       const pressureLevel = this._computePressureLevel(fight, promo);
+      // §B.1 — pressurePerformer/bigEventNervous só se descobrem numa luta
+      // que realmente pesa (metade do gatilho de C.3: pressão alta).
+      if (pressureLevel >= 50) {
+        if (fighterA.hasDNA('pressurePerformer')) fighterA.discoverTrait('pressurePerformer');
+        if (fighterA.hasDNA('bigEventNervous')) fighterA.discoverTrait('bigEventNervous');
+        if (fighterB.hasDNA('pressurePerformer')) fighterB.discoverTrait('pressurePerformer');
+        if (fighterB.hasDNA('bigEventNervous')) fighterB.discoverTrait('bigEventNervous');
+      }
       const result = await SimulationEngine.simulateFight(fighterA, fighterB, promo.tier === 1, hooks, gamePlan, fightDateISO, pressureLevel);
       result.eventId = eventId;
       result.card = fight.card;
@@ -486,6 +496,35 @@ export class WorldService {
       resumeStatus: fighter.status,
     };
     fighter.status = 'injured';
+
+    // §B.1 — injuryProne se descobre na 2ª lesão em menos de 52 semanas.
+    if (fighter.hasDNA('injuryProne') && !fighter.isDiscovered('injuryProne')
+      && fighter.injuryCount >= 1
+      && (absWeekNow - fighter.lastInjuryAbsWeek) < DNA_DISCOVERY_CONFIG.INJURY_PRONE_WINDOW_WEEKS) {
+      fighter.discoverTrait('injuryProne');
+    }
+    fighter.injuryCount = (fighter.injuryCount || 0) + 1;
+    fighter.lastInjuryAbsWeek = absWeekNow;
+
+    // §B.2 — lesão mais severa (mais semanas fora) rola chance de sequela
+    // permanente: reduz o TETO de alguns atributos pro resto da carreira,
+    // com uma pequena compensação mental (a dor ensina a lutar diferente).
+    const scarChance = weeks >= WORLD_CONFIG.SCAR_SEVERE_WEEKS_THRESHOLD
+      ? WORLD_CONFIG.SCAR_CHANCE_SEVERE
+      : WORLD_CONFIG.SCAR_CHANCE_LIGHT;
+    if (Math.random() < scarChance) {
+      const template = PERMANENT_SCAR_TABLE[Math.floor(Math.random() * PERMANENT_SCAR_TABLE.length)];
+      fighter.permanentScars.push({
+        bodyPart: template.bodyPart,
+        attributeCeilings: { ...template.attributeCeilings },
+        compensation: { ...template.compensation },
+        fromFightId: result.id,
+        atAbsWeek: absWeekNow,
+      });
+      for (const [attr, bonus] of Object.entries(template.compensation)) {
+        fighter.attributes[attr] = Math.min(fighter.effectiveCeiling(attr), (fighter.attributes[attr] || 50) + bonus);
+      }
+    }
   }
 
   async _recoverInjuries(absWeekNow, playerFighterId) {

@@ -287,18 +287,58 @@ export class FighterProfileView {
 
       ${contractHtml}
 
-      <!-- DNA Traits -->
+      <!-- DNA Traits — §B.1: pro próprio jogador, só o que já foi descoberto -->
       <div class="card mt-4">
         <div class="card-header">
           <span class="card-title">DNA Oculto</span>
         </div>
-        <div class="flex gap-2 flex-wrap">
-          ${fighter.dnaTraits.length > 0
-            ? fighter.dnaTraits.map(t => `<span class="badge badge-info">${t.label}</span>`).join('')
-            : '<span class="text-xs text-muted">Nenhum trait especial detectado</span>'
-          }
-        </div>
+        ${(() => {
+          const allTraits = fighter.dnaTraits;
+          const visible = isPlayer ? allTraits.filter(t => fighter.isDiscovered(t.key)) : allTraits;
+          const hiddenCount = isPlayer ? allTraits.length - visible.length : 0;
+          return `
+            <div class="flex gap-2 flex-wrap">
+              ${visible.length > 0
+                ? visible.map(t => `<span class="badge badge-info">${t.label}</span>`).join('')
+                : '<span class="text-xs text-muted">Nenhum trait especial descoberto ainda</span>'
+              }
+            </div>
+            ${hiddenCount > 0 ? `<div class="text-xs text-muted mt-2">Ainda existe algo por descobrir sobre você — só a carreira revela.</div>` : ''}
+            ${isPlayer ? `
+              <div class="grid grid-cols-3 gap-3 mt-3" style="border-top:1px solid var(--border);padding-top:0.75rem">
+                <div>
+                  <div class="text-xs text-muted">Potencial</div>
+                  <div class="text-sm font-bold">${fighter.isDiscovered('potential') ? fighter.hidden.potential : '???'}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-muted">Disciplina</div>
+                  <div class="text-sm font-bold">${fighter.isDiscovered('discipline') ? fighter.hidden.discipline : '???'}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-muted">Determinação</div>
+                  <div class="text-sm font-bold">${fighter.isDiscovered('determination') ? fighter.hidden.determination : '???'}</div>
+                </div>
+              </div>
+            ` : ''}
+          `;
+        })()}
       </div>
+
+      <!-- Sequelas permanentes (§B.2) -->
+      ${fighter.permanentScars.length > 0 ? `
+        <div class="card mt-4">
+          <div class="card-header">
+            <span class="card-title">Sequelas de Lesão</span>
+          </div>
+          ${fighter.permanentScars.map(s => `
+            <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
+              <span class="text-sm">🩹 ${s.bodyPart.charAt(0).toUpperCase() + s.bodyPart.slice(1)}</span>
+              <span class="text-xs text-muted">${Object.entries(s.attributeCeilings).map(([k, v]) => `${k} ${v}`).join(' · ')}</span>
+            </div>
+          `).join('')}
+          <div class="text-xs text-muted mt-2">Reduz o teto de evolução dos atributos acima pro resto da carreira.</div>
+        </div>
+      ` : ''}
 
       <!-- Popularidade -->
       <div class="card mt-4">

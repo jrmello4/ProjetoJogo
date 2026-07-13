@@ -320,10 +320,18 @@ export class GameController {
   async processWeek(cornerHooks = null) {
     const nextWeekState = await this.seasonService.peekNextWeek();
     const now = absWeek(nextWeekState);
+    const preFightId = (await this.getPlayerFighter()).id;
+
+    const world = await this.worldService.processWeek(now, nextWeekState.startedAt, preFightId, cornerHooks);
+
+    // Rebusca DEPOIS do tick do mundo — WorldService busca e salva sua
+    // PRÓPRIA instância do lutador ao resolver a luta (record, popularidade,
+    // caixa, lesão, descobertas de DNA...). Continuar mutando o `fighter`
+    // buscado ANTES da luta e salvá-lo no fim deste método sobrescrevia
+    // tudo isso com o estado pré-luta — a luta "acontecia" mas o resultado
+    // nunca sobrevivia ao fim da semana. Bug real, achado testando ao vivo.
     const fighter = await this.getPlayerFighter();
     const academy = await this.getAcademy(fighter.academyId);
-
-    const world = await this.worldService.processWeek(now, nextWeekState.startedAt, fighter.id, cornerHooks);
 
     await this.offerService.expireOld(now);
     const promotions = await this.worldService.getPromotions();
@@ -360,6 +368,8 @@ export class GameController {
 
     await this._generateHeadlines(now, world, fighter);
     await this._generateCallouts(now, fighter);
+
+    fighter.checkNumericDiscovery(); // §B.1 — idempotente, roda toda semana
 
     await this.fighterCtrl.updateFighter(fighter);
 
@@ -726,7 +736,8 @@ export class GameController {
   // ===== Patrocínios =====
   async acceptSponsorOffer(offerId) {
     const fighter = await this.getPlayerFighter();
-    return await this.sponsorService.accept(offerId, fighter.record.wins);
+    const state = await this.seasonService.getState();
+    return await this.sponsorService.accept(offerId, absWeek(state), fighter.record.wins);
   }
 
   async declineSponsorOffer(offerId) {

@@ -218,6 +218,11 @@ export const WORLD_CONFIG = {
   INJURY_WEEKS_MIN: 2,
   INJURY_WEEKS_MAX: 6,
 
+  // §B.2 — lesão >= este tanto de semanas rola chance de sequela permanente
+  SCAR_SEVERE_WEEKS_THRESHOLD: 5,
+  SCAR_CHANCE_LIGHT: 0.05,
+  SCAR_CHANCE_SEVERE: 0.20,
+
   // Draft anual (semana 52)
   DRAFT_MIN: 5,
   DRAFT_MAX: 10,
@@ -225,6 +230,26 @@ export const WORLD_CONFIG = {
   // Fase 1: teto de população — acima disto, veteranos irrelevantes são
   // aposentados forçadamente para evitar degradação da performance.
   POPULATION_CAP: 300,
+};
+
+// §B.2 — sequelas permanentes de lesão. Cada entrada reduz o TETO
+// (Fighter.effectiveCeiling) de alguns atributos e compensa um pouco em
+// outro (a dor ensina a lutar diferente) — nunca mexe no valor atual.
+export const PERMANENT_SCAR_TABLE = [
+  { bodyPart: 'joelho', attributeCeilings: { takedowns: -8, wrestling: -5 }, compensation: { fightIQ: 3 } },
+  { bodyPart: 'mão', attributeCeilings: { power: -6, boxing: -4 }, compensation: { fightIQ: 2 } },
+  { bodyPart: 'costela', attributeCeilings: { cardio: -6 }, compensation: { composure: 3 } },
+  { bodyPart: 'cervical', attributeCeilings: { chin: -5, durability: -5 }, compensation: { adaptability: 3 } },
+];
+
+// §B.1 — auto-descoberta de DNA. Traços booleanos se descobrem em
+// gatilhos de jogo (ver world-service.js/fighter.js); os 3 hidden
+// numéricos (potential/discipline/determination) se descobrem em bloco
+// depois de lutas suficientes pra ter uma amostra real de evolução.
+export const DNA_DISCOVERY_CONFIG = {
+  NUMERIC_REVEAL_AT_FIGHTS: 5,
+  INJURY_PRONE_WINDOW_WEEKS: 52,
+  BIG_MORALE_SWING_THRESHOLD: 20,
 };
 
 // Fase 1b: escada de tiers pra lutadores de IA (espelha o Épico B do

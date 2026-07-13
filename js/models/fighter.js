@@ -1,5 +1,6 @@
 import { clamp } from '../utils/helpers.js';
 import { Contract } from './contract.js';
+import { DNA_DISCOVERY_CONFIG } from '../config/game-config.js';
 
 const LEDGER_LIMIT = 120;
 
@@ -66,6 +67,8 @@ export class Fighter {
     // compensation, fromFightId, atAbsWeek }. attributeCeilings reduz o
     // TETO de evolve(), não o valor atual.
     this.permanentScars = data.permanentScars || [];
+    this.injuryCount = data.injuryCount || 0;
+    this.lastInjuryAbsWeek = data.lastInjuryAbsWeek || 0;
 
     // Épico D: configuração do acampamento semanal (persistida, não botão manual)
     this.campConfig = data.campConfig || null; // { intensity, spec, sparringPartnerId } ou null
@@ -377,7 +380,16 @@ export class Fighter {
 
   applyMoraleChange(amount) {
     const multiplier = this.dna.emotionallyUnstable ? 2.0 : 1.0;
-    this.morale = clamp(this.morale + Math.round(amount * multiplier), 0, 100);
+    const applied = Math.round(amount * multiplier);
+    this.morale = clamp(this.morale + applied, 0, 100);
+
+    // §B.1 — emotionallyUnstable se descobre na primeira oscilação grande
+    // de moral (o próprio traço dobra a variação — é essa dramaticidade
+    // que o denuncia, não um contador de eventos à parte).
+    if (this.dna.emotionallyUnstable && !this.isDiscovered('emotionallyUnstable')
+      && Math.abs(applied) >= DNA_DISCOVERY_CONFIG.BIG_MORALE_SWING_THRESHOLD) {
+      this.discoverTrait('emotionallyUnstable');
+    }
   }
 
   applyWeightCutImpact() {
@@ -399,7 +411,20 @@ export class Fighter {
   applyPostFightEffects() {
     if (this.dna.exceptionalRecovery) {
       this.fatigue = clamp(this.fatigue - 15, 0, 100);
+      // §B.1 — descoberto no primeiro recuo rápido de fadiga pós-luta.
+      this.discoverTrait('exceptionalRecovery');
     }
+  }
+
+  // §B.1 — potential/discipline/determination revelam-se em bloco depois
+  // de lutas suficientes: sua evolução real vira a única forma de
+  // estimá-los, como um atleta de verdade só descobre o próprio teto
+  // competindo. Idempotente — seguro chamar toda semana.
+  checkNumericDiscovery() {
+    if (this.totalFights < DNA_DISCOVERY_CONFIG.NUMERIC_REVEAL_AT_FIGHTS) return;
+    this.discoverTrait('potential');
+    this.discoverTrait('discipline');
+    this.discoverTrait('determination');
   }
 
   updatePopularity(amount) {

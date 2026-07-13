@@ -1,0 +1,14 @@
+# itch.io build ignore (for butler/zip)
+.git/
+.claude/
+.verboo/
+.vscode/
+.github/
+memory/
+node_modules/
+docs/
+test/
+.gitignore
+.itchignore
+.DS_Store
+Thumbs.db

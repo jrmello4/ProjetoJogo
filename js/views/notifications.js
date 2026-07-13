@@ -128,7 +128,7 @@ export class NotificationsView {
             </div>
             ${s.exists ? `
               <div style="padding:0.5rem">
-                <div class="text-xs font-bold">${s.gymName}</div>
+                <div class="text-xs font-bold">${s.fighterName}</div>
                 <div class="text-xs text-muted">Sem ${s.week} · Ano ${s.year}</div>
                 <div class="text-xs text-muted">${s.rosterSize} lutadores</div>
                 ${!s.corrupted ? `

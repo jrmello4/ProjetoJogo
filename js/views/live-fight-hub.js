@@ -45,8 +45,8 @@ export class LiveFightHubView {
             <div class="text-sm font-bold" style="color:var(--success)">$${(result._purse || 0).toLocaleString()}</div>
           </div>
           <div>
-            <div class="text-xs text-muted">Comissão</div>
-            <div class="text-sm font-bold" style="color:var(--gold)">$${(result._gymCut || 0).toLocaleString()}</div>
+            <div class="text-xs text-muted">Líquido</div>
+            <div class="text-sm font-bold" style="color:var(--gold)">$${(result._netPurse || 0).toLocaleString()}</div>
           </div>
           ${result._hypeBonus > 0 ? `
           <div>

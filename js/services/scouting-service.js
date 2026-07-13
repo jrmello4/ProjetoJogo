@@ -1,13 +1,13 @@
 import { clamp } from '../utils/helpers.js';
-import { SCOUTING_LEVELS, SCOUTING_CONFIG, GYM_CONFIG } from '../config/game-config.js';
+import { SCOUTING_LEVELS, SCOUTING_CONFIG } from '../config/game-config.js';
 
 const DOC_ID = 'scouting';
 
 // Névoa de guerra.
 //
-// Você conhece seus próprios atletas — treina com eles todo dia. De quem está
-// do lado de fora (adversários, agentes livres), você só sabe o que investigou.
-// Este serviço decide o que a interface pode mostrar sobre cada lutador.
+// Você conhece a si mesmo — treina todo dia. De quem está do lado de fora
+// (adversários), você só sabe o que investigou. Este serviço decide o que
+// a interface pode mostrar sobre cada lutador.
 export class ScoutingService {
   constructor(db, notifService) {
     this.db = db;
@@ -24,25 +24,27 @@ export class ScoutingService {
     await this.db.put('gameState', doc);
   }
 
-  // Nível de conhecimento sobre um lutador (0..3).
-  // Os seus são sempre nível 3: você os vê treinar.
-  async knowledgeOf(fighter, gym) {
+  // Nível de conhecimento sobre um lutador (0..3). Você mesmo é sempre
+  // nível 3. `hasBaseline` (§C.1): empresário com boas conexões dá
+  // conhecimento de base sobre qualquer adversário — substitui o olheiro
+  // comprado do modo academia antigo.
+  async knowledgeOf(fighter, playerFighterId, hasBaseline = false) {
     if (!fighter) return 0;
-    if (fighter.gymId === GYM_CONFIG.ID) return 3;
+    if (fighter.id === playerFighterId) return 3;
 
     const doc = await this._doc();
     const studied = doc.reports[fighter.id] || 0;
-    const baseline = gym?.scoutLevel > 0 ? SCOUTING_CONFIG.BASELINE_WITH_SCOUT : 0;
+    const baseline = hasBaseline ? SCOUTING_CONFIG.BASELINE_WITH_SCOUT : 0;
     return Math.max(studied, baseline);
   }
 
-  // Mapa id -> nível, para telas com muitos lutadores (Recrutamento).
-  async knowledgeMap(fighters, gym) {
+  // Mapa id -> nível, para telas com muitos lutadores.
+  async knowledgeMap(fighters, playerFighterId, hasBaseline = false) {
     const doc = await this._doc();
-    const baseline = gym?.scoutLevel > 0 ? SCOUTING_CONFIG.BASELINE_WITH_SCOUT : 0;
+    const baseline = hasBaseline ? SCOUTING_CONFIG.BASELINE_WITH_SCOUT : 0;
     const map = {};
     for (const f of fighters) {
-      map[f.id] = f.gymId === GYM_CONFIG.ID ? 3 : Math.max(doc.reports[f.id] || 0, baseline);
+      map[f.id] = f.id === playerFighterId ? 3 : Math.max(doc.reports[f.id] || 0, baseline);
     }
     return map;
   }
@@ -62,20 +64,21 @@ export class ScoutingService {
   }
 
   // Investir dinheiro para levantar a névoa sobre um adversário específico.
-  async study(fighter, gym, absWeekNow) {
-    const current = await this.knowledgeOf(fighter, gym);
+  // `payer` é sempre o lutador do jogador (quem paga do próprio caixa).
+  async study(opponent, payer, absWeekNow) {
+    const current = await this.knowledgeOf(opponent, payer.id);
     if (current >= 3) return { ok: false, reason: 'Você já sabe tudo o que há para saber sobre ele.' };
 
     const next = current + 1;
     const cost = this.studyCost(next);
-    if (gym.cash < cost) {
+    if (payer.cash < cost) {
       return { ok: false, reason: `Caixa insuficiente. Estudar até "${SCOUTING_LEVELS[next].label}" custa $${cost.toLocaleString()}.` };
     }
 
-    gym.addTransaction(absWeekNow, `Scouting — ${fighter.name}`, -cost);
+    payer.addTransaction(absWeekNow, `Scouting — ${opponent.name}`, -cost);
 
     const doc = await this._doc();
-    doc.reports[fighter.id] = next;
+    doc.reports[opponent.id] = next;
     await this._save(doc);
 
     return { ok: true, level: next, cost, label: SCOUTING_LEVELS[next].label };

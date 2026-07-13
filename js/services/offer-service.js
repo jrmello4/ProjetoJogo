@@ -2,7 +2,7 @@ import { FightOffer, OFFER_STATUS } from '../models/fight-offer.js';
 import { Fighter } from '../models/fighter.js';
 import { generateId, clamp } from '../utils/helpers.js';
 import { getWeightClassName } from '../utils/helpers.js';
-import { OFFER_CONFIG, NEGOTIATION_CONFIG, TITLE_CONFIG, TITLE_ROLE, GYM_CONFIG } from '../config/game-config.js';
+import { OFFER_CONFIG, NEGOTIATION_CONFIG, TITLE_CONFIG, TITLE_ROLE } from '../config/game-config.js';
 
 // Ciclo de vida das ofertas de luta: geração semanal pelas promoções,
 // expiração, aceite e recusa.
@@ -52,9 +52,11 @@ export class OfferService {
   }
 
   // Negociação de bolsa: uma tentativa por oferta. Quanto maior o pedido
-  // frente à força de barganha (popularidade do lutador + reputação da
-  // academia), maior o risco de a promoção recusar ou cancelar a oferta.
-  async negotiate(offerId, bumpIndex, fighter, gym) {
+  // frente à força de barganha (popularidade + reputação da academia atual
+  // + estilo do empresário, §C.1), maior o risco de a promoção recusar ou
+  // cancelar a oferta. `managerMods`: { leverageBonus, rescindBonus } —
+  // ver ManagerService.negotiationModifiers.
+  async negotiate(offerId, bumpIndex, fighter, academyReputation = 50, managerMods = { leverageBonus: 0, rescindBonus: 0 }) {
     const data = await this.db.get('offers', offerId);
     if (!data || data.status !== OFFER_STATUS.PENDING) return { ok: false, reason: 'Oferta indisponível.' };
 
@@ -64,7 +66,10 @@ export class OfferService {
     const bump = NEGOTIATION_CONFIG.BUMP_OPTIONS[bumpIndex];
     if (bump == null) return { ok: false, reason: 'Opção de negociação inválida.' };
 
-    const leverage = clamp((fighter?.popularity || 0) / 100 * 0.6 + (gym?.reputation || 0) / 100 * 0.4, 0, 1);
+    const leverage = clamp(
+      (fighter?.popularity || 0) / 100 * 0.6 + (academyReputation || 0) / 100 * 0.4 + (managerMods.leverageBonus || 0),
+      0, 1
+    );
     const acceptCeiling = leverage * NEGOTIATION_CONFIG.BASE_ACCEPT_LEVERAGE;
 
     offer.negotiated = true;
@@ -83,7 +88,7 @@ export class OfferService {
       return { ok: true, outcome: 'countered', offer };
     }
 
-    if (Math.random() < NEGOTIATION_CONFIG.RESCIND_CHANCE) {
+    if (Math.random() < NEGOTIATION_CONFIG.RESCIND_CHANCE + (managerMods.rescindBonus || 0)) {
       offer.status = OFFER_STATUS.DECLINED;
       await this.db.put('offers', offer);
       return { ok: true, outcome: 'rescinded', offer };
@@ -124,99 +129,93 @@ export class OfferService {
     }
   }
 
-  // Geração semanal: promoções procuram lutadores da academia sem
-  // compromisso e enviam propostas compatíveis com o nível de cada um.
-  async generateWeekly(absWeekNow, gym, team, promotions) {
+  // Geração semanal: promoções procuram o lutador do jogador, se ele está
+  // livre, e enviam uma proposta compatível com o nível dele.
+  async generateWeekly(absWeekNow, fighter, academyReputation, promotions) {
     const open = [...(await this.getPending()), ...(await this.getAccepted())];
     const busyFighterIds = new Set(open.map(o => o.fighterId));
     const targetedOpponentIds = new Set(open.map(o => o.opponentId));
     const created = [];
 
-    for (const fighter of team) {
-      if (busyFighterIds.has(fighter.id)) continue;
-      if (fighter.status === 'injured' || fighter.status === 'retired') continue;
-      if (fighter.availableFromAbsWeek > absWeekNow) continue; // ainda em suspensão médica
-      if (fighter.fatigue >= 70) continue; // ninguém oferece luta a atleta esgotado
-      if (Math.random() > OFFER_CONFIG.WEEKLY_OFFER_CHANCE) continue;
+    if (busyFighterIds.has(fighter.id)) return created;
+    if (fighter.status === 'injured' || fighter.status === 'retired') return created;
+    if (fighter.availableFromAbsWeek > absWeekNow) return created; // ainda em suspensão médica
+    if (fighter.fatigue >= 70) return created; // ninguém oferece luta a atleta esgotado
+    if (Math.random() > OFFER_CONFIG.WEEKLY_OFFER_CHANCE) return created;
 
-      // Uma chance de cinturão sempre atropela a oferta comum da semana.
-      const titleOffer = await this._tryTitleOffer(fighter, gym, promotions, absWeekNow, targetedOpponentIds);
-      if (titleOffer) {
-        targetedOpponentIds.add(titleOffer.opponentId);
-        busyFighterIds.add(fighter.id);
-        created.push(titleOffer);
-        continue;
-      }
-
-      // Épico B: contrato exclusivo limita ofertas à promoção contratante
-      let availablePromotions;
-      if (fighter.promotionContract?.status === 'active') {
-        const contractPromo = promotions.find(p => p.id === fighter.promotionContract.promotionId);
-        availablePromotions = contractPromo ? [contractPromo] : [];
-      } else {
-        // Sem contrato: só recebe ofertas do circuito regional (tier 3)
-        availablePromotions = promotions.filter(p => p.tier === 3);
-      }
-      if (availablePromotions.length === 0) continue;
-
-      const tier = this._pickTier(fighter, gym);
-      const candidates = availablePromotions.filter(p => p.tier === tier);
-      if (candidates.length === 0) continue;
-      const promo = candidates[Math.floor(Math.random() * candidates.length)];
-
-      const opponent = await this._pickOpponent(promo.id, fighter, targetedOpponentIds, absWeekNow);
-      if (!opponent) continue;
-
-      // Épico F4: verificar se o adversário já foi da academia do jogador
-      const isReencounter = (opponent.previousGymIds || []).includes(GYM_CONFIG.ID);
-
-      const eventAbsWeek = this._nextEventWeek(promo, absWeekNow);
-
-      // Épico B: usar bolsa do contrato se tiver contrato ativo
-      let rawPurse, winBonus;
-      if (fighter.promotionContract?.status === 'active') {
-        rawPurse = fighter.promotionContract.basePurse;
-        winBonus = fighter.promotionContract.winBonus;
-      } else {
-        const purseCfg = OFFER_CONFIG.PURSE[promo.tier];
-        rawPurse = purseCfg.base + fighter.popularity * purseCfg.perPop;
-        winBonus = Math.round((rawPurse * OFFER_CONFIG.WIN_BONUS_RATIO) / 50) * 50;
-      }
-      const purse = Math.round(rawPurse / 50) * 50;
-
-      const offer = new FightOffer({
-        id: generateId(),
-        promotionId: promo.id,
-        promotionName: promo.name,
-        tier: promo.tier,
-        fighterId: fighter.id,
-        opponentId: opponent.id,
-        opponentName: opponent.name,
-        opponentRecord: { ...opponent.record },
-        opponentOverall: opponent.overallRating,
-        opponentStyle: opponent.fightingStyle,
-        weightClass: fighter.weightClass,
-        purse,
-        winBonus,
-        eventAbsWeek,
-        expiresAbsWeek: absWeekNow + OFFER_CONFIG.EXPIRY_WEEKS,
-        isReencounter, // Épico F4
-        createdAtAbsWeek: absWeekNow,
-      });
-
-      await this.db.put('offers', offer);
-      targetedOpponentIds.add(opponent.id);
-      busyFighterIds.add(fighter.id);
-
-      // Épico F3: notificação de reencontro
-      if (isReencounter) {
-        await this.notifService.add('headline', 'Reencontro!',
-          `${opponent.name} (ex-integrante da sua academia) pode cruzar seu caminho contra ${fighter.name}! A rivalidade está armada.`);
-      }
-      created.push(offer);
-
-      await this.notifService.add('offer', '📩 Nova Oferta de Luta', `${promo.name} quer ${fighter.name} contra ${opponent.name} — bolsa de $${purse.toLocaleString()}.`);
+    // Uma chance de cinturão sempre atropela a oferta comum da semana.
+    const titleOffer = await this._tryTitleOffer(fighter, academyReputation, promotions, absWeekNow, targetedOpponentIds);
+    if (titleOffer) {
+      created.push(titleOffer);
+      return created;
     }
+
+    // Épico B: contrato exclusivo limita ofertas à promoção contratante
+    let availablePromotions;
+    if (fighter.promotionContract?.status === 'active') {
+      const contractPromo = promotions.find(p => p.id === fighter.promotionContract.promotionId);
+      availablePromotions = contractPromo ? [contractPromo] : [];
+    } else {
+      // Sem contrato: só recebe ofertas do circuito regional (tier 3)
+      availablePromotions = promotions.filter(p => p.tier === 3);
+    }
+    if (availablePromotions.length === 0) return created;
+
+    const tier = this._pickTier(fighter, academyReputation);
+    const candidates = availablePromotions.filter(p => p.tier === tier);
+    if (candidates.length === 0) return created;
+    const promo = candidates[Math.floor(Math.random() * candidates.length)];
+
+    const opponent = await this._pickOpponent(promo.id, fighter, targetedOpponentIds, absWeekNow);
+    if (!opponent) return created;
+
+    // Épico F4: reencontro — o adversário já treinou na SUA academia atual
+    const isReencounter = fighter.academyId && (opponent.previousAcademyIds || []).includes(fighter.academyId);
+
+    const eventAbsWeek = this._nextEventWeek(promo, absWeekNow);
+
+    // Épico B: usar bolsa do contrato se tiver contrato ativo
+    let rawPurse, winBonus;
+    if (fighter.promotionContract?.status === 'active') {
+      rawPurse = fighter.promotionContract.basePurse;
+      winBonus = fighter.promotionContract.winBonus;
+    } else {
+      const purseCfg = OFFER_CONFIG.PURSE[promo.tier];
+      rawPurse = purseCfg.base + fighter.popularity * purseCfg.perPop;
+      winBonus = Math.round((rawPurse * OFFER_CONFIG.WIN_BONUS_RATIO) / 50) * 50;
+    }
+    const purse = Math.round(rawPurse / 50) * 50;
+
+    const offer = new FightOffer({
+      id: generateId(),
+      promotionId: promo.id,
+      promotionName: promo.name,
+      tier: promo.tier,
+      fighterId: fighter.id,
+      opponentId: opponent.id,
+      opponentName: opponent.name,
+      opponentRecord: { ...opponent.record },
+      opponentOverall: opponent.overallRating,
+      opponentStyle: opponent.fightingStyle,
+      weightClass: fighter.weightClass,
+      purse,
+      winBonus,
+      eventAbsWeek,
+      expiresAbsWeek: absWeekNow + OFFER_CONFIG.EXPIRY_WEEKS,
+      isReencounter, // Épico F4
+      createdAtAbsWeek: absWeekNow,
+    });
+
+    await this.db.put('offers', offer);
+
+    // Épico F3: notificação de reencontro
+    if (isReencounter) {
+      await this.notifService.add('headline', 'Reencontro!',
+        `${opponent.name} (ex-colega da sua academia) pode cruzar seu caminho! A rivalidade está armada.`);
+    }
+    created.push(offer);
+
+    await this.notifService.add('offer', '📩 Nova Oferta de Luta', `${promo.name} quer você contra ${opponent.name} — bolsa de $${purse.toLocaleString()}.`);
 
     return created;
   }
@@ -231,15 +230,15 @@ export class OfferService {
   }
 
   // Tiers que o lutador já destravou (3 é sempre acessível).
-  _unlockedTiers(fighter, gym) {
+  _unlockedTiers(fighter, academyReputation) {
     const gates = OFFER_CONFIG.TIER_GATES;
     const wins = fighter.record.wins;
 
     const unlocked = [3];
-    if ((fighter.popularity >= gates[2].popularity || wins >= gates[2].wins) && gym.reputation >= gates[2].gymRep) {
+    if ((fighter.popularity >= gates[2].popularity || wins >= gates[2].wins) && academyReputation >= gates[2].gymRep) {
       unlocked.push(2);
     }
-    if ((fighter.popularity >= gates[1].popularity || wins >= gates[1].wins) && gym.reputation >= gates[1].gymRep) {
+    if ((fighter.popularity >= gates[1].popularity || wins >= gates[1].wins) && academyReputation >= gates[1].gymRep) {
       unlocked.push(1);
     }
     return unlocked;
@@ -247,8 +246,8 @@ export class OfferService {
 
   // Tier mais alto que o lutador destrava; com sorte a oferta vem dele,
   // senão desce um degrau (mantém tier 3 sempre acessível).
-  _pickTier(fighter, gym) {
-    const unlocked = this._unlockedTiers(fighter, gym);
+  _pickTier(fighter, academyReputation) {
+    const unlocked = this._unlockedTiers(fighter, academyReputation);
     const best = Math.min(...unlocked);
     if (best < 3 && Math.random() < OFFER_CONFIG.TOP_TIER_CHANCE) return best;
     // desce um tier a partir do melhor (nunca abaixo de 3)
@@ -257,10 +256,10 @@ export class OfferService {
 
   // Chance de cinturão. Prioriza a promoção mais prestigiada. Defender um
   // cinturão nunca depende do gate de tier — você já está lá dentro.
-  async _tryTitleOffer(fighter, gym, promotions, absWeekNow, excludeIds) {
+  async _tryTitleOffer(fighter, academyReputation, promotions, absWeekNow, excludeIds) {
     if (!this.titleService) return null;
 
-    const unlocked = new Set(this._unlockedTiers(fighter, gym));
+    const unlocked = new Set(this._unlockedTiers(fighter, academyReputation));
     const ordered = [...promotions].sort((a, b) => a.tier - b.tier);
 
     for (const promo of ordered) {
@@ -356,10 +355,11 @@ export class OfferService {
   // mesma divisão, para o reencontro. Prefere o de nível mais próximo (duelo
   // competitivo). Retorna null se não houver ninguém elegível.
   async _pickReunionOpponent(fighter, excludeIds, absWeekNow) {
+    if (!fighter.academyId) return null;
     const all = await this.fighterCtrl.getAllFighters();
     const candidates = all.filter(f =>
-      (f.previousGymIds || []).includes(GYM_CONFIG.ID) &&
-      f.gymId !== GYM_CONFIG.ID &&                 // não está mais na sua academia
+      (f.previousAcademyIds || []).includes(fighter.academyId) &&
+      f.academyId !== fighter.academyId &&         // não está mais na sua academia atual
       f.status !== 'retired' && f.status !== 'injured' &&
       f.weightClass === fighter.weightClass &&
       f.id !== fighter.id &&

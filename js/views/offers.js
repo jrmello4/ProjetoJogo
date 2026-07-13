@@ -97,8 +97,8 @@ export class OffersView {
     `;
   }
 
-  static render(pending, accepted, history, team, now, dossiers = {}, contractProposals = []) {
-    const fighterOf = (o) => team.find(f => f.id === o.fighterId);
+  static render(pending, accepted, history, fighter, now, dossiers = {}, contractProposals = []) {
+    const fighterOf = () => fighter;
 
     const tierBadge = (tier) => {
       const cls = tier === 1 ? 'badge-danger' : tier === 2 ? 'badge-warning' : 'badge-info';

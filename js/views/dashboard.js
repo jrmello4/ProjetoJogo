@@ -1,15 +1,15 @@
 import { formatCurrency, getWeightClassShort, getWeightClassName } from '../utils/helpers.js';
-import { TIER_LABELS, TRAINING_FOCUS_META, TITLE_ROLE, absWeekToLabel } from '../config/game-config.js';
+import { TIER_LABELS, TRAINING_FOCUS_META, TITLE_ROLE } from '../config/game-config.js';
 
 const tierBadgeCls = (tier) => (tier === 1 ? 'badge-danger' : tier === 2 ? 'badge-warning' : 'badge-info');
 
 export class DashboardView {
   // ===== Signature: the fight poster =====
-  // Your next booked bout, billed like the real thing. Your gym is always
-  // the red corner. With no fight on the books, the poster stays and the
-  // slot sits empty — which is exactly the feeling we want you to fix.
+  // Your next booked bout, billed like the real thing. You're always the
+  // red corner. With no fight on the books, the poster stays and the slot
+  // sits empty — which is exactly the feeling we want you to fix.
   static _renderPoster(data, weekLabel) {
-    const { gym, pendingOffers, bookings, team, now } = data;
+    const { fighter, pendingOffers, bookings, now } = data;
     const booking = bookings[0];
 
     const arena = `
@@ -20,7 +20,7 @@ export class DashboardView {
     const status = `
       <header class="poster-status">
         <span class="poster-status-week">${weekLabel}</span>
-        <span class="poster-status-gym">${gym.name} · ${gym.facility.name}</span>
+        <span class="poster-status-gym">${fighter.name} · ${getWeightClassShort(fighter.weightClass)}</span>
       </header>`;
 
     const actions = `
@@ -37,20 +37,19 @@ export class DashboardView {
           ${arena}
           <div class="poster-body">
             ${status}
-            <h1 class="visually-hidden">${gym.name} — ${weekLabel}</h1>
-            <span class="poster-gymname">${gym.name}</span>
+            <h1 class="visually-hidden">${fighter.name} — ${weekLabel}</h1>
+            <span class="poster-gymname">${fighter.name}</span>
             <div class="poster-headline">Sem luta<br>marcada</div>
             <p class="poster-sub">
               ${waiting > 0
                 ? `${waiting} oferta${waiting === 1 ? '' : 's'} na mesa esperando resposta`
-                : `${team.length} atleta${team.length === 1 ? '' : 's'} em treino · avance a semana para receber propostas`}
+                : 'avance a semana para receber propostas'}
             </p>
             ${actions}
           </div>
         </section>`;
     }
 
-    const fighter = team.find(f => f.id === booking.fighterId);
     const weeksOut = booking.eventAbsWeek - now;
     const orec = booking.opponentRecord;
 
@@ -58,8 +57,6 @@ export class DashboardView {
       ? 'Esta semana'
       : `Em ${weeksOut} semana${weeksOut === 1 ? '' : 's'}`;
 
-    // Cinturão em jogo: o pôster inteiro muda de tom. É a única coisa que
-    // merece dourado nesta tela.
     const titleStrap = booking.isTitleFight ? `
       <div class="poster-title-strap">
         <span class="poster-belt">🏆</span>
@@ -67,10 +64,9 @@ export class DashboardView {
         <span class="poster-belt">🏆</span>
       </div>` : '';
 
-    // Épico F3: reencontro aparece no pôster independente de ser title fight
     const reencounterStrap = booking.isReencounter ? `
       <div class="poster-title-strap" style="background:linear-gradient(135deg, var(--red), #c0392b)">
-        <span>⚔️ REENCONTRO — ${booking.opponentName} foi da sua academia!</span>
+        <span>⚔️ REENCONTRO — ${booking.opponentName} já treinou na sua academia!</span>
       </div>` : '';
 
     return `
@@ -78,7 +74,7 @@ export class DashboardView {
         ${arena}
         <div class="poster-body">
           ${status}
-          <h1 class="visually-hidden">${gym.name} — ${weekLabel}</h1>
+          <h1 class="visually-hidden">${fighter.name} — ${weekLabel}</h1>
 
           ${titleStrap}
           ${reencounterStrap}
@@ -92,10 +88,8 @@ export class DashboardView {
           <div class="poster-bout">
             <div class="poster-fighter poster-fighter--red">
               <span class="poster-corner">Córner vermelho</span>
-              <div class="poster-name">${this._posterName(fighter ? fighter.name : '—')}</div>
-              <span class="poster-record">
-                ${fighter ? `${fighter.record.wins}-${fighter.record.losses}-${fighter.record.draws} · OVR ${fighter.overallRating}` : ''}
-              </span>
+              <div class="poster-name">${this._posterName(fighter.name)}</div>
+              <span class="poster-record">${fighter.record.wins}-${fighter.record.losses}-${fighter.record.draws} · OVR ${fighter.overallRating}</span>
             </div>
 
             <div class="poster-vs"><span>VS</span></div>
@@ -129,8 +123,6 @@ export class DashboardView {
       </section>`;
   }
 
-  // Fight posters break the name after the first word: given name up top,
-  // surname below, both flush to the corner.
   static _posterName(name) {
     const parts = String(name).trim().split(/\s+/);
     if (parts.length < 2) return parts[0] || '—';
@@ -138,11 +130,11 @@ export class DashboardView {
   }
 
   static render(data, weekLabel) {
-    const { gym, team, teamBelts = {}, teamContenderStatus = {}, pendingOffers, bookings, promotions, pastEvents, milestones, now } = data;
+    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, now } = data;
 
     const tierBadge = (tier) => `<span class="badge ${tierBadgeCls(tier)}">${TIER_LABELS[tier]}</span>`;
 
-    // ===== Ofertas pendentes (a decisão da semana) =====
+    // ===== Ofertas pendentes =====
     let offersHtml = '';
     if (pendingOffers.length > 0) {
       offersHtml = `
@@ -153,29 +145,26 @@ export class DashboardView {
             <button class="btn btn-sm btn-primary" data-nav="offers">Ver todas</button>
           </div>
           <div data-reveal-stagger>
-            ${pendingOffers.slice(0, 3).map(o => {
-              const fighter = team.find(f => f.id === o.fighterId);
-              return `
-                <div class="flex items-center justify-between" style="padding:0.75rem 0;border-bottom:1px solid var(--border)">
-                  <div>
-                    <div class="text-sm font-bold">
-                      ${o.isTitleFight ? '<span class="belt-mark">🏆</span> ' : ''}${fighter ? fighter.name : '—'} vs ${o.opponentName}
-                    </div>
-                    <div class="text-xs text-muted">${o.promotionName} · Semana ${((o.eventAbsWeek - 1) % 52) + 1} · expira em ${o.expiresAbsWeek - now} sem</div>
+            ${pendingOffers.slice(0, 3).map(o => `
+              <div class="flex items-center justify-between" style="padding:0.75rem 0;border-bottom:1px solid var(--border)">
+                <div>
+                  <div class="text-sm font-bold">
+                    ${o.isTitleFight ? '<span class="belt-mark">🏆</span> ' : ''}Você vs ${o.opponentName}
                   </div>
-                  <div class="flex items-center gap-2">
-                    ${tierBadge(o.tier)}
-                    <span class="text-sm font-bold" style="color:var(--success)">${formatCurrency(o.purse)}</span>
-                  </div>
+                  <div class="text-xs text-muted">${o.promotionName} · Semana ${((o.eventAbsWeek - 1) % 52) + 1} · expira em ${o.expiresAbsWeek - now} sem</div>
                 </div>
-              `;
-            }).join('')}
+                <div class="flex items-center gap-2">
+                  ${tierBadge(o.tier)}
+                  <span class="text-sm font-bold" style="color:var(--success)">${formatCurrency(o.purse)}</span>
+                </div>
+              </div>
+            `).join('')}
           </div>
         </div>
       `;
     }
 
-    // ===== Patrocínios: propostas na mesa + contratos com meta =====
+    // ===== Patrocínios =====
     const sponsors = data.sponsors || { active: [], offers: [] };
     let sponsorsHtml = '';
     if (sponsors.offers.length > 0 || sponsors.active.length > 0) {
@@ -193,7 +182,7 @@ export class DashboardView {
       `).join('');
 
       const activeRows = sponsors.active.map(c => {
-        const winsSince = Math.max(0, gym.wins - c.startWins);
+        const winsSince = Math.max(0, fighter.record.wins - c.startWins);
         const weeksLeft = Math.max(0, c.deadlineAbsWeek - now);
         return `
           <div class="flex items-center justify-between" style="padding:0.75rem 0;border-bottom:1px solid var(--border)">
@@ -214,32 +203,29 @@ export class DashboardView {
       sponsorsHtml = `
         <div class="section-label" data-reveal>Patrocínios</div>
         <div class="card mb-4" data-reveal ${sponsors.offers.length > 0 ? 'style="border-top-color:var(--gold)"' : ''}>
-          <div class="card-header">
-            <span class="card-title">💼 Contratos de Marca</span>
-          </div>
+          <div class="card-header"><span class="card-title">💼 Contratos de Marca</span></div>
           ${offerRows}
           ${activeRows}
         </div>
       `;
     }
 
-    // ===== Lutas agendadas =====
+    // ===== Luta agendada =====
     let bookingsHtml = '';
     if (bookings.length > 0) {
       bookingsHtml = `
         <div class="section-label" data-reveal>Camp de Luta</div>
         <div class="card mb-4" data-reveal>
           <div class="card-header">
-            <span class="card-title">🥊 Lutas Confirmadas</span>
+            <span class="card-title">🥊 Luta Confirmada</span>
             <button class="btn btn-sm btn-secondary" data-nav="training">Preparar no Camp</button>
           </div>
           ${bookings.map(b => {
-            const fighter = team.find(f => f.id === b.fighterId);
             const weeksOut = b.eventAbsWeek - now;
             return `
               <div class="flex items-center justify-between" style="padding:0.75rem 0;border-bottom:1px solid var(--border)">
                 <div>
-                  <div class="text-sm font-bold">${fighter ? fighter.name : '—'} vs ${b.opponentName}</div>
+                  <div class="text-sm font-bold">Você vs ${b.opponentName}</div>
                   <div class="text-xs text-muted">${b.promotionName} · bolsa ${formatCurrency(b.purse)} + ${formatCurrency(b.winBonus)} por vitória</div>
                 </div>
                 <span class="badge ${weeksOut <= 1 ? 'badge-danger' : 'badge-warning'}">${weeksOut <= 0 ? 'Esta semana!' : `em ${weeksOut} sem`}</span>
@@ -250,59 +236,44 @@ export class DashboardView {
       `;
     }
 
-    // ===== Equipe =====
-    const teamHtml = `
-      <div class="section-label" data-reveal>Minha Equipe</div>
+    // ===== Seu lutador =====
+    const focusMeta = TRAINING_FOCUS_META[fighter.trainingFocus || 'striking'];
+    const injured = fighter.status === 'injured';
+    const fighterHtml = `
+      <div class="section-label" data-reveal>Seu Lutador</div>
       <div class="bento-grid mb-4" data-reveal-stagger>
-        ${team.map(f => {
-          const booking = bookings.find(b => b.fighterId === f.id);
-          const injured = f.status === 'injured';
-          const focusMeta = TRAINING_FOCUS_META[f.trainingFocus || 'striking'];
-          const belts = teamBelts[f.id] || [];
-          return `
-            <div class="card stat-card stat-card--span-4 ${belts.length > 0 ? 'stat-card--champion' : ''}" data-fighter-click="${f.id}" style="cursor:pointer">
-              <div class="card-header">
-                <span class="card-title">${belts.length > 0 ? '<span class="belt-mark">🏆</span> ' : ''}${f.name}</span>
-                <span class="badge badge-info">${getWeightClassShort(f.weightClass)}</span>
-              </div>
-              ${belts.map(b => `<div class="belt-line">Campeão ${getWeightClassName(b.weightClass)} · ${b.promotionShort}${b.defenses > 0 ? ` · ${b.defenses} defesa${b.defenses === 1 ? '' : 's'}` : ''}</div>`).join('')}
-              ${belts.length === 0 && teamContenderStatus[f.id] ? `<div class="contender-line">#${teamContenderStatus[f.id].rank} na fila do cinturão · ${teamContenderStatus[f.id].promotionShort}</div>` : ''}
-              <div class="flex items-center gap-3 mb-2">
-                <span class="stat-value" style="font-size:1.6rem">${f.overallRating}</span>
-                <div>
-                  <div class="text-sm font-bold">${f.record.wins}-${f.record.losses}-${f.record.draws}</div>
-                  <div class="text-xs text-muted">${f.age} anos · ${f.fightingStyle}</div>
-                </div>
-              </div>
-              ${injured ? `<div class="text-xs" style="color:var(--accent)">🏥 ${f.injury?.description || 'Lesionado'}</div>` : booking
-                ? `<div class="text-xs" style="color:var(--gold,#d4a843)">🥊 Luta em ${Math.max(0, booking.eventAbsWeek - now)} sem vs ${booking.opponentName}</div>`
-                : f.availableFromAbsWeek > now
-                  ? `<div class="text-xs" style="color:var(--warning)">⏳ Suspensão médica · ${f.availableFromAbsWeek - now} sem</div>`
-                  : '<div class="text-xs text-muted">Sem luta marcada</div>'}
-              <div class="flex items-center gap-2 mt-2">
-                <span class="text-xs text-muted">Fadiga</span>
-                <div class="progress-bar" style="width:50px;height:5px">
-                  <div class="progress-fill ${f.fatigue >= 60 ? 'low' : f.fatigue >= 30 ? 'medium' : 'high'}" style="width:${f.fatigue}%"></div>
-                </div>
-                <span class="text-xs text-muted">Moral</span>
-                <div class="progress-bar" style="width:50px;height:5px">
-                  <div class="progress-fill ${f.morale >= 70 ? 'high' : f.morale >= 40 ? 'medium' : 'low'}" style="width:${f.morale}%"></div>
-                </div>
-              </div>
-              <div class="text-xs mt-2" style="color:var(--text-secondary)">Treino da semana: <strong>${focusMeta.icon} ${focusMeta.label}</strong></div>
-            </div>
-          `;
-        }).join('')}
-        ${team.length < gym.maxTeamSize ? `
-          <div class="card stat-card stat-card--span-4" data-nav="market" style="cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:120px;border-style:dashed">
-            <div class="text-center">
-              <div style="font-size:1.5rem">➕</div>
-              <div class="text-sm text-muted">Recrutar lutador (${team.length}/${gym.maxTeamSize})</div>
+        <div class="card stat-card stat-card--span-4 ${belts.length > 0 ? 'stat-card--champion' : ''}" data-fighter-click="${fighter.id}" style="cursor:pointer">
+          <div class="card-header">
+            <span class="card-title">${belts.length > 0 ? '<span class="belt-mark">🏆</span> ' : ''}${fighter.name}</span>
+            <span class="badge badge-info">${getWeightClassShort(fighter.weightClass)}</span>
+          </div>
+          ${belts.map(b => `<div class="belt-line">Campeão ${getWeightClassName(b.weightClass)} · ${b.promotionShort}${b.defenses > 0 ? ` · ${b.defenses} defesa${b.defenses === 1 ? '' : 's'}` : ''}</div>`).join('')}
+          ${belts.length === 0 && contenderStatus ? `<div class="contender-line">#${contenderStatus.rank} na fila do cinturão · ${contenderStatus.promotionShort}</div>` : ''}
+          <div class="flex items-center gap-3 mb-2">
+            <span class="stat-value" style="font-size:1.6rem">${fighter.overallRating}</span>
+            <div>
+              <div class="text-sm font-bold">${fighter.record.wins}-${fighter.record.losses}-${fighter.record.draws}</div>
+              <div class="text-xs text-muted">${fighter.age} anos · ${fighter.fightingStyle}</div>
             </div>
           </div>
-        ` : ''}
+          ${injured ? `<div class="text-xs" style="color:var(--accent)">🏥 ${fighter.injury?.description || 'Lesionado'}</div>` : bookings[0]
+            ? `<div class="text-xs" style="color:var(--gold,#d4a843)">🥊 Luta em ${Math.max(0, bookings[0].eventAbsWeek - now)} sem vs ${bookings[0].opponentName}</div>`
+            : fighter.availableFromAbsWeek > now
+              ? `<div class="text-xs" style="color:var(--warning)">⏳ Suspensão médica · ${fighter.availableFromAbsWeek - now} sem</div>`
+              : '<div class="text-xs text-muted">Sem luta marcada</div>'}
+          <div class="flex items-center gap-2 mt-2">
+            <span class="text-xs text-muted">Fadiga</span>
+            <div class="progress-bar" style="width:50px;height:5px">
+              <div class="progress-fill ${fighter.fatigue >= 60 ? 'low' : fighter.fatigue >= 30 ? 'medium' : 'high'}" style="width:${fighter.fatigue}%"></div>
+            </div>
+            <span class="text-xs text-muted">Moral</span>
+            <div class="progress-bar" style="width:50px;height:5px">
+              <div class="progress-fill ${fighter.morale >= 70 ? 'high' : fighter.morale >= 40 ? 'medium' : 'low'}" style="width:${fighter.morale}%"></div>
+            </div>
+          </div>
+          <div class="text-xs mt-2" style="color:var(--text-secondary)">Treino da semana: <strong>${focusMeta.icon} ${focusMeta.label}</strong></div>
+        </div>
       </div>
-      <div class="text-xs text-muted mb-4">Ajuste o foco de treino de cada atleta em <strong>Minha Equipe</strong>.</div>
     `;
 
     // ===== Calendário do mundo =====
@@ -322,7 +293,7 @@ export class DashboardView {
                 <div class="flex items-center gap-2">
                   ${tierBadge(p.tier)}
                   <span class="text-sm font-bold">${p.nextEventName()}</span>
-                  ${hasBooking ? '<span class="badge badge-success" style="font-size:0.6rem">SEU ATLETA NO CARD</span>' : ''}
+                  ${hasBooking ? '<span class="badge badge-success" style="font-size:0.6rem">VOCÊ NO CARD</span>' : ''}
                 </div>
                 <span class="text-xs text-muted">${weeksOut <= 0 ? 'esta semana' : `em ${weeksOut} sem`}</span>
               </div>
@@ -332,67 +303,7 @@ export class DashboardView {
       </div>
     `;
 
-    // ===== Ranking de Academias — a rivalidade que dá gás pra competir =====
-    const standingsHtml = data.gymStandings ? `
-      <div class="section-label" data-reveal>Rivalidade</div>
-      <div class="card mb-4" data-reveal>
-        <div class="card-header"><span class="card-title">Ranking de Academias</span></div>
-        <div data-reveal-stagger>
-          ${data.gymStandings.map((s, i) => `
-            <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-bold" style="color:${i === 0 ? 'var(--gold)' : 'var(--text-muted)'}">#${i + 1}</span>
-                <span class="text-sm ${s.isPlayer ? 'font-bold' : ''}">${s.name}</span>
-                ${s.isPlayer ? '<span class="badge badge-info" style="font-size:0.6rem">VOCÊ</span>' : ''}
-              </div>
-              <span class="text-xs text-muted">${s.reputation} rep</span>
-            </div>
-          `).join('')}
-        </div>
-        <div class="text-xs text-muted mt-2">Academias rivais disputam os mesmos agentes livres e podem seduzir atletas com moral baixa. Mantenha o time motivado.</div>
-      </div>
-    ` : '';
-
-    // ===== Metas iniciais (novos treinadores) =====
-    let goalsHtml = '';
-    if (localStorage.getItem('gymTutorialDone') && !localStorage.getItem('gymGoalsDone')) {
-      const teamWins = team.reduce((s, f) => s + (f.record?.wins || 0), 0);
-      const teamFights = team.reduce((s, f) => s + (f.fights?.length || 0), 0);
-      const anyTitle = team.some(f => (f.titlesWon || 0) > 0);
-      const highestTier = Math.min(...team.map(f => f.promotionContract?.tier || 99));
-      const hasFought = teamFights > 0;
-      const hasWon = teamWins > 0;
-
-      const goals = [
-        { done: true, label: 'Nomear sua academia' },
-        { done: true, label: 'Recrutar equipe inicial' },
-        { done: hasFought, label: 'Disputar sua primeira luta', hint: hasFought ? '' : 'Aceite uma oferta na aba Ofertas' },
-        { done: hasWon, label: 'Vencer sua primeira luta', hint: hasWon ? '' : 'Configure o camp e escolha o plano de jogo certo' },
-        { done: highestTier <= 2, label: 'Subir para o Tier 2', hint: highestTier <= 2 ? '' : 'Mais vitórias atraem promoções melhores' },
-        { done: anyTitle, label: 'Disputar um cinturão', hint: anyTitle ? '' : 'Chegue ao topo do ranking da sua divisão' },
-      ];
-      const allDone = goals.every(g => g.done);
-      if (allDone) localStorage.setItem('gymGoalsDone', '1');
-
-      goalsHtml = `
-        <div class="section-label" data-reveal>🎯 Próximos Passos</div>
-        <div class="card mb-4" data-reveal style="border-top-color:var(--accent)">
-          <div class="card-header"><span class="card-title">${allDone ? '🏁 Missão Completa!' : '🚀 Sua Jornada Começa'}</span></div>
-          ${goals.map(g => `
-            <div class="flex items-center justify-between" style="padding:0.6rem 0;border-bottom:1px solid var(--border)">
-              <div>
-                <span style="${g.done ? 'opacity:0.5;text-decoration:line-through' : 'font-weight:600'}">
-                  ${g.done ? '✅' : '☐'} ${g.label}
-                </span>
-                ${g.hint ? `<div class="text-xs text-muted" style="margin-top:0.15rem">💡 ${g.hint}</div>` : ''}
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      `;
-    }
-
-    // ===== Objetivos (milestones do sistema) =====
+    // ===== Objetivos (milestones) =====
     const pendingMilestones = (milestones || []).filter(m => !m.unlocked).slice(0, 3);
     const milestonesHtml = pendingMilestones.length > 0 ? `
       <div class="section-label" data-reveal>Objetivos</div>
@@ -442,26 +353,26 @@ export class DashboardView {
       <div class="bento-grid mb-4" data-reveal-stagger>
         <div class="stat-card stat-card--span-3">
           <div class="card-header"><span class="card-title">Caixa</span></div>
-          <div class="stat-value ${gym.cash < 0 ? 'text-danger' : ''}">${formatCurrency(gym.cash)}</div>
+          <div class="stat-value ${fighter.cash < 0 ? 'text-danger' : ''}">${formatCurrency(fighter.cash)}</div>
           <div class="stat-label">Disponível</div>
         </div>
         <div class="stat-card stat-card--span-3">
-          <div class="card-header"><span class="card-title">Reputação</span></div>
-          <div class="stat-value">${gym.reputation}</div>
+          <div class="card-header"><span class="card-title">Popularidade</span></div>
+          <div class="stat-value">${fighter.popularity}</div>
           <div class="stat-label">
             <div class="progress-bar mt-2">
-              <div class="progress-fill ${gym.reputation >= 70 ? 'high' : gym.reputation >= 40 ? 'medium' : 'low'}" style="width:${gym.reputation}%"></div>
+              <div class="progress-fill ${fighter.popularity >= 70 ? 'high' : fighter.popularity >= 40 ? 'medium' : 'low'}" style="width:${fighter.popularity}%"></div>
             </div>
           </div>
         </div>
         <div class="stat-card stat-card--span-3">
-          <div class="card-header"><span class="card-title">Cartel da Equipe</span></div>
-          <div class="stat-value">${gym.wins}-${gym.losses}</div>
+          <div class="card-header"><span class="card-title">Cartel</span></div>
+          <div class="stat-value">${fighter.record.wins}-${fighter.record.losses}</div>
           <div class="stat-label">Vitórias-Derrotas</div>
         </div>
         <div class="stat-card stat-card--span-3">
-          <div class="card-header"><span class="card-title">Comissões</span></div>
-          <div class="stat-value" style="font-size:1.4rem">${formatCurrency(gym.totalPurseEarnings)}</div>
+          <div class="card-header"><span class="card-title">Ganhos na Carreira</span></div>
+          <div class="stat-value" style="font-size:1.4rem">${formatCurrency(fighter.careerEarnings || 0)}</div>
           <div class="stat-label">Total em bolsas</div>
         </div>
       </div>
@@ -469,24 +380,22 @@ export class DashboardView {
       ${offersHtml}
       ${sponsorsHtml}
       ${bookingsHtml}
-      ${teamHtml}
+      ${fighterHtml}
 
-      <!-- Academia — link rápido para estrutura/treinadores/olheiro -->
+      <!-- Academia e empresário — links rápidos -->
       <div class="card mb-4" data-reveal>
         <div class="card-header">
-          <span class="card-title">🏋️ ${gym.facility.name} · Nível ${gym.level}</span>
-          <button class="btn btn-sm btn-secondary" data-nav="academy">Gerenciar Academia</button>
+          <span class="card-title">🏋️ ${academy?.name || 'Sem academia'}</span>
+          <button class="btn btn-sm btn-secondary" data-nav="academy">Trocar Academia</button>
         </div>
         <div class="flex items-center gap-2" style="flex-wrap:wrap">
-          <span class="badge badge-info">${gym.hiredCoachCount}/${gym.facility.coachSlots} treinadores</span>
-          <span class="badge ${gym.scoutLevel > 0 ? 'badge-success' : 'badge-warning'}">${gym.scoutLevel > 0 ? 'Olheiro ativo' : 'Sem olheiro'}</span>
-          <span class="text-xs text-muted">+${Math.round(gym.facility.trainingBonus * 100)}% de ganho no treino</span>
+          <span class="badge badge-info">Sinergia ${fighter.coachSynergy}%</span>
+          <span class="badge ${manager ? 'badge-success' : 'badge-warning'}">${manager ? manager.name : 'Sem empresário'}</span>
+          <span class="text-xs text-muted">+${Math.round((academy?.facility?.trainingBonus || 0) * 100)}% de ganho no treino</span>
         </div>
       </div>
 
       ${worldHtml}
-      ${standingsHtml}
-      ${goalsHtml}
       ${milestonesHtml}
       ${resultsHtml}
     `;

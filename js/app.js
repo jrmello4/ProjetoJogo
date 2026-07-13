@@ -1,7 +1,5 @@
 import { LayoutView } from './views/layout.js';
 import { DashboardView } from './views/dashboard.js';
-import { RosterView } from './views/roster.js';
-import { MarketView } from './views/market.js';
 import { EventsView } from './views/events.js';
 import { LiveFightHubView } from './views/live-fight-hub.js';
 import { OffersView } from './views/offers.js';
@@ -26,7 +24,7 @@ import { SaveService } from './services/save-service.js';
 import { ThreeArena } from './three-arena.js';
 import { ThreeBackground } from './three-background.js';
 import { motion } from './motion/motion-engine.js';
-import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, absWeekToLabel, GYM_CONFIG } from './config/game-config.js';
+import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, ARCHETYPES, ORIGINS, absWeekToLabel } from './config/game-config.js';
 import { getWeightClassName, formatCurrency, getAdjacentWeightClasses } from './utils/helpers.js';
 import { CAMP_CONFIG, HYPE_PURSE_RATIO, absWeek } from './config/game-config.js';
 
@@ -39,8 +37,6 @@ class App {
   constructor() {
     this.game = new GameController();
     this.currentView = 'dashboard';
-    this.marketFilter = '';
-    this.marketSearch = '';
     this.previousView = 'dashboard';
     this.rivalryService = null;
     this.seasonService = new SeasonService(this.game.db);
@@ -53,8 +49,9 @@ class App {
   async init() {
     try { motion.init(); } catch(e) { console.warn('Motion init failed:', e); }
     LayoutView.initNavigation();
+    let playerFighter;
     try {
-      await this.game.init();
+      playerFighter = await this.game.init();
     } catch (err) {
       console.error('Failed to init game:', err);
       document.getElementById('mainContent').innerHTML = `
@@ -77,7 +74,6 @@ class App {
       this.navigateTo(e.detail.view);
     });
 
-    // Delegação global para botões de navegação renderizados nas views
     document.addEventListener('click', (e) => {
       const navEl = e.target.closest('[data-nav]');
       if (navEl) {
@@ -85,128 +81,171 @@ class App {
       }
     });
 
-    this.navigateTo('dashboard');
-    this._maybeShowOnboarding();
-  }
-
-  // ===== Onboarding: nome da academia + dificuldade + equipe inicial =====
-  async _maybeShowOnboarding() {
-    if (localStorage.getItem('gymOnboardingDone')) return;
-    const gym = await this.game.getGym();
-    if (gym.wins + gym.losses > 0) {
-      localStorage.setItem('gymOnboardingDone', '1');
+    if (!playerFighter) {
+      this._showCharacterCreation();
       return;
     }
 
-    const team = await this.game.getTeam();
+    this.navigateTo('dashboard');
+  }
+
+  // ===== Criação de personagem (§A.7) =====
+  async _showCharacterCreation() {
+    const academies = await this.game.getAcademies();
 
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
-    modal.id = 'onboardingModal';
+    modal.id = 'characterCreationModal';
     modal.innerHTML = `
-      <div class="modal" style="max-width:620px">
+      <div class="modal" style="max-width:640px">
         <div class="modal-header">
-          <h3>Bem-vindo à sua Academia</h3>
+          <h3>Crie seu Lutador</h3>
         </div>
         <p class="text-sm" style="color:var(--text-secondary)">
-          Você é o treinador e dono de uma academia de MMA. Desenvolva seus atletas,
-          aceite as lutas certas e leve sua equipe do circuito regional à elite mundial:
+          Você não gerencia uma academia — você É o lutador. Do primeiro contrato à aposentadoria,
+          toda decisão de carreira é sua.
         </p>
-        <div class="onboarding-steps">
-          <div class="onboarding-step"><div class="onboarding-step-icon">🥋</div><div class="onboarding-step-label">Treine sua equipe</div></div>
-          <div class="onboarding-step"><div class="onboarding-step-icon">📩</div><div class="onboarding-step-label">Aceite ofertas de luta</div></div>
-          <div class="onboarding-step"><div class="onboarding-step-icon">🥊</div><div class="onboarding-step-label">Vença nos eventos</div></div>
-          <div class="onboarding-step"><div class="onboarding-step-icon">🏆</div><div class="onboarding-step-label">Chegue à elite mundial</div></div>
+
+        <div class="form-group">
+          <label class="form-label">Nome</label>
+          <input type="text" class="form-input" id="charName" maxlength="30" placeholder="Seu nome de lutador">
         </div>
 
         <div class="form-group">
-          <label class="form-label">Sua equipe inicial</label>
-          <div class="grid grid-cols-3 gap-2">
-            ${team.map(f => `
-              <div class="card" style="padding:0.6rem">
-                <div class="text-sm font-bold">${f.name}</div>
-                <div class="text-xs text-muted">${getWeightClassName(f.weightClass)} · ${f.age} anos</div>
-                <div class="text-xs">OVR ${f.overallRating} · ${f.record.wins}-${f.record.losses}</div>
+          <label class="form-label">Categoria de Peso</label>
+          <select class="form-select" id="charWeightClass">
+            <option value="Flyweight">Peso Mosca</option>
+            <option value="Bantamweight">Peso Galo</option>
+            <option value="Featherweight">Peso Pena</option>
+            <option value="Lightweight" selected>Peso Leve</option>
+            <option value="Welterweight">Peso Meio-Médio</option>
+            <option value="Middleweight">Peso Médio</option>
+            <option value="Light Heavyweight">Meio-Pesado</option>
+            <option value="Heavyweight">Peso Pesado</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Arquétipo Inicial</label>
+          <div class="difficulty-grid">
+            ${Object.entries(ARCHETYPES).map(([key, a]) => `
+              <div class="difficulty-option ${key === 'generalist' ? 'selected' : ''}" data-archetype="${key}">
+                <div class="difficulty-name">${a.label}</div>
               </div>
             `).join('')}
           </div>
         </div>
 
         <div class="form-group">
-          <label class="form-label">Nome da sua academia</label>
-          <input type="text" class="form-input" id="onboardingGymName" maxlength="40" value="" placeholder="Ex: Alpha Team BR">
+          <label class="form-label">Origem Esportiva</label>
+          <div class="difficulty-grid" style="grid-template-columns:repeat(3,1fr)">
+            ${Object.entries(ORIGINS).map(([key, o], i) => `
+              <div class="difficulty-option ${i === 0 ? 'selected' : ''}" data-origin="${key}">
+                <div class="difficulty-name">${o.label}</div>
+              </div>
+            `).join('')}
+          </div>
         </div>
 
         <div class="form-group">
-          <label class="form-label">Dificuldade</label>
+          <label class="form-label">Reserva Financeira</label>
           <div class="difficulty-grid">
             ${DIFFICULTIES.map(d => `
-              <div class="difficulty-option ${d.id === 'normal' ? 'selected' : ''}" data-difficulty="${d.id}" data-cash="${d.cash}">
+              <div class="difficulty-option ${d.id === 'normal' ? 'selected' : ''}" data-difficulty="${d.id}">
                 <div class="difficulty-name">${d.name}</div>
-                <div class="difficulty-cash">$${(d.cash / 1000).toFixed(0)}k iniciais</div>
+                <div class="difficulty-cash">${formatCurrency(d.cash)}</div>
                 <div class="text-xs text-muted mt-2">${d.desc}</div>
               </div>
             `).join('')}
           </div>
         </div>
 
+        <div class="form-group">
+          <label class="form-label">Primeira Academia</label>
+          <div class="difficulty-grid">
+            ${academies.map((a, i) => `
+              <div class="difficulty-option ${i === 0 ? 'selected' : ''}" data-academy="${a.id}">
+                <div class="difficulty-name">${a.name}</div>
+                <div class="text-xs text-muted mt-2">${a.philosophy} · ${formatCurrency(a.weeklyFee)}/sem</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
         <div class="modal-actions">
-          <button class="btn btn-primary w-full" id="onboardingStartBtn">Abrir a academia</button>
+          <button class="btn btn-primary w-full" id="characterCreationStartBtn">Começar carreira</button>
         </div>
       </div>
     `;
     document.body.appendChild(modal);
 
-    modal.querySelectorAll('.difficulty-option').forEach(opt => {
+    modal.querySelectorAll('[data-archetype]').forEach(opt => {
       opt.addEventListener('click', () => {
-        modal.querySelectorAll('.difficulty-option').forEach(o => o.classList.remove('selected'));
+        modal.querySelectorAll('[data-archetype]').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
+      });
+    });
+    modal.querySelectorAll('[data-origin]').forEach(opt => {
+      opt.addEventListener('click', () => {
+        modal.querySelectorAll('[data-origin]').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
+      });
+    });
+    modal.querySelectorAll('[data-difficulty]').forEach(opt => {
+      opt.addEventListener('click', () => {
+        modal.querySelectorAll('[data-difficulty]').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
+      });
+    });
+    modal.querySelectorAll('[data-academy]').forEach(opt => {
+      opt.addEventListener('click', () => {
+        modal.querySelectorAll('[data-academy]').forEach(o => o.classList.remove('selected'));
         opt.classList.add('selected');
       });
     });
 
-    modal.querySelector('#onboardingStartBtn').addEventListener('click', async () => {
-      const name = modal.querySelector('#onboardingGymName').value.trim() || 'Alpha Team BR';
-      const selected = modal.querySelector('.difficulty-option.selected');
-      const cash = parseInt(selected?.dataset.cash) || 35000;
+    modal.querySelector('#characterCreationStartBtn').addEventListener('click', async () => {
+      const name = modal.querySelector('#charName').value.trim() || 'Lutador Anônimo';
+      const weightClass = modal.querySelector('#charWeightClass').value;
+      const archetype = modal.querySelector('[data-archetype].selected')?.dataset.archetype || 'generalist';
+      const origin = modal.querySelector('[data-origin].selected')?.dataset.origin || null;
+      const difficultyId = modal.querySelector('[data-difficulty].selected')?.dataset.difficulty || 'normal';
+      const academyId = modal.querySelector('[data-academy].selected')?.dataset.academy || academies[0]?.id;
 
-      const freshGym = await this.game.getGym();
-      freshGym.name = name;
-      freshGym.cash = cash;
-      await this.game.updateGym(freshGym);
+      await this.game.createPlayerFighter({ name, weightClass, archetype, origin, difficultyId, academyId });
 
-      localStorage.setItem('gymOnboardingDone', '1');
+      localStorage.setItem('characterCreationDone', '1');
       modal.remove();
-      this.notificationService.add('success', 'Academia Aberta', `${name} está de portas abertas. Confira as ofertas de luta na mesa, treinador!`);
-      this.renderDashboard();
-      // Tutorial guiado para novos treinadores
+      this.notificationService.add('success', 'Carreira Iniciada', `${name} deu o primeiro passo rumo à elite mundial.`);
+      this.navigateTo('dashboard');
       setTimeout(() => this._showTutorial(), 600);
     });
   }
 
   // ===== Tutorial guiado para novos jogadores =====
   _showTutorial() {
-    if (localStorage.getItem('gymTutorialDone')) return;
+    if (localStorage.getItem('tutorialDone')) return;
 
     const steps = [
       {
         emoji: '📊',
         title: 'Dashboard',
-        text: 'Aqui você vê o resumo da sua academia: próximas lutas, resultados recentes, finanças e notificações. Fique de olho nas ofertas!',
+        text: 'Aqui você vê o resumo da sua carreira: próxima luta, finanças e notificações. Fique de olho nas ofertas!',
       },
       {
         emoji: '📩',
         title: 'Ofertas de Luta',
-        text: 'No menu "Ofertas" você recebe propostas de luta das promoções. Aceite as certas para subir de tier e disputar cinturões.',
+        text: 'No menu "Ofertas" você recebe propostas das promoções. Aceite as certas para subir de tier e disputar cinturões.',
       },
       {
         emoji: '🏋️',
         title: 'Acampamento',
-        text: 'Antes de cada luta, configure o acampamento no perfil do lutador. Escolha a intensidade e o foco — isso define o desempenho no octógono.',
+        text: 'Antes de cada luta, configure o acampamento. Escolha a intensidade e o foco — isso define seu desempenho no octógono.',
       },
       {
         emoji: '⏩',
         title: 'Avançar Semana',
-        text: 'Use o botão "Avançar Semana" para progredir. Cada semana traz treinos, ofertas, eventos e notícias do mundo do MMA.',
+        text: 'Use o botão "Avançar Semana" para progredir. Cada semana traz treino, ofertas, eventos e notícias do mundo do MMA.',
       },
     ];
 
@@ -243,7 +282,6 @@ class App {
     overlay.innerHTML = renderStep(0);
     document.body.appendChild(overlay);
 
-    // Avançar passo
     overlay.addEventListener('click', (e) => {
       const nextBtn = e.target.closest('.tutorial-next');
       const skipBtn = e.target.closest('.tutorial-skip');
@@ -253,7 +291,7 @@ class App {
         currentStep++;
         overlay.innerHTML = renderStep(currentStep);
       } else if (skipBtn || finishBtn) {
-        localStorage.setItem('gymTutorialDone', '1');
+        localStorage.setItem('tutorialDone', '1');
         overlay.remove();
       }
     });
@@ -266,12 +304,6 @@ class App {
     switch (view) {
       case 'dashboard':
         await this.renderDashboard();
-        break;
-      case 'roster':
-        await this.renderRoster();
-        break;
-      case 'market':
-        await this.renderMarket();
         break;
       case 'offers':
         await this.renderOffers();
@@ -324,7 +356,6 @@ class App {
     document.getElementById('saveLoadBtn')?.addEventListener('click', () => this.handleSaveLoad());
     document.getElementById('simulatePeriodBtn')?.addEventListener('click', () => this.openSimulatePeriod());
 
-    // Patrocínios: fechar/recusar direto do dashboard
     document.querySelectorAll('[data-sponsor-accept]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const result = await this.game.acceptSponsorOffer(btn.dataset.sponsorAccept);
@@ -368,8 +399,6 @@ class App {
     const btn = document.getElementById('weekAdvanceBtn');
     if (btn) btn.disabled = true;
 
-    // Instruções de córner ao vivo: só existem para a(s) luta(s) do
-    // jogador nesta semana; o WorldService chama isso entre rounds.
     const cornerHooks = {
       onFightStart: async ({ fighter, opponent, promo }) => {
         const html = EventsView.renderCornerFightIntro(fighter, opponent, promo.name);
@@ -398,7 +427,6 @@ class App {
     const summary = await this.game.processWeek(cornerHooks);
     const { world, offersCreated, economy, milestonesUnlocked, now } = summary;
 
-    // Rivalidades e narrativa pós-luta dos atletas do jogador
     for (const evt of world.playerEvents) {
       for (const result of evt.playerResults) {
         const fighterA = await this.game.fighterCtrl.getFighter(result.fighterAId);
@@ -409,7 +437,6 @@ class App {
       }
     }
 
-    // Conquistas desbloqueadas
     for (const id of milestonesUnlocked) {
       await this.notificationService.add('achievement', 'Conquista Desbloqueada!', MILESTONE_LABELS[id] || id);
     }
@@ -417,10 +444,9 @@ class App {
     await this.notificationService.add(
       'week-advance',
       'Semana Iniciada',
-      `${absWeekToLabel(now)}. Fluxo da academia: ${economy.net >= 0 ? '+' : ''}$${economy.net.toLocaleString()}${offersCreated.length > 0 ? ` · ${offersCreated.length} nova${offersCreated.length === 1 ? '' : 's'} oferta${offersCreated.length === 1 ? '' : 's'} de luta` : ''}.`
+      `${absWeekToLabel(now)}. Fluxo pessoal: ${economy.net >= 0 ? '+' : ''}$${economy.net.toLocaleString()}${offersCreated.length > 0 ? ` · ${offersCreated.length} nova${offersCreated.length === 1 ? '' : 's'} oferta${offersCreated.length === 1 ? '' : 's'} de luta` : ''}.`
     );
 
-    // Se um atleta da academia lutou, mostra o Live Fight Hub
     const featured = world.playerEvents[0];
     if (featured) {
       const playerResult = featured.playerResults?.[0];
@@ -431,12 +457,10 @@ class App {
           const html = LiveFightHubView.render(fA, fB, playerResult);
           await LayoutView.render(html);
           this._playLiveHub(featured.results, featured.playerFighterIds, fA, fB);
-          // Sem este bind o botão do resumo é um beco sem saída — o jogador
-          // termina a luta e fica preso na tela do hub.
           document.getElementById('hubBackBtn')?.addEventListener('click', () => this.renderDashboard());
           document.getElementById('shareFightBtn')?.addEventListener('click', () => {
             const fText = `${playerResult._won ? '🏆' : '😔'} ${fA.name} ${playerResult._won ? 'venceu' : 'perdeu'} por ${playerResult.method} no R${playerResult.round}!`;
-            const shareText = `${fText}\n💰 Bolsa: $${(playerResult._purse || 0).toLocaleString()} | Comissão: $${(playerResult._gymCut || 0).toLocaleString()}\n📊 Recorde: ${fA.record.wins}-${fA.record.losses}-${fA.record.draws}${SHARE_URL ? `\n\nJogue MMA Manager: ${SHARE_URL}` : ''}`;
+            const shareText = `${fText}\n💰 Bolsa: $${(playerResult._purse || 0).toLocaleString()} | Líquido: $${(playerResult._netPurse || 0).toLocaleString()}\n📊 Recorde: ${fA.record.wins}-${fA.record.losses}-${fA.record.draws}${SHARE_URL ? `\n\nJogue MMA Manager: ${SHARE_URL}` : ''}`;
             if (navigator.share) {
               navigator.share({ title: 'MMA Manager', text: shareText });
             } else {
@@ -448,7 +472,6 @@ class App {
           return;
         }
       }
-      // fallback: broadcast completo
       const html = EventsView.renderLiveSimulation(featured.event, featured.results, featured.playerFighterIds);
       await LayoutView.render(html);
       this._playLiveBroadcast();
@@ -461,7 +484,7 @@ class App {
     this.renderDashboard();
   }
 
-  // ===== Simular Período (fast-forward de semanas/meses/anos) =====
+  // ===== Simular Período =====
   async openSimulatePeriod() {
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
@@ -474,13 +497,13 @@ class App {
         </div>
         <p class="text-sm" style="color:var(--text-secondary)">
           Avance várias semanas de uma vez, sem instruções de córner. Ofertas de luta compatíveis são
-          <strong>aceitas automaticamente</strong> — a academia não fica parada enquanto você está fora.
+          <strong>aceitas automaticamente</strong>.
         </p>
 
         <div class="form-group">
-          <label class="form-label">Foco de Treino da Equipe no Período</label>
+          <label class="form-label">Foco de Treino no Período</label>
           <div class="flex gap-2" style="flex-wrap:wrap">
-            <button class="btn btn-sm btn-primary sim-focus-option" data-focus="">Manter escolhas individuais</button>
+            <button class="btn btn-sm btn-primary sim-focus-option" data-focus="">Manter escolha atual</button>
             ${Object.entries(TRAINING_FOCUS_META).map(([key, meta]) => `
               <button class="btn btn-sm btn-secondary sim-focus-option" data-focus="${key}">${meta.icon} ${meta.label}</button>
             `).join('')}
@@ -528,7 +551,7 @@ class App {
     await LayoutView.render(`
       <div class="page-header">
         <h2>Simulando...</h2>
-        <p>Avançando ${weeks} semanas na sua academia</p>
+        <p>Avançando ${weeks} semanas na sua carreira</p>
       </div>
       <div class="empty-state"><p>O tempo está passando — isso pode levar alguns segundos.</p></div>
     `, false);
@@ -547,19 +570,17 @@ class App {
     const pending = await this.game.offerService.getPending();
     const accepted = await this.game.offerService.getAccepted();
     const history = await this.game.offerService.getHistory();
-    const team = await this.game.getTeam();
+    const fighter = await this.game.getPlayerFighter();
 
-    // Dossiê de cada adversário já contratado — o que você sabe (ou não).
     const dossiers = {};
     for (const o of accepted) {
       const d = await this.game.opponentDossier(o);
       if (d) dossiers[o.id] = d;
     }
 
-    // Épico B: carregar propostas de contrato pendentes
-    const contractProposals = await this._loadContractProposals(team);
+    const contractProposals = await this._loadContractProposals(fighter);
 
-    const html = OffersView.render(pending, accepted, history, team, now, dossiers, contractProposals);
+    const html = OffersView.render(pending, accepted, history, fighter, now, dossiers, contractProposals);
     await LayoutView.render(html);
 
     document.querySelectorAll('.study-opponent').forEach(btn => {
@@ -602,10 +623,7 @@ class App {
 
     document.querySelectorAll('.negotiate-option').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const offer = pending.find(o => o.id === btn.dataset.id);
-        const fighter = team.find(f => f.id === offer?.fighterId);
-        const gym = await this.game.getGym();
-        const result = await this.game.offerService.negotiate(btn.dataset.id, parseInt(btn.dataset.bump), fighter, gym);
+        const result = await this.game.negotiateOffer(btn.dataset.id, parseInt(btn.dataset.bump));
 
         if (!result.ok) {
           this.notificationService.add('warning', 'Negociação Falhou', result.reason);
@@ -622,14 +640,13 @@ class App {
       });
     });
 
-    // Épico B: aceitar/recusar proposta de contrato
     document.querySelectorAll('.contract-accept').forEach(btn => {
       btn.addEventListener('click', async () => {
         const fighterId = btn.dataset.fighter;
         const promoId = btn.dataset.promo;
         const result = await this.game.contractService.accept(fighterId, promoId, now);
         if (result) {
-          this.notificationService.add('success', 'Contrato Assinado!', `${result.name} agora é exclusivo da promoção.`);
+          this.notificationService.add('success', 'Contrato Assinado!', `Você agora é exclusivo dessa promoção.`);
         }
         this.renderOffers();
       });
@@ -645,136 +662,15 @@ class App {
     });
   }
 
-  // Épico B: carregar propostas de contrato pendentes do banco
-  async _loadContractProposals(team) {
-    const proposals = [];
-    for (const fighter of team) {
-      try {
-        const doc = await this.game.db.get('gameState', `contract-offer-${fighter.id}`);
-        if (doc && doc.offers) {
-          for (const offer of doc.offers) {
-            proposals.push({ ...offer, fighterId: fighter.id });
-          }
-        }
-      } catch { /* sem propostas para este lutador */ }
-    }
-    return proposals;
-  }
-
-  // ===== Minha Equipe =====
-  async renderRoster() {
-    const team = await this.game.getTeam();
-    const bookings = await this.game.offerService.getAccepted();
-    const state = await this.seasonService.getState();
-    const now = (state.year - 1) * 52 + state.week;
-
-    // Épico A: carregar sondagens ativas
-    const approaches = await this._loadRetentionApproaches();
-
-    const html = RosterView.render(team, bookings, now, approaches);
-    await LayoutView.render(html);
-
-    this._bindFighterClicks();
-
-    document.querySelectorAll('.roster-release').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (!confirm(`Dispensar ${btn.dataset.name} da equipe? Ele volta ao mercado.`)) return;
-        await this.game.fighterCtrl.releaseFromGym(btn.dataset.id);
-        this.notificationService.add('info', 'Dispensa', `${btn.dataset.name} deixou a academia.`);
-        this.renderRoster();
-      });
-    });
-
-    document.querySelectorAll('.training-focus-set').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        await this.game.setTrainingFocus(btn.dataset.id, btn.dataset.focus);
-        this.renderRoster();
-      });
-    });
-
-    // Épico A: responder a sondagem
-    document.querySelectorAll('.retention-respond').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const approachId = btn.dataset.approach;
-        const action = btn.dataset.action;
-        const gym = await this.game.getGym();
-
-        // Encontrar o fighter pelo approach
-        const approaches2 = await this._loadRetentionApproaches();
-        const approach = approaches2.find(a => a.id === approachId);
-        if (!approach) return;
-
-        const fighter = await this.game.fighterCtrl.getFighter(approach.fighterId);
-        if (!fighter) return;
-
-        const result = await this.game.retentionService.respond(now, approachId, action, fighter, gym);
-        await this.game.fighterCtrl.updateFighter(fighter);
-        await this.game.updateGym(gym);
-
-        if (result.success) {
-          this.notificationService.add(result.outcome === 'released' ? 'warning' : 'success', 'Retenção', result.message);
-        } else {
-          this.notificationService.add('warning', 'Retenção', result.message || 'Não foi possível realizar esta ação.');
-        }
-
-        this.renderRoster();
-      });
-    });
-  }
-
-  // Épico A: carregar sondagens ativas do banco
-  async _loadRetentionApproaches() {
+  async _loadContractProposals(fighter) {
+    if (!fighter) return [];
     try {
-      const doc = await this.game.db.get('gameState', 'retention');
-      return doc ? doc.approaches || [] : [];
-    } catch {
-      return [];
-    }
-  }
-
-  // ===== Recrutamento =====
-  async renderMarket() {
-    const agents = await this.game.fighterCtrl.getFreeAgents();
-    const gym = await this.game.getGym();
-    const team = await this.game.getTeam();
-
-    const knowledge = await this.game.scoutingService.knowledgeMap(agents, gym);
-
-    const html = MarketView.render(
-      agents, gym, team.length,
-      this.marketFilter, this.marketSearch,
-      (f) => this.game.recruitFee(f),
-      knowledge
-    );
-    await LayoutView.render(html);
-
-    this._bindFighterClicks();
-
-    document.querySelectorAll('.market-filter').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.marketFilter = btn.dataset.filter;
-        this.renderMarket();
-      });
-    });
-
-    document.querySelectorAll('.market-search').forEach(input => {
-      input.addEventListener('input', () => {
-        this.marketSearch = input.value;
-        this.renderMarket();
-      });
-    });
-
-    document.querySelectorAll('.market-recruit').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const result = await this.game.recruitFighter(btn.dataset.id);
-        if (result.ok) {
-          this.notificationService.add('success', 'Novo Atleta', `${result.fighter.name} agora treina na sua academia! Taxa: $${result.fee.toLocaleString()}.`);
-          this.renderMarket();
-        } else {
-          this.notificationService.add('warning', 'Recrutamento Falhou', result.reason);
-        }
-      });
-    });
+      const doc = await this.game.db.get('gameState', `contract-offer-${fighter.id}`);
+      if (doc && doc.offers) {
+        return doc.offers.map(offer => ({ ...offer, fighterId: fighter.id }));
+      }
+    } catch { /* sem propostas */ }
+    return [];
   }
 
   // ===== Mundo (eventos das promoções) =====
@@ -797,8 +693,8 @@ class App {
     const event = await this.game.eventCtrl.getEvent(eventId);
     if (!event) return;
 
-    const team = await this.game.getTeam();
-    const playerIds = new Set(team.map(f => f.id));
+    const fighter = await this.game.getPlayerFighter();
+    const playerIds = new Set(fighter ? [fighter.id] : []);
 
     const html = EventsView.renderSimulation(event, event.results || [], playerIds);
     await LayoutView.render(html);
@@ -831,7 +727,6 @@ class App {
 
     const faceOff = document.getElementById('hubFaceOff');
     let threeFaceOff = null;
-    // Tenta montar ThreeFaceOff (falha silenciosa se Three.js nao carregou)
     try {
       import('./three-faceoff.js').then(mod => {
         if (!cancelled && faceOff) {
@@ -843,7 +738,7 @@ class App {
     const finish = () => {
       cancelled = true;
       tl.kill();
-      tl = gsap.timeline(); // fresh timeline for summary
+      tl = gsap.timeline();
 
       rounds.forEach(r => r.style.display = 'block');
       rounds.forEach(r => {
@@ -853,7 +748,6 @@ class App {
       if (statusText) statusText.textContent = 'Luta encerrada';
       if (skipBtn) skipBtn.style.display = 'none';
 
-      // Summary dramatic reveal
       if (summary) {
         summary.style.display = 'block';
         tl.to('#hubResultIcon', { opacity: 1, scale: 1, duration: 0.4, ease: 'back.out(2)' }, 0)
@@ -866,13 +760,6 @@ class App {
       }
     };
 
-    // Nota: o ritmo round-a-round usa gsap.delayedCall (não tl.call) de
-    // propósito. GSAP3 não tem o argumento "scope" que GSAP2 tinha —
-    // tl.call(fn, null, null, delay) é a assinatura antiga, o 4º argumento
-    // é ignorado silenciosamente, e reagendar novos tl.call() de DENTRO de
-    // um callback que já está rodando na mesma timeline nunca dispara de
-    // novo (testado: a timeline trava depois da 1ª chamada, mesmo esperando
-    // 10s). gsap.delayedCall é um agendamento independente e não sofre disso.
     const showBeat = () => {
       if (cancelled) return;
       const round = rounds[roundIdx];
@@ -880,7 +767,6 @@ class App {
       const beats = round.querySelectorAll('.live-beat');
 
       if (!beats.length || beatIdx >= beats.length) {
-        // Pausa entre rounds
         gsap.delayedCall(1, () => {
           if (cancelled) return;
           roundIdx++;
@@ -896,10 +782,8 @@ class App {
       const beat = beats[beatIdx];
       const beatType = beat.dataset.beatType;
 
-      // Revelar beat
       beat.style.display = 'flex';
 
-      // Screen shake em knockdown e finish
       if (beatType === 'knockdown') {
         gsap.to(faceOff || document.getElementById('liveHubRounds'), {
           x: '+=6', duration: 0.04, repeat: 4, yoyo: true, ease: 'power1.inOut',
@@ -909,7 +793,6 @@ class App {
         gsap.to(faceOff || document.getElementById('liveHubRounds'), {
           x: '+=10', duration: 0.05, repeat: 6, yoyo: true, ease: 'power1.inOut',
         });
-        // Flash momentâneo
         const flash = document.createElement('div');
         flash.style.cssText = 'position:fixed;inset:0;background:rgba(232,35,74,0.3);pointer-events:none;z-index:999';
         document.body.appendChild(flash);
@@ -918,20 +801,16 @@ class App {
       }
 
       beatIdx++;
-      // Beats de impacto respiram: o desfecho pausa mais que o resto pra o
-      // flash/shake assentarem antes do próximo passo. Beat comum = 0.45s.
       const nextDelay = beatType === 'finish' ? 1.6 : beatType === 'knockdown' ? 0.9 : 0.45;
       gsap.delayedCall(nextDelay, showBeat);
     };
 
     if (rounds.length === 0 || cancelled) { finish(); return; }
 
-    // Intro animation
     tl.to(statusCard, { opacity: 1, duration: 0.3 }, 0)
       .to(title, { opacity: 1, y: 0, duration: 0.4, ease: 'back.out(1.2)' }, '-=0.1')
       .to(subtitle, { opacity: 1, duration: 0.3 }, '-=0.15');
 
-    // Show first round
     gsap.delayedCall(0.8, () => {
       if (!cancelled) {
         rounds[0].style.display = 'block';
@@ -986,7 +865,10 @@ class App {
     const fighter = await this.game.fighterCtrl.getFighter(fighterId);
     if (!fighter) return;
 
-    const html = FighterProfileView.render(fighter, fighter.fights);
+    const playerFighter = await this.game.getPlayerFighter();
+    const isPlayer = playerFighter?.id === fighter.id;
+
+    const html = FighterProfileView.render(fighter, fighter.fights, isPlayer);
     await LayoutView.render(html);
 
     document.querySelectorAll('.fighter-back').forEach(btn => {
@@ -995,7 +877,6 @@ class App {
       });
     });
 
-    // Épico E1: mudança de divisão de peso
     document.querySelectorAll('.change-weight-class').forEach(btn => {
       btn.addEventListener('click', async () => {
         const dir = btn.dataset.dir;
@@ -1007,26 +888,21 @@ class App {
         const newWeightClass = dir === 'up' ? adj.up : adj.down;
         if (!newWeightClass) return;
 
-        const gym = await this.game.getGym();
         const cost = 5000;
-        if (gym.cash < cost) {
+        if (f.cash < cost) {
           this.notificationService.add('warning', 'Divisão', `Saldo insuficiente. Mudança custa ${formatCurrency(cost)}.`);
           return;
         }
 
-        // Efeitos da mudança na divisão
         const oldClass = f.weightClass;
         f.weightClass = newWeightClass;
 
-        // Ajustes de atributos por mudança de divisão
         if (dir === 'up') {
-          // Subir = enfrentar oponentes menores: perde power/strength, ganha speed/cardio
           f.attributes.power = Math.max(1, (f.attributes.power || 50) - 3);
           f.attributes.strength = Math.max(1, (f.attributes.strength || 50) - 2);
           f.attributes.speed = Math.min(99, (f.attributes.speed || 50) + 2);
           f.attributes.cardio = Math.min(99, (f.attributes.cardio || 50) + 1);
         } else {
-          // Descer = enfrentar oponentes maiores: ganha power/strength, perde speed/cardio
           f.attributes.power = Math.min(99, (f.attributes.power || 50) + 2);
           f.attributes.strength = Math.min(99, (f.attributes.strength || 50) + 3);
           f.attributes.speed = Math.max(1, (f.attributes.speed || 50) - 2);
@@ -1035,16 +911,14 @@ class App {
 
         const state = await this.seasonService.getState();
         const week = absWeek(state);
-        gym.addTransaction(week, `Mudança divisão: ${f.name} (${oldClass} → ${newWeightClass})`, -cost);
+        f.addTransaction(week, `Mudança divisão: ${oldClass} → ${newWeightClass}`, -cost);
         await this.game.fighterCtrl.updateFighter(f);
-        await this.game.updateGym(gym);
 
-        this.notificationService.add('success', 'Divisão Alterada', `${f.name} mudou de ${oldClass} para ${newWeightClass}.`);
+        this.notificationService.add('success', 'Divisão Alterada', `Você mudou de ${oldClass} para ${newWeightClass}.`);
         this.showFighterProfile(fighterId);
       });
     });
 
-    // Renomear lutador
     document.querySelectorAll('.fighter-rename').forEach(btn => {
       btn.addEventListener('click', async () => {
         const fId = btn.dataset.id;
@@ -1066,61 +940,47 @@ class App {
     });
   }
 
-  // ===== Training Camp (Épico D) =====
+  // ===== Training Camp =====
   async renderTrainingCamp() {
-    const team = await this.game.getTeam();
+    const fighter = await this.game.getPlayerFighter();
     const bookings = await this.game.offerService.getAccepted();
     const state = await this.seasonService.getState();
     const now = (state.year - 1) * 52 + state.week;
-    const gym = await this.game.getGym();
-    const html = TrainingCampView.render(team, bookings, now, gym);
+    const booking = bookings.find(b => b.fighterId === fighter.id) || null;
+    const html = TrainingCampView.render(fighter, booking, now);
     await LayoutView.render(html);
-    this._bindTrainingCamp(team, bookings, now, gym);
+    this._bindTrainingCamp(fighter, booking, now);
   }
 
-  _bindTrainingCamp(team, bookings, now, gym) {
-    // Salvar configuração de camp
+  _bindTrainingCamp(fighter, booking, now) {
     document.querySelectorAll('.camp-save').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const fighterId = btn.dataset.fighter;
-        const fighter = await this.game.fighterCtrl.getFighter(fighterId);
-        if (!fighter) return;
-
-        const intensity = document.querySelector(`.camp-intensity[data-fighter="${fighterId}"]`)?.value;
-        const spec = document.querySelector(`.camp-spec[data-fighter="${fighterId}"]`)?.value;
-        const sparringPartnerId = document.querySelector(`.camp-sparring[data-fighter="${fighterId}"]`)?.value || null;
+        const intensity = document.querySelector(`.camp-intensity[data-fighter="${fighter.id}"]`)?.value;
+        const spec = document.querySelector(`.camp-spec[data-fighter="${fighter.id}"]`)?.value;
 
         if (!intensity) {
           this.notificationService.add('warning', 'Camp', 'Selecione uma intensidade para o camp.');
           return;
         }
-
-        const booking = bookings.find(b => b.fighterId === fighterId);
         if (intensity === 'intense' && !booking) {
           this.notificationService.add('warning', 'Camp', 'Treino intenso só é permitido com luta marcada.');
           return;
         }
 
-        TrainingCamp.configureCamp(fighter, intensity, spec || 'striking', sparringPartnerId);
+        TrainingCamp.configureCamp(fighter, intensity, spec || 'striking', null);
         await this.game.fighterCtrl.updateFighter(fighter);
 
         const cost = CAMP_CONFIG.WEEKLY_COST[intensity] || 0;
-        this.notificationService.add('success', 'Camp Configurado', `${fighter.name} iniciou camp ${intensity} ($${cost.toLocaleString()}/sem).`);
+        this.notificationService.add('success', 'Camp Configurado', `Você iniciou camp ${intensity} ($${cost.toLocaleString()}/sem).`);
         this.renderTrainingCamp();
       });
     });
 
-    // Cancelar camp
     document.querySelectorAll('.camp-cancel').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const fighterId = btn.dataset.fighter;
-        const fighter = await this.game.fighterCtrl.getFighter(fighterId);
-        if (!fighter) return;
-
         TrainingCamp.cancelCamp(fighter);
         await this.game.fighterCtrl.updateFighter(fighter);
-
-        this.notificationService.add('info', 'Camp Cancelado', `Camp de ${fighter.name} foi cancelado.`);
+        this.notificationService.add('info', 'Camp Cancelado', 'Camp cancelado.');
         this.renderTrainingCamp();
       });
     });
@@ -1131,64 +991,46 @@ class App {
     const allFighters = await this.game.fighterCtrl.getAllFighters();
     const active = allFighters.filter(f => f.status !== 'retired');
     const rankings = RankingService.calculateRankings(active);
-    const belts = await this.game.titleService.getBeltMap();
-    const html = RankingsView.render(rankings, belts);
+    const playerFighter = await this.game.getPlayerFighter();
+    const belts = await this.game.titleService.getBeltMap(playerFighter?.id);
+    const html = RankingsView.render(rankings, belts, playerFighter?.id);
     await LayoutView.render(html);
     this._bindFighterClicks();
   }
 
   // ===== Finanças =====
   async renderFinance() {
-    const gym = await this.game.getGym();
-    const team = await this.game.getTeam();
-    const html = FinanceView.render(gym, team);
+    const fighter = await this.game.getPlayerFighter();
+    const academy = await this.game.getPlayerAcademy();
+    const manager = await this.game.getPlayerManager();
+    const html = FinanceView.render(fighter, academy, manager);
     await LayoutView.render(html);
+
+    document.querySelectorAll('.lifestyle-set').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await this.game.setLifestyle(btn.dataset.tier);
+        this.renderFinance();
+      });
+    });
   }
 
-  // ===== Academia (estrutura, treinadores, olheiro) =====
+  // ===== Academia (escolha de onde treinar, §E.3) =====
   async renderAcademy() {
-    const gym = await this.game.getGym();
-    const html = AcademyView.render(gym);
+    const academies = await this.game.getAcademies();
+    const fighter = await this.game.getPlayerFighter();
+    const html = AcademyView.render(academies, fighter);
     await LayoutView.render(html);
 
-    document.querySelector('.facility-upgrade')?.addEventListener('click', async () => {
-      const result = await this.game.upgradeFacility();
-      if (result.ok) {
-        this.notificationService.add('success', 'Upgrade Concluído', `Sua academia agora é um(a) ${result.facility.name}!`);
-      } else {
-        this.notificationService.add('warning', 'Upgrade Falhou', result.reason);
-      }
-      this.renderAcademy();
-    });
-
-    document.querySelectorAll('.coach-hire').forEach(btn => {
+    document.querySelectorAll('.academy-switch').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const result = await this.game.hireCoach(btn.dataset.category);
+        const result = await this.game.switchAcademy(btn.dataset.academy);
         if (result.ok) {
-          this.notificationService.add('success', 'Treinador Contratado', 'A comissão técnica está mais forte.');
+          this.notificationService.add('success', 'Academia Trocada', `Agora você treina em ${result.academy.name}.`);
         } else {
-          this.notificationService.add('warning', 'Contratação Falhou', result.reason);
+          this.notificationService.add('warning', 'Troca Falhou', result.reason);
         }
         this.renderAcademy();
       });
-    });
-
-    document.querySelectorAll('.coach-fire').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        await this.game.fireCoach(btn.dataset.category);
-        this.notificationService.add('info', 'Treinador Dispensado', 'Vaga de comissão técnica liberada.');
-        this.renderAcademy();
-      });
-    });
-
-    document.querySelector('.scout-hire')?.addEventListener('click', async () => {
-      const result = await this.game.purchaseScout();
-      if (result.ok) {
-        this.notificationService.add('success', 'Olheiro Contratado', 'O potencial oculto dos agentes livres agora aparece no Recrutamento.');
-      } else {
-        this.notificationService.add('warning', 'Contratação Falhou', result.reason);
-      }
-      this.renderAcademy();
     });
   }
 
@@ -1225,7 +1067,7 @@ class App {
     await LayoutView.render(html);
 
     document.querySelector('.hall-of-fame-share')?.addEventListener('click', () => {
-      const text = `Acabei de imortalizar ${entries.length} lendas no MMA Manager!\n\nConstrua dinastias. Destrua legados.${SHARE_URL ? `\n👉 ${SHARE_URL}` : ''}`;
+      const text = `Acabei de imortalizar ${entries.length} lendas no MMA Manager!\n\nConstrua uma carreira. Vire lenda.${SHARE_URL ? `\n👉 ${SHARE_URL}` : ''}`;
       if (navigator.share) {
         navigator.share(SHARE_URL ? { title: 'MMA Manager', text, url: SHARE_URL } : { title: 'MMA Manager', text });
       } else {
@@ -1236,7 +1078,7 @@ class App {
     });
   }
 
-  // ===== G5: Cerimônia de Aposentadoria =====
+  // ===== Cerimônia de Aposentadoria =====
   async renderRetirementCeremony() {
     const gameState = await this.game.db.get('gameState', 'state');
     const fighterId = gameState?.meta?.lastRetirementFighterId;
@@ -1255,7 +1097,6 @@ class App {
     await LayoutView.render(html);
 
     document.getElementById('viewFullCareerBtn')?.addEventListener('click', () => {
-      // Mostra o card do atleta no Hall da Fama — navega para lá
       this.navigateTo('hall-of-fame');
     });
 
@@ -1270,12 +1111,10 @@ class App {
     const html = NotificationsView.render(notifications, unreadCount, category);
     await LayoutView.render(html);
 
-    // Abas de categoria
     document.querySelectorAll('.notif-cat-btn').forEach(btn => {
       btn.addEventListener('click', () => this.renderNotifications(btn.dataset.cat));
     });
 
-    // G5: navega para cerimônia ao clicar em notificação de hall-of-fame
     document.querySelectorAll('.nav-link[data-view="retirement"]').forEach(link => {
       link.addEventListener('click', (e) => {
         if (e.target.closest('.notif-mark-read, .notif-mark-all')) return;
@@ -1320,17 +1159,15 @@ class App {
   }
 
   async renderPressConference() {
-    const team = await this.game.getTeam();
+    const fighter = await this.game.getPlayerFighter();
     const upcoming = await this.game.offerService.getAccepted();
 
-    // F1: buscar a luta real do primeiro atleta com booking
     const booking = upcoming.length > 0 ? upcoming[0] : null;
-    let fighterA = null;
+    let fighterA = fighter;
     let fighterB = null;
     let event = null;
 
     if (booking) {
-      fighterA = team.find(f => f.id === booking.fighterId) || team[0];
       const oppData = await this.game.fighterCtrl.getFighter(booking.opponentId);
       if (oppData) {
         fighterB = oppData;
@@ -1344,9 +1181,7 @@ class App {
         promotion: promo?.name || booking.promotionName || '',
       };
     } else {
-      // Fallback: sem luta marcada
       event = { name: 'Nenhuma luta marcada', promotion: '' };
-      fighterA = { name: '—', record: { wins: 0, losses: 0, draws: 0 } };
       fighterB = { name: '—', record: { wins: 0, losses: 0, draws: 0 } };
     }
 
@@ -1354,7 +1189,7 @@ class App {
     const html = PressConferenceView.render(scenarios, fighterA, fighterB, event, !!booking);
     await LayoutView.render(html);
 
-    if (!booking) return; // sem luta marcada: nada para responder, nada a ligar
+    if (!booking) return;
 
     document.querySelectorAll('.pc-answer').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -1369,19 +1204,17 @@ class App {
         if (next) {
           next.style.display = 'block';
         } else {
-          // Épico F1: hype acumulado de TODAS as perguntas
           const totalHype = fighterA.pcHype || 0;
           const hypeBonus = totalHype * HYPE_PURSE_RATIO;
           await this.game.fighterCtrl.updateFighter(fighterA);
 
-          // Épico F1: hype alto gera rivalidade/heat entre os lutadores
           if (totalHype >= PressConference.RIVALRY_HYPE_THRESHOLD && booking && fighterB?.id) {
             const rivalry = await this.rivalryService.addPressConferenceHeat(
               fighterA.id, fighterB.id, totalHype, booking.promotionId
             );
             if (rivalry) {
               this.notificationService.add('info', 'Rivalidade',
-                `A provocação na coletiva acirrou a rivalidade entre ${fighterA.name} e ${fighterB.name}! (Intensidade: ${rivalry.intensityLabel})`);
+                `A provocação na coletiva acirrou a rivalidade com ${fighterB.name}! (Intensidade: ${rivalry.intensityLabel})`);
             }
           }
 
@@ -1394,10 +1227,9 @@ class App {
 
           if (totalHype > 0) {
             this.notificationService.add('success', 'Hype!',
-              `${fighterA.name} gerou hype +${totalHype} na coletiva. Bônus de ${formatCurrency(hypeBonus)} na bolsa da luta!`);
+              `Você gerou hype +${totalHype} na coletiva. Bônus de ${formatCurrency(hypeBonus)} na bolsa da luta!`);
           } else {
-            this.notificationService.add('info', 'Imprensa',
-              `Conferência de imprensa de ${fighterA.name} concluída.`);
+            this.notificationService.add('info', 'Imprensa', 'Conferência de imprensa concluída.');
           }
         }
       });

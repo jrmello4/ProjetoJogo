@@ -4,53 +4,89 @@
 // mecânica deve hardcodar valores de economia/progresso.
 // ============================================================
 
-export const GYM_CONFIG = {
-  ID: 'gym-player',
-  STARTING_REPUTATION: 10,
-  STARTING_TEAM_SIZE: 3,
-  MANAGER_CUT: 0.2, // % da bolsa que fica com a academia
+// Carreira de 1 lutador — não há mais academia-negócio do jogador. "Quem
+// é o lutador do jogador" é identidade (`gameState.career.playerFighterId`),
+// não posse de academia — ver
+// `docs/superpowers/specs/2026-07-13-carreira-sistemica-1-lutador-design.md` §A.6.
 
-  // Economia semanal
-  WEEKLY_RENT: 1200,
-  WEEKLY_COACHING_PER_FIGHTER: 300,
-  STUDENT_INCOME_BASE: 1800, // mensalidades de alunos comuns
-  STUDENT_INCOME_PER_REP: 25,
-
-  // Recrutamento de agentes livres para a equipe
-  RECRUIT_FEE_PER_OVR: 150,
-  RECRUIT_FEE_BASE: 2000,
-
-  // Reputação da academia
-  REP_PER_WIN: 2,
-  REP_PER_FINISH: 2,
-  REP_PER_LOSS: -1,
-  REP_TIER_BONUS: { 1: 3, 2: 1, 3: 0 },
-};
-
-// Estrutura da academia — cada nível aumenta vagas no time, bônus de
-// treino e recuperação semanal. maxTeamSize do nível 1 mantém o valor
-// original (4) para não encolher partidas já em andamento.
+// Estrutura de uma Academia — cada nível de instalação muda o bônus de
+// treino e recuperação de quem treina lá (você ou IA). Não é mais algo
+// que se compra por upgrade: é um atributo da Academia que você escolhe.
 export const FACILITY_LEVELS = [
-  { level: 1, name: 'Galpão Improvisado', maxTeamSize: 4, trainingBonus: 0, recoveryBonus: 0, coachSlots: 1, upgradeCost: 0 },
-  { level: 2, name: 'Academia Equipada', maxTeamSize: 5, trainingBonus: 0.15, recoveryBonus: 3, coachSlots: 2, upgradeCost: 25000 },
-  { level: 3, name: 'Centro de Alto Rendimento', maxTeamSize: 6, trainingBonus: 0.30, recoveryBonus: 6, coachSlots: 3, upgradeCost: 65000 },
-  { level: 4, name: 'Complexo Elite Mundial', maxTeamSize: 8, trainingBonus: 0.45, recoveryBonus: 10, coachSlots: 3, upgradeCost: 150000 },
+  { level: 1, name: 'Galpão Improvisado', trainingBonus: 0, recoveryBonus: 0 },
+  { level: 2, name: 'Academia Equipada', trainingBonus: 0.15, recoveryBonus: 3 },
+  { level: 3, name: 'Centro de Alto Rendimento', trainingBonus: 0.30, recoveryBonus: 6 },
+  { level: 4, name: 'Complexo Elite Mundial', trainingBonus: 0.45, recoveryBonus: 10 },
 ];
 
-// Treinadores auxiliares — cada um amplifica o ganho de atributos dos
-// lutadores cujo foco semanal bate com a categoria do treinador.
-export const COACH_CONFIG = {
-  striking: { label: 'Técnico de Striking', icon: '🥊', weeklyCost: 900, gainBonus: 0.35 },
-  grappling: { label: 'Técnico de Grappling', icon: '🤼', weeklyCost: 900, gainBonus: 0.35 },
-  cardio: { label: 'Preparador Físico', icon: '🫁', weeklyCost: 700, gainBonus: 0.35, recoveryBonus: 4 },
+// Catálogo de academias — lugares no mundo, sem dono. `specialties`
+// amplifica o ganho de atributos do foco de treino correspondente
+// (substitui COACH_CONFIG de hoje, que era contratação avulsa).
+// `weeklyFee` é cobrado do caixa PESSOAL do lutador enquanto treina lá.
+// Academia pequena (facilityLevel baixo) cresce sinergia com o técnico
+// mais rápido — ver `SYNERGY_CONFIG` — mas tem teto de treino mais baixo.
+export const ACADEMIES = [
+  {
+    id: 'academy-blacktiger', name: 'Black Tiger Academy', reputation: 30,
+    facilityLevel: 1, weeklyFee: 150, philosophy: 'Atenção individual',
+    specialties: { striking: 0.10, grappling: 0.15, cardio: 0.10 },
+    headCoach: { name: 'Sensei Paulo', personality: 'cautious' },
+  },
+  {
+    id: 'academy-fortaleza', name: 'Fortaleza MMA', reputation: 45,
+    facilityLevel: 2, weeklyFee: 400, philosophy: 'Tradicional',
+    specialties: { striking: 0.20, grappling: 0.30, cardio: 0.15 },
+    headCoach: { name: 'Mestre Diego', personality: 'analytical' },
+  },
+  {
+    id: 'academy-elite', name: 'Elite Combat Team', reputation: 55,
+    facilityLevel: 3, weeklyFee: 800, philosophy: 'Alto rendimento',
+    specialties: { striking: 0.30, grappling: 0.25, cardio: 0.30 },
+    headCoach: { name: 'Coach Marcus', personality: 'aggressive' },
+  },
+];
+
+// Sinergia técnico-atleta — ver spec §C.2. Ao trocar de Academia, a
+// sinergia não zera nem é herdada inteira: `current * CARRY_OVER_RATIO`.
+// Academia de facilityLevel baixo cresce sinergia mais rápido (menos
+// atletas por treinador = mais atenção) — GROWTH_RATE_BY_FACILITY indexa
+// por `facilityLevel - 1`, espelhando FACILITY_LEVELS.
+export const SYNERGY_CONFIG = {
+  CARRY_OVER_RATIO: 0.4,
+  GROWTH_RATE_BY_FACILITY: [1.3, 1.0, 0.8, 0.6],
+  GAIN_ON_INSTRUCTION_FOLLOWED_AND_WON: 4,
+  LOSS_ON_INSTRUCTION_IGNORED_AND_LOST: -3,
 };
 
-// Olheiro — revela o potencial oculto dos agentes livres no Recrutamento,
-// a principal informação escondida que hoje é desperdiçada.
-export const SCOUT_CONFIG = {
-  unlockCost: 15000,
-  weeklyCost: 400,
+// Empresários — ver spec §C.1. `cut` é a fração da bolsa retida antes do
+// caixa pessoal (substitui GYM_CONFIG.MANAGER_CUT de hoje, que ficava
+// com a academia). `connections` acelera auto-descoberta de DNA (§B.1) e
+// dá conhecimento de base sobre adversários (substitui SCOUT_CONFIG de
+// hoje, que era um olheiro comprado pela academia).
+export const MANAGERS = [
+  { id: 'manager-loyal', name: 'Renata Alves', style: 'loyal', cut: 0.12, connections: 30 },
+  { id: 'manager-conservative', name: 'João Bittencourt', style: 'conservative', cut: 0.10, connections: 40 },
+  { id: 'manager-aggressive', name: 'Marcelo Duarte', style: 'aggressive', cut: 0.15, connections: 60 },
+];
+
+export const MANAGER_CONFIG = {
+  STARTING_TRUST: 50,
+  TERMINATE_FINE_RATIO: 0.5, // igual à multa de rescisão de promoção (NEGOTIATION/ContractService)
+  AGGRESSIVE_LEVERAGE_BONUS: 0.5, // soma na leverage de negociação de bolsa
+  AGGRESSIVE_RESCIND_BONUS: 0.15, // soma na chance da promoção cancelar a oferta
+  CONSERVATIVE_LEVERAGE_PENALTY: -0.2,
+  BASELINE_SCOUTING_FROM_CONNECTIONS: 45, // connections acima disto dá SCOUTING_CONFIG.BASELINE_WITH_SCOUT
 };
+
+// Custo de vida pessoal — ver spec §E.1. Subir de tier dá pequeno bônus
+// de moral/popularidade (aparência de sucesso); descer depois de ter
+// subido custa moral (perda de status).
+export const LIFESTYLE_TIERS = {
+  modest: { label: 'Modesto', weeklyCost: 200, moraleBonus: 0, popularityBonus: 0 },
+  comfortable: { label: 'Confortável', weeklyCost: 600, moraleBonus: 3, popularityBonus: 1 },
+  luxurious: { label: 'Luxuoso', weeklyCost: 1500, moraleBonus: 6, popularityBonus: 3 },
+};
+export const LIFESTYLE_DOWNGRADE_MORALE_PENALTY = 15;
 
 export const POTENTIAL_TIERS = [
   { min: 80, label: 'Elite', cls: 'badge-success' },
@@ -68,11 +104,31 @@ export const TRAINING_FOCUS_META = {
 };
 
 export const DIFFICULTIES = [
-  { id: 'easy', name: 'Mestre Estabelecido', cash: 60000, desc: 'Caixa folgado para errar sem medo' },
-  { id: 'normal', name: 'Treinador Profissional', cash: 35000, desc: 'A experiência equilibrada' },
-  { id: 'challenging', name: 'Desafiante', cash: 25000, desc: 'Cada dólar exige planejamento' },
-  { id: 'hard', name: 'Garagem e Sonho', cash: 18000, desc: 'Cada dólar conta' },
+  { id: 'easy', name: 'Reserva Confortável', cash: 12000, desc: 'Poupança folgada para errar sem medo' },
+  { id: 'normal', name: 'Prospecto Profissional', cash: 6000, desc: 'A experiência equilibrada' },
+  { id: 'challenging', name: 'Desafiante', cash: 3000, desc: 'Cada dólar exige planejamento' },
+  { id: 'hard', name: 'Só o Sonho', cash: 800, desc: 'Cada dólar conta' },
 ];
+
+// Arquétipo inicial e origem esportiva (§A.7) — viés leve nos atributos
+// iniciais via Fighter.expandAttributes. `seedBonus` eleva a base (que o
+// jitter/spread de expandAttributes usa pra derivar o resto) antes da
+// geração; não é um valor final, só empurra a média de partida.
+export const ARCHETYPES = {
+  striker: { label: 'Striker', seedAttrs: ['boxing', 'kickboxing', 'muayThai'], seedBonus: 15 },
+  grappler: { label: 'Grappler', seedAttrs: ['wrestling', 'bjj'], seedBonus: 15 },
+  brawler: { label: 'Brawler', seedAttrs: ['power', 'chin', 'aggression'], seedBonus: 15 },
+  generalist: { label: 'Generalista', seedAttrs: [], seedBonus: 0 },
+};
+
+export const ORIGINS = {
+  kickboxing: { label: 'Kickboxing', seedAttrs: ['kickboxing', 'footwork'], seedBonus: 10 },
+  judo: { label: 'Judô', seedAttrs: ['wrestling', 'takedowns'], seedBonus: 10 },
+  wrestling: { label: 'Wrestling', seedAttrs: ['wrestling', 'takedowns', 'strength'], seedBonus: 10 },
+  muayThai: { label: 'Muay Thai', seedAttrs: ['muayThai', 'clinch'], seedBonus: 10 },
+  bjj: { label: 'Jiu-Jitsu', seedAttrs: ['bjj', 'submissionOffense'], seedBonus: 10 },
+  boxing: { label: 'Boxe', seedAttrs: ['boxing', 'headMovement'], seedBonus: 10 },
+};
 
 // Divisões usadas na geração do mundo — concentra lutadores para
 // garantir matchmaking viável dentro de cada promoção.
@@ -350,58 +406,37 @@ export const MILESTONE_LABELS = {
   firstFinish: '💥 Primeira Finalização!',
   firstTier2: '📺 Palco Nacional!',
   firstTier1: '⭐ Elite Mundial!',
-  rep50: '🏛️ Academia Respeitada!',
-  topGym: '👑 Academia Nº1 do Ranking!',
+  popularity50: '🌟 Nome Conhecido no Meio!',
+  popularity80: '👑 Superstar do MMA!',
   firstTitleShot: '🎯 Primeira Disputa de Cinturão!',
   firstBelt: '🏆 CAMPEÃO! Primeiro Cinturão da Academia!',
   firstDefense: '🛡️ Primeira Defesa de Cinturão!',
   worldChampion: '🌍 Campeão Mundial! Cinturão da Elite!',
 };
 
-// Academias rivais — o verdadeiro antagonista do treinador: competem pelos
-// mesmos agentes livres e podem seduzir atletas insatisfeitos da sua equipe.
-export const RIVAL_GYMS = [
-  { id: 'rivalgym-fortaleza', name: 'Fortaleza MMA', reputation: 45 },
-  { id: 'rivalgym-elite', name: 'Elite Combat Team', reputation: 55 },
-  { id: 'rivalgym-blacktiger', name: 'Black Tiger Academy', reputation: 30 },
-];
-
-export const RIVAL_GYM_CONFIG = {
-  // Chance semanal de CADA academia rival tentar recrutar um agente livre
-  RECRUIT_CHANCE_PER_GYM: 0.35,
-  REP_PER_SIGNING: 1,
-  REP_PER_POACH: 3,
-
-  // Assédio a atletas da sua equipe: só um rival tenta por atleta por
-  // semana (não soma chance de todas as academias), chance-base pequena,
-  // amplificada por moral baixa e por reputação do rival acima da sua
-  // (com teto pra não punir demais o início de jogo, quando o gap é maior).
-  MIN_TENURE_WEEKS: 8, // carência antes de um atleta poder ser assediado
-  POACH_BASE_CHANCE: 0.008,
-  POACH_MORALE_WEIGHT: 0.10, // moral 0 soma até +10%
-  POACH_REP_WEIGHT: 0.05, // vantagem de reputação (capada em 40) soma até +2%
-  POACH_REP_EDGE_CAP: 40,
-  MAX_POACH_PER_WEEK: 1,
-};
-
-// Patrocínios — renda recorrente com metas de médio prazo. Preenchem as
-// semanas entre lutas com um objetivo concreto: "vença N lutas até a
-// semana X e leve o bônus". Marcas melhores exigem mais reputação.
+// Patrocínios pessoais — ver spec §E.2. Renda recorrente com meta de médio
+// prazo ("vença N lutas até a semana X"). Marcas melhores exigem mais
+// popularidade PESSOAL (antes era reputação da academia). `imageClause`:
+// 'clean' cancela o contrato se você acumular provocações demais nas
+// redes (§D.2); 'villain' paga melhor mas exige manter hype/provocação
+// ativa pra renovar.
 export const SPONSOR_CONFIG = {
-  WEEKLY_OFFER_CHANCE: 0.15, // chance semanal de uma marca procurar a academia
+  WEEKLY_OFFER_CHANCE: 0.15, // chance semanal de uma marca te procurar
   MAX_ACTIVE: 2,             // contratos simultâneos
   OFFER_EXPIRY_WEEKS: 4,
-  REP_PER_GOAL_MET: 2,
-  REP_PER_GOAL_FAILED: -1,
+  POPULARITY_PER_GOAL_MET: 2,
+  POPULARITY_PER_GOAL_FAILED: -1,
+  CLEAN_CLAUSE_PROVOCATION_LIMIT: 2, // provocações públicas no período tolerado antes de cancelar
+  VILLAIN_CLAUSE_MIN_PROVOCATIONS: 1, // provocações mínimas no período pra renovar
 };
 
 export const SPONSOR_BRANDS = [
-  { id: 'sp-combate',  name: 'Combate Energy',            tier: 3, weekly: 250,  goalWins: 1, goalWeeks: 26, bonus: 4000,  minRep: 0 },
-  { id: 'sp-ferro',    name: 'Ferro & Fibra Suplementos', tier: 3, weekly: 350,  goalWins: 2, goalWeeks: 39, bonus: 6500,  minRep: 20 },
-  { id: 'sp-valetudo', name: 'Vale Tudo Wear',            tier: 2, weekly: 600,  goalWins: 2, goalWeeks: 32, bonus: 12000, minRep: 35 },
-  { id: 'sp-predador', name: 'Predador Fightwear',        tier: 2, weekly: 800,  goalWins: 3, goalWeeks: 39, bonus: 18000, minRep: 45 },
-  { id: 'sp-titan',    name: 'Titan Performance',         tier: 1, weekly: 1500, goalWins: 3, goalWeeks: 32, bonus: 35000, minRep: 60 },
-  { id: 'sp-apexmedia',name: 'Apex Global Media',         tier: 1, weekly: 2200, goalWins: 4, goalWeeks: 39, bonus: 60000, minRep: 75 },
+  { id: 'sp-combate',  name: 'Combate Energy',            tier: 3, weekly: 250,  goalWins: 1, goalWeeks: 26, bonus: 4000,  minPopularity: 0,  imageClause: null },
+  { id: 'sp-ferro',    name: 'Ferro & Fibra Suplementos', tier: 3, weekly: 350,  goalWins: 2, goalWeeks: 39, bonus: 6500,  minPopularity: 20, imageClause: null },
+  { id: 'sp-valetudo', name: 'Vale Tudo Wear',            tier: 2, weekly: 600,  goalWins: 2, goalWeeks: 32, bonus: 12000, minPopularity: 35, imageClause: 'villain' },
+  { id: 'sp-predador', name: 'Predador Fightwear',        tier: 2, weekly: 800,  goalWins: 3, goalWeeks: 39, bonus: 18000, minPopularity: 45, imageClause: 'villain' },
+  { id: 'sp-titan',    name: 'Titan Performance',         tier: 1, weekly: 1500, goalWins: 3, goalWeeks: 32, bonus: 35000, minPopularity: 60, imageClause: 'clean' },
+  { id: 'sp-apexmedia',name: 'Apex Global Media',         tier: 1, weekly: 2200, goalWins: 4, goalWeeks: 39, bonus: 60000, minPopularity: 75, imageClause: 'clean' },
 ];
 
 // Presets de simulação de período (fast-forward)

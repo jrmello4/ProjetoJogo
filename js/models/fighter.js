@@ -1,6 +1,8 @@
 import { clamp } from '../utils/helpers.js';
 import { Contract } from './contract.js';
 
+const LEDGER_LIMIT = 120;
+
 const DNA_TRAIT_NAMES = {
   pressurePerformer: 'Cresce sob pressão',
   bigEventNervous: 'Medo em grandes eventos',
@@ -33,8 +35,8 @@ export class Fighter {
     this.weightCut = data.weightCut || this._defaultWeightCut();
     this.status = data.status;
     this.organizationId = data.organizationId;
-    this.gymId = data.gymId || null; // academia que treina o lutador
-    this.gymJoinedAbsWeek = data.gymJoinedAbsWeek || 0; // carência anti-assédio de rivais
+    this.academyId = data.academyId || null; // academia onde o lutador treina hoje
+    this.academyJoinedAbsWeek = data.academyJoinedAbsWeek || 0; // carência anti-assédio + base da sinergia
     this.injury = data.injury || null; // { untilAbsWeek, description }
     this.trainingFocus = data.trainingFocus || 'striking'; // foco individual de treino semanal
     this.availableFromAbsWeek = data.availableFromAbsWeek || 0; // suspensão médica pós-luta
@@ -45,6 +47,26 @@ export class Fighter {
     this.purseShare = data.purseShare ?? 0.8; // fração da bolsa que fica com o atleta (1 - managerCut)
     this.promises = data.promises || []; // { kind, deadlineAbsWeek, madeAtAbsWeek, kept }
 
+    // Economia pessoal (não há mais academia-negócio do jogador, §A.2)
+    this.cash = data.cash ?? 0;
+    this.ledger = data.ledger || []; // {absWeek, label, amount}
+    this.lifestyleTier = data.lifestyleTier || 'modest'; // §E.1
+    this.everReachedLifestyle = data.everReachedLifestyle || { modest: true, comfortable: false, luxurious: false };
+
+    // Empresário (§C.1) e sinergia com o técnico da academia atual (§C.2)
+    this.managerId = data.managerId || null;
+    this.coachSynergy = data.coachSynergy ?? 40;
+
+    // Auto-descoberta de DNA (§B.1): chaves de `dna`/hidden numéricos já
+    // reveladas ao jogador. Sem estar aqui, a interface mostra faixa/rótulo
+    // vago em vez do valor exato — mesma função de blur do scouting.
+    this.discoveredTraits = data.discoveredTraits || [];
+
+    // Sequelas permanentes de lesão (§B.2): { bodyPart, attributeCeilings,
+    // compensation, fromFightId, atAbsWeek }. attributeCeilings reduz o
+    // TETO de evolve(), não o valor atual.
+    this.permanentScars = data.permanentScars || [];
+
     // Épico D: configuração do acampamento semanal (persistida, não botão manual)
     this.campConfig = data.campConfig || null; // { intensity, spec, sparringPartnerId } ou null
     this.campProcessedThisWeek = data.campProcessedThisWeek || false; // já foi processado no loop semanal
@@ -54,7 +76,7 @@ export class Fighter {
     this.lastExpectationCheck = data.lastExpectationCheck || 0;
 
     // Épico F4: academias por onde passou (para detecção de reencontro)
-    this.previousGymIds = data.previousGymIds || [];
+    this.previousAcademyIds = data.previousAcademyIds || [];
 
     // G5: tracking de carreira
     this.careerEarnings = data.careerEarnings || 0;
@@ -265,14 +287,47 @@ export class Fighter {
       const multiplier = isYoung ? 1.5 : 1.0;
       this.attributes[key] = clamp(
         Math.round(this.attributes[key] + growth * multiplier),
-        0, 99
+        0, this.effectiveCeiling(key)
       );
     }
 
     this.attributes.fightIQ = clamp(
       Math.round(this.attributes.fightIQ + (Math.random() * 2 + 0.5)),
-      0, 99
+      0, this.effectiveCeiling('fightIQ')
     );
+  }
+
+  // §B.2 — sequelas permanentes de lesão reduzem o TETO de evolução de
+  // certos atributos (não o valor atual). Sem sequela nesse atributo, o
+  // teto continua 99.
+  effectiveCeiling(attr) {
+    let ceiling = 99;
+    for (const scar of this.permanentScars) {
+      if (scar.attributeCeilings && attr in scar.attributeCeilings) {
+        ceiling += scar.attributeCeilings[attr];
+      }
+    }
+    return clamp(ceiling, 1, 99);
+  }
+
+  // ===== Economia pessoal (§A.2) =====
+  addTransaction(absWeek, label, amount) {
+    this.cash += amount;
+    this.ledger.unshift({ absWeek, label, amount });
+    if (this.ledger.length > LEDGER_LIMIT) {
+      this.ledger.length = LEDGER_LIMIT;
+    }
+  }
+
+  // ===== Auto-descoberta de DNA (§B.1) =====
+  isDiscovered(traitKey) {
+    return this.discoveredTraits.includes(traitKey);
+  }
+
+  discoverTrait(traitKey) {
+    if (!this.discoveredTraits.includes(traitKey)) {
+      this.discoveredTraits.push(traitKey);
+    }
   }
 
   // Épico E3: declínio anual após ~33 anos

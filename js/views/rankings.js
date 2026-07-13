@@ -1,15 +1,15 @@
 import { getWeightClassLabel, getWeightClassName, getNationalityFlag } from '../utils/helpers.js';
-import { GYM_CONFIG, TIER_LABELS } from '../config/game-config.js';
+import { TIER_LABELS } from '../config/game-config.js';
 
 const DIVISION_ORDER = [
   'Heavyweight', 'Light Heavyweight', 'Middleweight', 'Welterweight',
   'Lightweight', 'Featherweight', 'Bantamweight', 'Flyweight', 'Strawweight',
 ];
 
-const isMine = (fighter) => fighter?.gymId === GYM_CONFIG.ID;
+const isMine = (fighter, playerFighterId) => fighter?.id === playerFighterId;
 
 export class RankingsView {
-  static render(rankings, belts = []) {
+  static render(rankings, belts = [], playerFighterId = null) {
     const byDivision = {};
     for (const entry of rankings) {
       const wc = entry.fighter.weightClass;
@@ -37,16 +37,16 @@ export class RankingsView {
         <p>Cinturões em disputa e a classificação por divisão</p>
       </div>
 
-      ${this._renderBelts(belts)}
+      ${this._renderBelts(belts, playerFighterId)}
 
       <div class="section-label" data-reveal>Classificação por Divisão</div>
-      ${divisions.map(wc => this._renderDivision(wc, byDivision[wc])).join('')}
+      ${divisions.map(wc => this._renderDivision(wc, byDivision[wc], playerFighterId)).join('')}
     `;
   }
 
   // Os cinturões do mundo, agrupados por promoção. Cada cinturão tem dono
   // (ou está vago) — não é mais o #1 do ranking fingindo ser campeão.
-  static _renderBelts(belts) {
+  static _renderBelts(belts, playerFighterId) {
     if (belts.length === 0) return '';
 
     const byPromo = {};
@@ -65,18 +65,18 @@ export class RankingsView {
             <span class="badge ${p.tier === 1 ? 'badge-danger' : p.tier === 2 ? 'badge-warning' : 'badge-info'}">${TIER_LABELS[p.tier]}</span>
           </div>
           <div class="belt-grid">
-            ${p.belts.map(b => this._renderBelt(b)).join('')}
+            ${p.belts.map(b => this._renderBelt(b, playerFighterId)).join('')}
           </div>
         </div>
       `).join('')}
     `;
   }
 
-  static _renderBelt(b) {
+  static _renderBelt(b, playerFighterId) {
     // Quem é o próximo da fila. É esta informação que explica por que a
-    // chance de título não chega ao seu atleta.
+    // chance de título não chega até você.
     const nextInLine = b.topContender
-      ? `<div class="belt-contender">Desafiante nº1 · ${b.topContender.name}${isMine(b.topContender) ? ' (seu)' : ''}</div>`
+      ? `<div class="belt-contender">Desafiante nº1 · ${b.topContender.name}${isMine(b.topContender, playerFighterId) ? ' (você)' : ''}</div>`
       : '';
 
     // G2: top 5 desafiantes
@@ -87,7 +87,7 @@ export class RankingsView {
           ${b.contenders.slice(0, 5).map((c, i) => `
             <div class="rank-row rank-row-sm" data-fighter-click="${c.id}">
               <span class="rank-number" style="font-size:0.55rem">#${i + 1}</span>
-              <span class="text-xs" style="flex:1">${c.name}${isMine(c) ? ' (seu)' : ''}</span>
+              <span class="text-xs" style="flex:1">${c.name}${isMine(c, playerFighterId) ? ' (você)' : ''}</span>
               <span class="text-xs text-muted">${c.record.wins}-${c.record.losses} · ${c.overallRating}</span>
             </div>
           `).join('')}
@@ -117,12 +117,12 @@ export class RankingsView {
         </div>
         ${nextInLine}
         ${contendersList}
-        ${mine ? '<span class="badge badge-danger belt-mine-tag">Sua academia</span>' : ''}
+        ${mine ? '<span class="badge badge-danger belt-mine-tag">Você</span>' : ''}
       </div>
     `;
   }
 
-  static _renderDivision(wc, entries) {
+  static _renderDivision(wc, entries, playerFighterId) {
     const top = entries.slice(0, 10);
 
     return `
@@ -134,12 +134,12 @@ export class RankingsView {
 
         <div class="card" style="padding:0.5rem 0.25rem">
           ${top.map((c, i) => `
-            <div class="rank-row ${isMine(c.fighter) ? 'rank-row--mine' : ''}" data-fighter-click="${c.fighter.id}">
+            <div class="rank-row ${isMine(c.fighter, playerFighterId) ? 'rank-row--mine' : ''}" data-fighter-click="${c.fighter.id}">
               <span class="rank-number">#${i + 1}</span>
               <span class="text-sm font-bold" style="flex:1">
                 ${c.fighter.nationality?.code ? getNationalityFlag(c.fighter.nationality.code) + ' ' : ''}${c.fighter.name}
                 ${(c.fighter.titlesWon || 0) > 0 ? '<span class="belt-mark ml-1" title="Já foi campeão"><span class="belt-mark-icon"></span></span>' : ''}
-                ${isMine(c.fighter) ? '<span class="badge badge-danger ml-2" style="font-size:0.6rem">SEU</span>' : ''}
+                ${isMine(c.fighter, playerFighterId) ? '<span class="badge badge-danger ml-2" style="font-size:0.6rem">VOCÊ</span>' : ''}
               </span>
               <span class="text-xs text-muted">${c.fighter.record.wins}-${c.fighter.record.losses}-${c.fighter.record.draws}</span>
               <span class="text-xs font-bold" style="width:3.5rem;text-align:right">${c.fighter.overallRating} OVR</span>

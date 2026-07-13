@@ -7,8 +7,7 @@ import { DataGenerator } from './data-generator.js';
 import { HallOfFame } from './hall-of-fame.js';
 import { generateId, getWeightClassName } from '../utils/helpers.js';
 import {
-  GYM_CONFIG,
-  RIVAL_GYMS,
+  ACADEMIES,
   WORLD_CONFIG,
   CORE_WEIGHT_CLASSES,
   TITLE_CONFIG,
@@ -24,13 +23,15 @@ import {
 // Motor do mundo vivo: cada promoção de IA agenda e realiza os próprios
 // eventos. Lutas do jogador entram nos cards via ofertas aceitas.
 export class WorldService {
-  constructor(db, fighterCtrl, notifService, titleService = null, scoutingService = null, contractService = null) {
+  constructor(db, fighterCtrl, notifService, titleService = null, scoutingService = null, contractService = null, managerService = null, careerLogService = null) {
     this.db = db;
     this.fighterCtrl = fighterCtrl;
     this.notifService = notifService;
     this.titleService = titleService;
     this.scoutingService = scoutingService;
     this.contractService = contractService;
+    this.managerService = managerService;
+    this.careerLogService = careerLogService;
   }
 
   async getPromotions() {
@@ -47,11 +48,11 @@ export class WorldService {
   }
 
   // Tick semanal do mundo. Retorna eventos realizados, destacando os que
-  // envolvem lutadores do jogador (para a transmissão ao vivo).
-  // cornerHooks (opcional): repassado à simulação das lutas do jogador para
+  // envolvem o lutador do jogador (para a transmissão ao vivo).
+  // cornerHooks (opcional): repassado à simulação da luta do jogador para
   // permitir instruções de córner ao vivo entre rounds (ver app.js).
-  async processWeek(absWeekNow, startedAt, gym, cornerHooks = null) {
-    await this._recoverInjuries(absWeekNow);
+  async processWeek(absWeekNow, startedAt, playerFighterId, cornerHooks = null) {
+    await this._recoverInjuries(absWeekNow, playerFighterId);
     if (this.titleService) await this.titleService.reconcileBelts();
 
     const promotions = await this.getPromotions();
@@ -61,7 +62,7 @@ export class WorldService {
     for (const promo of promotions) {
       if (absWeekNow < promo.nextEventAbsWeek) continue;
 
-      const outcome = await this._runEvent(promo, absWeekNow, startedAt, gym, cornerHooks);
+      const outcome = await this._runEvent(promo, absWeekNow, startedAt, playerFighterId, cornerHooks);
       if (!outcome) continue;
 
       if (outcome.playerResults.length > 0) {
@@ -79,30 +80,30 @@ export class WorldService {
     }
 
     await this._refillFreeAgents();
-    await this._processYearEnd(absWeekNow, startedAt);
+    await this._processYearEnd(absWeekNow, playerFighterId, startedAt);
     // G1: verificar cinturões interinos (toda semana)
     await this._checkInterimTitles(absWeekNow, promotions);
 
     return { playerEvents };
   }
 
-  async _runEvent(promo, absWeekNow, startedAt, gym, cornerHooks = null) {
+  async _runEvent(promo, absWeekNow, startedAt, playerFighterId, cornerHooks = null) {
     const bookings = await this._getBookings(promo.id, absWeekNow);
     const playerFighterIds = new Set();
     const bookedIds = new Set();
     const fights = [];
 
-    // 1) Lutas do jogador (ofertas aceitas para este evento)
+    // 1) Luta do jogador (oferta aceita para este evento)
     for (const booking of bookings) {
       const fighter = await this.fighterCtrl.getFighter(booking.fighterId);
       let opponent = await this.fighterCtrl.getFighter(booking.opponentId);
 
-      // gymId !== GYM_CONFIG.ID cobre o caso de o atleta ter sido roubado
-      // por uma academia rival (ou dispensado) depois de aceitar a luta
-      if (!fighter || fighter.gymId !== GYM_CONFIG.ID || fighter.status === 'injured' || fighter.status === 'retired') {
+      // status inválido cobre o caso de o jogador ter se lesionado/aposentado
+      // depois de aceitar a luta
+      if (!fighter || fighter.status === 'injured' || fighter.status === 'retired') {
         booking.status = OFFER_STATUS.CANCELLED;
         await this.db.put('offers', booking);
-        await this.notifService.add('warning', 'Luta Cancelada', `${booking.opponentName ? 'A luta contra ' + booking.opponentName : 'Uma luta'} foi cancelada — seu atleta não pôde competir.`);
+        await this.notifService.add('warning', 'Luta Cancelada', `${booking.opponentName ? 'A luta contra ' + booking.opponentName : 'Uma luta'} foi cancelada — você não pôde competir.`);
         continue;
       }
 
@@ -144,7 +145,7 @@ export class WorldService {
 
     // 1.5) Disputa de cinturão entre lutadores da IA — vira o evento principal
     if (this.titleService) {
-      const aiTitle = await this.titleService.pickAiTitleFight(promo, absWeekNow, bookedIds);
+      const aiTitle = await this.titleService.pickAiTitleFight(promo, absWeekNow, bookedIds, playerFighterId);
       if (aiTitle) {
         bookedIds.add(aiTitle.fighterA.id);
         bookedIds.add(aiTitle.fighterB.id);
@@ -230,7 +231,7 @@ export class WorldService {
       let titleOutcome = null;
       if (fight.titleWeightClass && this.titleService && !result.isDraw) {
         titleOutcome = await this.titleService.resolveTitleFight(
-          promo, fight.titleWeightClass, result.winnerId, result.loserId, absWeekNow
+          promo, fight.titleWeightClass, result.winnerId, result.loserId, absWeekNow, playerFighterId
         );
         result.titleRetained = titleOutcome.retained;
       }
@@ -245,7 +246,7 @@ export class WorldService {
         // Você acabou de passar 15 minutos dentro do octógono com o cara —
         // sabe mais sobre ele do que qualquer olheiro. Tarde demais.
         if (this.scoutingService) await this.scoutingService.observeAfterFight(fighterB.id);
-        await this._settlePlayerFight(fight, result, promo, gym, absWeekNow, titleOutcome);
+        await this._settlePlayerFight(fight, result, promo, absWeekNow, titleOutcome);
       }
     }
 
@@ -280,40 +281,39 @@ export class WorldService {
     return { event, results, playerResults, playerFighterIds };
   }
 
-  async _settlePlayerFight(fight, result, promo, gym, absWeekNow, titleOutcome = null) {
+  async _settlePlayerFight(fight, result, promo, absWeekNow, titleOutcome = null) {
     const { booking } = fight;
-    const fighter = fight.fighterA; // lutador do jogador é sempre o córner A
+    const fighter = fight.fighterA; // o lutador do jogador é sempre o córner A
     const isDraw = !!result.isDraw;
     const won = !isDraw && result.winnerId === fighter.id;
 
     // Épico F1: hype da coletiva vira bônus na bolsa
     const hypeBonus = (fighter.pcHype || 0) * HYPE_PURSE_RATIO;
-    const totalPurse = booking.purse + (won ? booking.winBonus : 0) + hypeBonus;
+    const grossPurse = booking.purse + (won ? booking.winBonus : 0) + hypeBonus;
     // Limpa o hype após usar — não acumular para a próxima luta
     fighter.pcHype = 0;
 
-    // Épico A: usa purseShare do atleta em vez de managerCut fixo da academia
-    const managerCut = 1 - (fighter.purseShare ?? 0.8);
-    const gymCut = Math.round(totalPurse * managerCut);
+    // §A.2/§C.1: o corte já não é da academia — primeiro o contrato de
+    // promoção (purseShare do atleta), depois o empresário (se tiver um).
+    const afterPurseShare = Math.round(grossPurse * (fighter.purseShare ?? 0.8));
+    const { managerCut, netPurse, manager } = this.managerService
+      ? await this.managerService.applyCut(fighter, afterPurseShare)
+      : { managerCut: 0, netPurse: afterPurseShare, manager: null };
 
-    gym.addTransaction(absWeekNow, `Comissão — ${fighter.name} (${promo.short})${hypeBonus > 0 ? ' (c/ hype)' : ''}`, gymCut);
-    gym.totalPurseEarnings += gymCut;
-    fighter.careerEarnings = (fighter.careerEarnings || 0) + totalPurse;
+    fighter.addTransaction(absWeekNow, `Bolsa — ${promo.short}${manager ? ` (empresário: -$${managerCut.toLocaleString()})` : ''}${hypeBonus > 0 ? ' (c/ hype)' : ''}`, netPurse);
+    fighter.careerEarnings = (fighter.careerEarnings || 0) + grossPurse;
 
     if (isDraw) {
-      // Empate não conta como vitória nem derrota no cartel da academia.
-      await this.notifService.add('info', '🤝 Empate', `${fighter.name} empatou com ${result.fighterBName} (${result.method}) no ${promo.nextEventName()}. Comissão: $${gymCut.toLocaleString()}.`);
+      // Empate não conta como vitória nem derrota no cartel.
+      await this.notifService.add('info', '🤝 Empate', `Você empatou com ${result.fighterBName} (${result.method}) no ${promo.nextEventName()}. Bolsa líquida: $${netPurse.toLocaleString()}.`);
     } else if (won) {
-      gym.wins++;
       const isFinish = result.method && !result.method.startsWith('Decision');
-      let rep = GYM_CONFIG.REP_PER_WIN + (GYM_CONFIG.REP_TIER_BONUS[promo.tier] || 0);
-      if (isFinish) rep += GYM_CONFIG.REP_PER_FINISH;
-      gym.updateReputation(rep);
-      await this.notifService.add('success', '🏆 Vitória!', `${fighter.name} venceu ${result.winnerId === result.fighterAId ? result.fighterBName : result.fighterAName} por ${result.method} no ${promo.nextEventName()}. Comissão: $${gymCut.toLocaleString()}.${hypeBonus > 0 ? ` ($${hypeBonus.toLocaleString()} de bônus de hype)` : ''}`);
+      await this.notifService.add('success', '🏆 Vitória!', `Você venceu ${result.winnerId === result.fighterAId ? result.fighterBName : result.fighterAName} por ${result.method} no ${promo.nextEventName()}. Bolsa líquida: $${netPurse.toLocaleString()}.${hypeBonus > 0 ? ` ($${hypeBonus.toLocaleString()} de bônus de hype)` : ''}`);
+      if (this.careerLogService && isFinish) {
+        await this.careerLogService.publish('finish', absWeekNow, promo.tier === 1 ? 70 : 45, { opponentName: result.fighterBName === fighter.name ? result.fighterAName : result.fighterBName, method: result.method, promo: promo.short });
+      }
     } else {
-      gym.losses++;
-      gym.updateReputation(GYM_CONFIG.REP_PER_LOSS);
-      await this.notifService.add('warning', 'Derrota', `${fighter.name} foi derrotado por ${result.winnerName} (${result.method}). Comissão da bolsa: $${gymCut.toLocaleString()}.`);
+      await this.notifService.add('warning', 'Derrota', `Você foi derrotado por ${result.winnerName} (${result.method}). Bolsa líquida: $${netPurse.toLocaleString()}.`);
     }
 
     // Título em empate: o campeão retém automaticamente (regra real do MMA) —
@@ -324,14 +324,15 @@ export class WorldService {
         'info',
         '🛡️ Cinturão Mantido (Empate)',
         booking.titleRole === TITLE_ROLE.DEFENSE
-          ? `${fighter.name} empatou e mantém o cinturão ${division} do ${promo.short}.`
-          : `${fighter.name} empatou pelo cinturão ${division} — o campeão atual mantém o título.`
+          ? `Você empatou e mantém o cinturão ${division} do ${promo.short}.`
+          : `Você empatou pelo cinturão ${division} — o campeão atual mantém o título.`
       );
     }
 
     // Expõe dados financeiros no resultado para a tela pós-luta
-    result._purse = totalPurse;
-    result._gymCut = gymCut;
+    result._purse = grossPurse;
+    result._netPurse = netPurse;
+    result._managerCut = managerCut;
     result._hypeBonus = hypeBonus;
     result._won = won;
 
@@ -339,23 +340,23 @@ export class WorldService {
     if (titleOutcome) {
       const division = titleOutcome.division;
       if (won) {
-        const rep = titleOutcome.retained ? TITLE_CONFIG.REP_ON_DEFENSE : TITLE_CONFIG.REP_ON_TITLE_WIN;
-        gym.updateReputation(rep);
         await this.notifService.add(
           'achievement',
           titleOutcome.retained ? '🛡️ Cinturão Defendido!' : '🏆 CAMPEÃO!',
           titleOutcome.retained
-            ? `${fighter.name} defendeu o cinturão ${division} do ${promo.short} pela ${titleOutcome.defenses}ª vez.`
-            : `${fighter.name} é o novo campeão ${division} do ${promo.name}. A academia inteira sente.`
+            ? `Você defendeu o cinturão ${division} do ${promo.short} pela ${titleOutcome.defenses}ª vez.`
+            : `Você é o novo campeão ${division} do ${promo.name}!`
         );
+        if (this.careerLogService) {
+          await this.careerLogService.publish('title_won', absWeekNow, titleOutcome.retained ? 60 : 95, { division, promo: promo.short, defense: titleOutcome.retained });
+        }
       } else {
-        gym.updateReputation(TITLE_CONFIG.REP_ON_TITLE_LOSS);
         await this.notifService.add(
           'warning',
           booking.titleRole === TITLE_ROLE.DEFENSE ? '💔 Cinturão Perdido' : 'Chance Desperdiçada',
           booking.titleRole === TITLE_ROLE.DEFENSE
-            ? `${fighter.name} perdeu o cinturão ${division} para ${result.winnerName}.`
-            : `${fighter.name} não conquistou o cinturão ${division}. Vai precisar reconstruir o cartel.`
+            ? `Você perdeu o cinturão ${division} para ${result.winnerName}.`
+            : `Você não conquistou o cinturão ${division}. Vai precisar reconstruir o cartel.`
         );
       }
     }
@@ -371,7 +372,7 @@ export class WorldService {
     // Épico B: consumir luta do contrato exclusivo. `null` = empate — não
     // reseta nem incrementa derrotas seguidas (não é vitória nem derrota).
     if (this.contractService) {
-      await this.contractService.consumeFight(fighter.id, isDraw ? null : won, gym, absWeekNow);
+      await this.contractService.consumeFight(fighter.id, isDraw ? null : won, absWeekNow);
     }
   }
 
@@ -464,22 +465,21 @@ export class WorldService {
     fighter.injury = {
       untilAbsWeek: absWeekNow + weeks,
       description: `Lesionado por ${weeks} semanas`,
-      // Volta exatamente para onde estava. Derivar de `gymId` fazia um atleta
-      // de academia RIVAL voltar como 'gym' — status do jogador.
+      // Volta exatamente para onde estava.
       resumeStatus: fighter.status,
     };
     fighter.status = 'injured';
   }
 
-  async _recoverInjuries(absWeekNow) {
+  async _recoverInjuries(absWeekNow, playerFighterId) {
     const injured = await this.db.getIndex('fighters', 'status', 'injured');
     for (const data of injured) {
       if (!data.injury || data.injury.untilAbsWeek > absWeekNow) continue;
       const fighter = new Fighter(data);
-      fighter.status = fighter.injury.resumeStatus || (fighter.gymId ? 'gym' : 'roster');
+      fighter.status = fighter.injury.resumeStatus || 'roster';
       fighter.injury = null;
       await this.db.put('fighters', fighter);
-      if (fighter.gymId === GYM_CONFIG.ID) {
+      if (fighter.id === playerFighterId) {
         await this.notifService.add('success', 'Recuperado', `${fighter.name} está liberado pelo departamento médico.`);
       }
     }
@@ -498,7 +498,6 @@ export class WorldService {
     }
   }
 
-  // G1: verifica cinturões interinos.
   // G1: verifica cinturões interinos.
   // 1. Se campeão está lesionado 12+ semanas → cria cinturão interino
   // 2. Se interino existe e campeão original já se recuperou → promove interino a definitivo
@@ -528,10 +527,6 @@ export class WorldService {
 
         // FASE 2: Promover interino a definitivo — só quando o campeão
         // original REALMENTE não volta mais (se aposentou ou saiu do banco).
-        // Bug anterior: a condição era `champ.status !== 'injured'`, que
-        // também vale pra um campeão SAUDÁVEL recém-recuperado — como
-        // `_recoverInjuries` roda antes disto no mesmo processWeek, o
-        // interino tomava o cinturão do campeão de volta sem nenhuma luta.
         const interimId = promo.interimChampionOf(wc);
         if (interimId) {
           const championGone = !champ || champ.status === 'retired';
@@ -550,8 +545,9 @@ export class WorldService {
       await this.db.put('organization', promo);
     }
   }
+
   // Virada de ano (semana 52): aposentadorias e nova safra de prospectos
-  async _processYearEnd(absWeekNow, startedAt = null) {
+  async _processYearEnd(absWeekNow, playerFighterId, startedAt = null) {
     if (absWeekNow % 52 !== 0) return;
     const inGameNowISO = absWeekToDate(absWeekNow, startedAt).toISOString();
 
@@ -569,10 +565,10 @@ export class WorldService {
       if (chance > 0 && Math.random() < chance) {
         f.status = 'retired';
         f.organizationId = null;
-        const wasGymFighter = f.gymId === GYM_CONFIG.ID;
-        f.gymId = null;
+        const wasPlayerFighter = f.id === playerFighterId;
+        f.academyId = null;
         // Fase 1: ex-atletas do jogador nunca são purgados do banco (abaixo).
-        if (wasGymFighter) f.wasPlayerFighter = true;
+        if (wasPlayerFighter) f.wasPlayerFighter = true;
 
         // Campeão que pendura as luvas deixa o cinturão vago.
         const vacated = this.titleService ? await this.titleService.vacateBeltsOf(f.id) : [];
@@ -587,10 +583,9 @@ export class WorldService {
           }
         }
 
-        if (wasGymFighter) {
+        if (wasPlayerFighter) {
           await this.notifService.add('hall-of-fame', '🏆 Aposentadoria',
             `${f.name} pendurou as luvas aos ${age} anos após uma carreira histórica. Clique para ver a cerimônia.`);
-          // Marca o último aposentado para a tela de cerimônia
           const gameState = await this.db.get('gameState', 'state');
           if (gameState) {
             gameState.meta = gameState.meta || {};
@@ -620,29 +615,26 @@ export class WorldService {
     }
 
     // Fase 1: todo prospecto entra no circuito regional com roster ATIVO —
-    // sem isso eles nunca aparecem em evento nenhum (_buildAiCard/_findReplacement
-    // só olham status==='roster') e ficam "soltos" pra sempre, sem cartel,
-    // sem chance de subir. RIVAL_GYMS não tem promoção própria — a academia
-    // rival só empresta o gymId; quem decide se ele luta é a promoção regional.
+    // sem isso eles nunca aparecem em evento nenhum e ficam "soltos" pra
+    // sempre, sem cartel, sem chance de subir. Uma fração entra já afiliada
+    // a uma Academia (flavor de mundo vivo, §A.3 — sem mecânica de "roubo",
+    // só cor local: "fulano já chegou contratado pela Fortaleza MMA").
     const tier3Promos = PROMOTIONS.filter(p => p.tier === 3);
-    const rivalGyms = RIVAL_GYMS.filter(g => g.id !== GYM_CONFIG.ID);
-    let distributed = 0;
+    let affiliated = 0;
     for (const p of prospects) {
       p.status = 'roster';
       p.organizationId = tier3Promos[Math.floor(Math.random() * tier3Promos.length)].id;
-      if (rivalGyms.length > 0 && Math.random() < 0.4) {
-        const rival = rivalGyms[Math.floor(Math.random() * rivalGyms.length)];
-        p.gymId = rival.id;
-        distributed++;
+      if (ACADEMIES.length > 0 && Math.random() < 0.4) {
+        const academy = ACADEMIES[Math.floor(Math.random() * ACADEMIES.length)];
+        p.academyId = academy.id;
+        affiliated++;
       }
       await this.db.put('fighters', p);
     }
 
     // Fase 1b: escada de tiers — promove destaques do regional pro Nacional
     // e do Nacional pra Elite, relegando os piores de cima pra abrir vaga.
-    // Sem isso o elenco de Nacional/Elite fica fixo desde o bootstrap do
-    // mundo pra sempre (só envelhece e aposenta, nunca recebe sangue novo).
-    await this._processTierMovement(absWeekNow);
+    await this._processTierMovement(absWeekNow, playerFighterId);
 
     // Fase 1: teto de populacao — aposenta veteranos IA irrelevantes se excedeu
     const allNow = await this.fighterCtrl.getAllFighters();
@@ -650,7 +642,7 @@ export class WorldService {
     if (activeCount > WORLD_CONFIG.POPULATION_CAP) {
       const toTrim = activeCount - WORLD_CONFIG.POPULATION_CAP;
       const candidates = allNow
-        .filter(f => f.gymId !== GYM_CONFIG.ID && (f.age || 28) >= 32 && f.overallRating < 60)
+        .filter(f => f.id !== playerFighterId && (f.age || 28) >= 32 && f.overallRating < 60)
         .sort((a, b) => (a.overallRating || 0) - (b.overallRating || 0));
       let trimmed = 0;
       for (const c of candidates) {
@@ -674,28 +666,27 @@ export class WorldService {
     worldGen.totalGenerated = (worldGen.totalGenerated || 0) + count;
     await this.db.put('gameState', worldGen);
 
-    const msg = `${count} jovens prospectos chegaram ao mercado${distributed > 0 ? ` (${distributed} ja contratados por academias rivais)` : ''}.`;
+    const msg = `${count} jovens prospectos chegaram ao mercado${affiliated > 0 ? ` (${affiliated} já afiliados a academias)` : ''}.`;
     await this.notifService.add('success', 'Nova Safra', msg);
   }
 
-  // Fase 1b: escada de tiers pra lutadores de IA — espelha o Épico B do
-  // jogador (ContractService), mas pra quem a IA controla. Sobe do tier
-  // mais baixo pro mais alto (3→2→1) pra um lutador recém-promovido já
-  // poder, em tese, ser avaliado de novo daqui a um ano.
-  async _processTierMovement(absWeekNow) {
+  // Fase 1b: escada de tiers pra lutadores de IA. Sobe do tier mais baixo
+  // pro mais alto (3→2→1) pra um lutador recém-promovido já poder, em
+  // tese, ser avaliado de novo daqui a um ano.
+  async _processTierMovement(absWeekNow, playerFighterId) {
     const promotions = await this.getPromotions();
     const byTier = { 1: [], 2: [], 3: [] };
     for (const p of promotions) (byTier[p.tier] || []).push(p);
 
-    await this._promoteTier(byTier[3], byTier[2], OFFER_CONFIG.TIER_GATES[2]);
-    await this._promoteTier(byTier[2], byTier[1], OFFER_CONFIG.TIER_GATES[1]);
+    await this._promoteTier(byTier[3], byTier[2], OFFER_CONFIG.TIER_GATES[2], playerFighterId);
+    await this._promoteTier(byTier[2], byTier[1], OFFER_CONFIG.TIER_GATES[1], playerFighterId);
   }
 
   // Promove os destaques de `fromPromos` (que batem `gate`) pra `toPromos`,
   // relegando os piores de `toPromos` de volta pra `fromPromos` quando a
   // promoção de cima já está no teto de elenco — sempre tem alguém descendo
   // quando alguém sobe, pra não inflar o elenco sem limite.
-  async _promoteTier(fromPromos, toPromos, gate) {
+  async _promoteTier(fromPromos, toPromos, gate, playerFighterId) {
     if (fromPromos.length === 0 || toPromos.length === 0 || !gate) return;
 
     const candidates = [];
@@ -704,7 +695,7 @@ export class WorldService {
       for (const data of roster) {
         const f = new Fighter(data);
         // O jogador sobe de tier via ContractService, não por aqui.
-        if (f.status !== 'roster' || f.gymId === GYM_CONFIG.ID) continue;
+        if (f.status !== 'roster' || f.id === playerFighterId) continue;
         const meetsWins = (f.record?.wins || 0) >= gate.wins;
         const meetsPop = (f.popularity || 0) >= gate.popularity;
         if (!meetsWins && !meetsPop) continue;
@@ -724,7 +715,7 @@ export class WorldService {
       let roomLeft = toPromo.rosterSize - (await this._activeRosterCount(toPromo.id));
       const wanted = Math.min(maxPerPromo, candidates.length - cursor);
       if (roomLeft < wanted) {
-        roomLeft += await this._relegateWorst(toPromo, fromPromos, TIER_MOVEMENT_CONFIG.MAX_RELEGATIONS_PER_YEAR);
+        roomLeft += await this._relegateWorst(toPromo, fromPromos, TIER_MOVEMENT_CONFIG.MAX_RELEGATIONS_PER_YEAR, playerFighterId);
       }
 
       let promotedHere = 0;
@@ -754,13 +745,13 @@ export class WorldService {
 
   // Relega os piores lutadores (menor OVR, exceto campeões atuais) de
   // `promo` pra uma das `targetPromos` (tier abaixo) — abre vaga.
-  async _relegateWorst(promo, targetPromos, maxCount) {
+  async _relegateWorst(promo, targetPromos, maxCount, playerFighterId) {
     if (targetPromos.length === 0) return 0;
     const roster = await this.db.getIndex('fighters', 'organizationId', promo.id);
     const champions = new Set(Object.values(promo.champions || {}).filter(Boolean));
     const active = roster
       .map(d => new Fighter(d))
-      .filter(f => f.status === 'roster' && f.gymId !== GYM_CONFIG.ID && !champions.has(f.id))
+      .filter(f => f.status === 'roster' && f.id !== playerFighterId && !champions.has(f.id))
       .sort((a, b) => a.overallRating - b.overallRating);
 
     let relegated = 0;
@@ -775,8 +766,8 @@ export class WorldService {
   }
 
   // Fase 1: mantém o store 'fighters' limitado. Aposentados de IA sem relevância
-  // (nunca foram do jogador, não entraram no Hall da Fama) não têm valor de jogo
-  // e só pesam nas leituras semanais de getAllFighters(). Lendas e ex-atletas do
+  // (nunca foram o jogador, não entraram no Hall da Fama) não têm valor de jogo
+  // e só pesam nas leituras semanais de getAllFighters(). Lendas e o próprio
   // jogador são preservados. Rivalidades órfãs do purgado também são removidas.
   async _purgeForgettableRetired() {
     const all = await this.fighterCtrl.getAllFighters();
@@ -786,7 +777,7 @@ export class WorldService {
     const rivalries = await this.db.getAll('rivalries');
     let purged = 0;
     for (const f of retired) {
-      if (f.wasPlayerFighter) continue;                 // ex-atleta do jogador
+      if (f.wasPlayerFighter) continue;                 // o próprio jogador
       const legend = await this.db.get('hallOfFame', f.id);
       if (legend) continue;                             // lenda: fica no Hall da Fama
       await this.db.delete('fighters', f.id);

@@ -1,5 +1,4 @@
 import { formatCurrency, formatDate, getWeightClassShort, getWeightClassLabel, getNationalityFlag, getAdjacentWeightClasses, clamp } from '../utils/helpers.js';
-import { GYM_CONFIG } from '../config/game-config.js';
 
 export class FighterProfileView {
   // G3: gráfico de carreira — OVR do atleta em cada luta (fighterRating é
@@ -46,7 +45,7 @@ export class FighterProfileView {
     `;
   }
 
-  static render(fighter, fightHistory = []) {
+  static render(fighter, fightHistory = [], isPlayer = false) {
     const displayHistory = fightHistory.length > 0 ? fightHistory : fighter.fights || [];
 
     const attrBars = (attrs, label, colorClass) => {
@@ -151,7 +150,7 @@ export class FighterProfileView {
         <div class="card">
           <div class="card-title">Status</div>
           <div class="stat-value" style="font-size:1.25rem">
-            <span class="badge ${fighter.gymId === GYM_CONFIG.ID ? 'badge-success' : fighter.status === 'roster' ? 'badge-info' : 'badge-warning'}">${fighter.gymId === GYM_CONFIG.ID ? 'Sua Academia' : fighter.status === 'roster' ? 'Contratado' : 'Agente Livre'}</span>
+            <span class="badge ${isPlayer ? 'badge-success' : fighter.status === 'roster' ? 'badge-info' : 'badge-warning'}">${isPlayer ? 'Você' : fighter.status === 'roster' ? 'No circuito' : 'Agente Livre'}</span>
           </div>
           <div class="stat-label">Fadiga: ${fighter.fatigue}% · Moral: ${fighter.morale}%</div>
         </div>
@@ -333,7 +332,7 @@ export class FighterProfileView {
             </div>
           </div>
         </div>
-        ${fighter.gymId === GYM_CONFIG.ID ? (() => {
+        ${isPlayer ? (() => {
           const adj = getAdjacentWeightClasses(fighter.weightClass);
           const options = [];
           if (adj.up) options.push({ dir: 'up', label: `Subir para ${getWeightClassShort(adj.up)} (menos peso)`, cost: 5000, attrPenalty: 'power -3, strength -2', attrBonus: 'speed +2, cardio +1' });

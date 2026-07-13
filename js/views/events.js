@@ -363,15 +363,14 @@ export class EventsView {
   // ===== Resumo de período (simular meses/anos de uma vez) =====
 
   static renderPeriodSummary(result) {
-    const { weeksSimulated, offersAccepted, rivalSignings, poachedFighters, cashDelta, repDelta, winsDelta, lossesDelta, fightResults, milestonesUnlocked } = result;
+    const { weeksSimulated, offersAccepted, cashDelta, popularityDelta, winsDelta, lossesDelta, fightResults, milestonesUnlocked } = result;
 
     const fightsHtml = fightResults.length === 0
-      ? '<div class="empty-state"><p>Nenhuma luta da sua equipe durante o período — só o tempo passou.</p></div>'
+      ? '<div class="empty-state"><p>Nenhuma luta sua durante o período — só o tempo passou.</p></div>'
       : fightResults.map(f => `
           <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
             <div>
               <span class="badge ${f.won === true ? 'badge-success' : f.won === null ? 'badge-warning' : 'badge-danger'}">${f.won === true ? 'VITÓRIA' : f.won === null ? 'EMPATE' : 'DERROTA'}</span>
-              <span class="text-sm font-bold ml-2">${f.fighterName}</span>
               <span class="text-xs text-muted"> vs ${f.opponentName} · ${f.method} · ${f.promoName}</span>
             </div>
           </div>
@@ -383,16 +382,6 @@ export class EventsView {
         ${milestonesUnlocked.map(id => `<div class="text-sm" style="padding:0.4rem 0">${MILESTONE_LABELS[id] || id}</div>`).join('')}
       </div>
     `;
-
-    const rivalHtml = (rivalSignings > 0 || (poachedFighters && poachedFighters.length > 0)) ? `
-      <div class="section-label" data-reveal>Movimentação das Academias Rivais</div>
-      <div class="card mb-4" data-reveal>
-        ${poachedFighters && poachedFighters.length > 0 ? poachedFighters.map(p => `
-          <div class="text-sm" style="padding:0.4rem 0;color:var(--danger)">💔 ${p.fighterName} foi seduzido pela ${p.gymName}</div>
-        `).join('') : ''}
-        ${rivalSignings > 0 ? `<div class="text-sm text-muted" style="padding:0.4rem 0">As academias rivais fecharam ${rivalSignings} ${rivalSignings === 1 ? 'contratação' : 'contratações'} no mercado de agentes livres.</div>` : ''}
-      </div>
-    ` : '';
 
     return `
       <div class="page-header">
@@ -406,8 +395,8 @@ export class EventsView {
           <div class="stat-value ${cashDelta >= 0 ? 'text-success' : 'text-danger'}" style="font-size:1.6rem">${cashDelta >= 0 ? '+' : ''}${formatCurrency(cashDelta)}</div>
         </div>
         <div class="card stat-card">
-          <div class="card-header"><span class="card-title">Reputação</span></div>
-          <div class="stat-value ${repDelta >= 0 ? 'text-success' : 'text-danger'}">${repDelta >= 0 ? '+' : ''}${repDelta}</div>
+          <div class="card-header"><span class="card-title">Popularidade</span></div>
+          <div class="stat-value ${popularityDelta >= 0 ? 'text-success' : 'text-danger'}">${popularityDelta >= 0 ? '+' : ''}${popularityDelta}</div>
         </div>
         <div class="card stat-card">
           <div class="card-header"><span class="card-title">Cartel no Período</span></div>
@@ -420,9 +409,8 @@ export class EventsView {
       </div>
 
       ${milestonesHtml}
-      ${rivalHtml}
 
-      <div class="section-label" data-reveal>Lutas da Equipe no Período</div>
+      <div class="section-label" data-reveal>Suas Lutas no Período</div>
       <div class="card mb-4" data-reveal>
         ${fightsHtml}
       </div>

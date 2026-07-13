@@ -28,71 +28,39 @@ export class FighterController {
     return all.map(d => new Fighter(d));
   }
 
-  // Lutadores treinados por uma academia (equipe do jogador)
-  async getTeam(gymId) {
-    const all = await this.db.getIndex('fighters', 'gymId', gymId);
-    return all.map(d => new Fighter(d)).filter(f => f.status !== 'retired');
+  // O lutador do jogador — identidade (career.playerFighterId), não posse
+  // de academia. Ver spec §A.6.
+  async getPlayerFighter() {
+    const career = await this.db.get('gameState', 'career');
+    if (!career?.playerFighterId) return null;
+    return await this.getFighter(career.playerFighterId);
   }
 
-  async recruitToGym(fighterId, gymId, absWeekNow = 0) {
+  async setPlayerFighterId(fighterId) {
+    await this.db.put('gameState', { id: 'career', playerFighterId: fighterId });
+  }
+
+  // Troca de academia (substitui recruitToGym — não é mais "ser recrutado
+  // por um negócio", é escolher onde treinar). Registra a academia anterior
+  // pra detecção de reencontro (Épico F4) e reseta parcialmente a sinergia
+  // com o técnico (§C.2, SYNERGY_CONFIG.CARRY_OVER_RATIO é aplicado pelo
+  // chamador, que já tem acesso à config).
+  async setAcademy(fighterId, academyId, absWeekNow = 0) {
     const fighter = await this.getFighter(fighterId);
     if (!fighter) return null;
 
-    fighter.gymId = gymId;
-    fighter.gymJoinedAbsWeek = absWeekNow;
-    fighter.status = 'gym';
-    fighter.organizationId = null;
-    fighter.contract = null;
-    fighter.applyMoraleChange(10);
+    if (fighter.academyId && fighter.academyId !== academyId && !fighter.previousAcademyIds.includes(fighter.academyId)) {
+      fighter.previousAcademyIds.push(fighter.academyId);
+    }
+    fighter.academyId = academyId;
+    fighter.academyJoinedAbsWeek = absWeekNow;
 
     await this.db.put('fighters', fighter);
     return new Fighter(fighter);
-  }
-
-  async releaseFromGym(fighterId) {
-    const fighter = await this.getFighter(fighterId);
-    if (!fighter) return false;
-
-    // Épico F4: registrar academia anterior antes de soltar
-    if (fighter.gymId && !fighter.previousGymIds.includes(fighter.gymId)) {
-      fighter.previousGymIds.push(fighter.gymId);
-    }
-    fighter.gymId = null;
-    fighter.status = 'free';
-
-    await this.db.put('fighters', fighter);
-    return true;
   }
 
   async saveFighter(fighter) {
     await this.db.put('fighters', fighter);
-  }
-
-  async hireFighter(fighterId, organizationId, contractData) {
-    const fighter = await this.getFighter(fighterId);
-    if (!fighter) return null;
-
-    const contract = new Contract(contractData);
-
-    fighter.status = 'roster';
-    fighter.organizationId = organizationId;
-    fighter.contract = contract;
-    fighter.applyMoraleChange(10);
-
-    await this.db.put('fighters', fighter);
-    return new Fighter(fighter);
-  }
-
-  async fireFighter(fighterId) {
-    const fighter = await this.getFighter(fighterId);
-    if (!fighter) return false;
-
-    fighter.status = 'free';
-    fighter.organizationId = null;
-    fighter.contract = null;
-
-    await this.db.put('fighters', fighter);
-    return true;
   }
 
   async updateFighter(fighter) {

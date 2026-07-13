@@ -23,13 +23,14 @@ export class SaveService {
     try {
       const data = JSON.parse(json);
       const state = (data.gameState || []).find(s => s.id === 'state');
-      const gym = (data.gameState || []).find(s => s.id === 'gym');
+      const career = (data.gameState || []).find(s => s.id === 'career');
+      const fighter = career?.playerFighterId ? data.fighters?.find(f => f.id === career.playerFighterId) : null;
       return {
         slot: slotIndex, exists: true,
         week: state?.week || '?', year: state?.year || '?',
-        gymName: gym?.name || 'Desconhecido',
+        fighterName: fighter?.name || 'Sem lutador',
         exportedAt: data.exportedAt || null,
-        rosterSize: data.fighters?.filter(f => f.status === 'gym').length || 0,
+        rosterSize: fighter ? 1 : 0,
       };
     } catch {
       return { slot: slotIndex, exists: true, corrupted: true };
@@ -45,7 +46,7 @@ export class SaveService {
   }
 
   async exportSave() {
-    const data = { exportedAt: new Date().toISOString(), version: 2 };
+    const data = { exportedAt: new Date().toISOString(), version: 3 };
     for (const store of STORES) {
       data[store] = await this.db.getAll(store);
     }
@@ -101,8 +102,9 @@ export class SaveService {
     const fighters = await this.db.getAll('fighters');
     const events = await this.db.getAll('events');
     const state = await this.db.get('gameState', 'state');
+    const career = await this.db.get('gameState', 'career');
     return {
-      rosterSize: fighters.filter(f => f.status === 'gym').length,
+      rosterSize: career?.playerFighterId ? 1 : 0,
       freeAgents: fighters.filter(f => f.status === 'free').length,
       totalEvents: events.length,
       week: state?.week || 1, year: state?.year || 1,

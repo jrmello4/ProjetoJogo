@@ -1,5 +1,5 @@
 const DB_NAME = 'MMAManagerDB';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 export class DB {
   constructor() {
@@ -21,10 +21,12 @@ export class DB {
           fighterStore.createIndex('organizationId', 'organizationId');
         }
 
-        // v6 — modo academia: índice por academia + store de ofertas
+        // v7 — carreira de 1 lutador: sem posse de academia, sem índice
+        // por dono. "Quem é o jogador" agora é identidade (career.playerFighterId),
+        // não um índice de fighters — ver docs/superpowers/specs/2026-07-13-carreira-sistemica-1-lutador-design.md §A.6.
         const fighterStore = tx.objectStore('fighters');
-        if (!fighterStore.indexNames.contains('gymId')) {
-          fighterStore.createIndex('gymId', 'gymId');
+        if (fighterStore.indexNames.contains('gymId')) {
+          fighterStore.deleteIndex('gymId');
         }
 
         if (!db.objectStoreNames.contains('offers')) {

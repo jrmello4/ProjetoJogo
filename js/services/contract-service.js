@@ -1,5 +1,5 @@
 import { generateId, clamp, formatCurrency } from '../utils/helpers.js';
-import { OFFER_CONFIG, PROMOTIONS, GYM_CONFIG, TIER_LABELS } from '../config/game-config.js';
+import { OFFER_CONFIG, PROMOTIONS, TIER_LABELS } from '../config/game-config.js';
 
 // Ciclo de vida dos contratos exclusivos com promoções (Épico B).
 // Fluxo: proposta → aceite → vigência → expiração/corte/rescisão.
@@ -26,14 +26,14 @@ export class ContractService {
   // caminho pra tirá-lo de lá. `_currentTier` já devolve o tier MAIS ALTO
   // cujo gate de vitórias/popularidade o lutador bate (1 = elite); a
   // proposta é para ESSE tier, não um acima dele.
-  async generateOffers(fighter, absWeekNow, gym) {
+  async generateOffers(fighter, absWeekNow, academyReputation = 50) {
     if (fighter.promotionContract?.status === 'active') return; // já tem contrato
 
     const targetTier = this._currentTier(fighter);
     if (targetTier >= 3) return; // ainda não bate nem o gate de tier 2
 
     const gate = OFFER_CONFIG.TIER_GATES[targetTier];
-    const eligible = this._checkGate(fighter, targetTier, gate, gym?.reputation || 50);
+    const eligible = this._checkGate(fighter, targetTier, gate, academyReputation);
     if (!eligible) return; // bate wins/popularidade mas a reputação da academia ainda não acompanha
 
     // Buscar promoções do tier alvo
@@ -123,7 +123,7 @@ export class ContractService {
   }
 
   // Consome uma luta do contrato - chamado após settlePlayerFight
-  async consumeFight(fighterId, won, gym = null, absWeekNow = null) {
+  async consumeFight(fighterId, won, absWeekNow = null, academyReputation = 50) {
     const fighter = await this.fighterCtrl.getFighter(fighterId);
     if (!fighter || !fighter.promotionContract) return;
 
@@ -147,7 +147,7 @@ export class ContractService {
     // acima antes de renovar automaticamente no mesmo tier de sempre.
     if (contract.fightsRemaining <= 0) {
       contract.status = 'expired';
-      await this._handleExpiration(fighter, gym, absWeekNow ?? contract.signedAtAbsWeek);
+      await this._handleExpiration(fighter, academyReputation, absWeekNow ?? contract.signedAtAbsWeek);
       return;
     }
 
@@ -159,11 +159,11 @@ export class ContractService {
   // no atual) em vez de renovar sozinho para sempre no mesmo tier — sem
   // isso, um campeão que nunca perde 2 seguidas jamais era reavaliado e
   // ficava preso no tier em que assinou o primeiro contrato.
-  async _handleExpiration(fighter, gym, absWeekNow) {
+  async _handleExpiration(fighter, academyReputation, absWeekNow) {
     const oldContract = fighter.promotionContract;
     const targetTier = oldContract.tier - 1;
     const gate = targetTier >= 1 ? OFFER_CONFIG.TIER_GATES[targetTier] : null;
-    const eligible = gate && this._checkGate(fighter, targetTier, gate, gym?.reputation ?? 50);
+    const eligible = gate && this._checkGate(fighter, targetTier, gate, academyReputation ?? 50);
 
     if (!eligible) {
       await this._autoRenew(fighter);
@@ -253,14 +253,14 @@ export class ContractService {
     await this.fighterCtrl.updateFighter(fighter);
   }
 
-  // Rescisão antecipada com multa — gym é passado pelo caller
-  async terminate(fighter, absWeekNow, gym) {
+  // Rescisão antecipada com multa — sai do caixa pessoal do lutador (§A.2)
+  async terminate(fighter, absWeekNow) {
     if (fighter.promotionContract?.status !== 'active') return false;
 
     const contract = fighter.promotionContract;
     const fine = Math.round(contract.fightsRemaining * contract.basePurse * 0.5);
 
-    if (gym.cash < fine) {
+    if (fighter.cash < fine) {
       await this.notifService.add(
         'danger',
         'Multa alta demais',
@@ -269,7 +269,7 @@ export class ContractService {
       return false;
     }
 
-    gym.addTransaction(absWeekNow, `Multa rescisória: ${fighter.name}`, -fine);
+    fighter.addTransaction(absWeekNow, `Multa rescisória: ${fighter.name}`, -fine);
 
     contract.status = 'terminated';
     fighter.promotionContract = contract;
@@ -303,7 +303,7 @@ export class ContractService {
     return 3;
   }
 
-  _checkGate(fighter, targetTier, gate, gymRep) {
+  _checkGate(fighter, targetTier, gate, academyReputation) {
     const wins = fighter.record?.wins || 0;
     const pop = fighter.popularity || 0;
 
@@ -311,7 +311,7 @@ export class ContractService {
     const meetsPop = pop >= gate.popularity;
     if (!meetsWins && !meetsPop) return false;
 
-    return gymRep >= gate.gymRep;
+    return academyReputation >= gate.gymRep;
   }
 
   _buildProposal(fighter, promo, absWeekNow) {

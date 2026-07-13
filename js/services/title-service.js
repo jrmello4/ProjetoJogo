@@ -2,7 +2,7 @@ import { Promotion } from '../models/promotion.js';
 import { Fighter } from '../models/fighter.js';
 import { RankingService } from './ranking.js';
 import { getWeightClassName } from '../utils/helpers.js';
-import { TITLE_CONFIG, TITLE_ROLE, CORE_WEIGHT_CLASSES, GYM_CONFIG } from '../config/game-config.js';
+import { TITLE_CONFIG, TITLE_ROLE, CORE_WEIGHT_CLASSES } from '../config/game-config.js';
 
 // Cinturões: quem detém, quem desafia, e o que acontece quando o cinturão
 // troca de mãos. Toda a regra de título vive aqui — nem o OfferService nem
@@ -68,7 +68,7 @@ export class TitleService {
   // ===== Consulta =====
 
   // Todos os cinturões do mundo, com o campeão resolvido. Para a tela de Rankings.
-  async getBeltMap() {
+  async getBeltMap(playerFighterId = null) {
     const promotions = await this._promotions();
     const belts = [];
 
@@ -85,7 +85,7 @@ export class TitleService {
           weightClass: wc,
           champion,
           defenses: promo.defensesOf(wc),
-          isPlayerFighter: champion?.gymId === GYM_CONFIG.ID,
+          isPlayerFighter: !!playerFighterId && champion?.id === playerFighterId,
           topContender: contenders[0] || null,
           contenders: contenders.slice(0, 5),
         });
@@ -254,7 +254,7 @@ export class TitleService {
   }
 
   // ===== Disputa de cinturão entre lutadores da IA =====
-  async pickAiTitleFight(promo, absWeekNow, excludeIds) {
+  async pickAiTitleFight(promo, absWeekNow, excludeIds, playerFighterId = null) {
     const isTitleEvent = (promo.eventsHosted + 1) % TITLE_CONFIG.AI_TITLE_FIGHT_EVERY === 0;
     if (!isTitleEvent) return null;
 
@@ -265,22 +265,21 @@ export class TitleService {
       const active = await this._resolveActiveChampion(promo, wc, absWeekNow);
 
       if (active && !active.busy) {
-        // O campeão do jogador não é escalado pela IA — ele decide se defende.
-        // Campeão de academia rival, sim: ele segue no circuito.
-        if (active.champ.gymId === GYM_CONFIG.ID) continue;
+        // O campeão jogador não é escalado pela IA — ele decide se defende.
+        if (active.champ.id === playerFighterId) continue;
         if (excludeIds.has(active.champ.id)) continue;
 
         const challenger = await this.mandatoryChallenger(promo, wc, absWeekNow, excludeIds);
-        if (!challenger || challenger.gymId === GYM_CONFIG.ID) continue; // o jogador decide suas lutas
+        if (!challenger || challenger.id === playerFighterId) continue; // o jogador decide suas lutas
         return { fighterA: active.champ, fighterB: challenger, weightClass: wc, role: TITLE_ROLE.DEFENSE };
       }
 
       if (!active) {
         // Cinturão vago: os dois melhores disputam.
         const first = await this.mandatoryChallenger(promo, wc, absWeekNow, excludeIds);
-        if (!first || first.gymId === GYM_CONFIG.ID) continue;
+        if (!first || first.id === playerFighterId) continue;
         const second = await this.mandatoryChallenger(promo, wc, absWeekNow, new Set([...excludeIds, first.id]));
-        if (!second || second.gymId === GYM_CONFIG.ID) continue;
+        if (!second || second.id === playerFighterId) continue;
         return { fighterA: first, fighterB: second, weightClass: wc, role: TITLE_ROLE.VACANT };
       }
     }
@@ -290,7 +289,7 @@ export class TitleService {
   // ===== Resolução =====
   // Troca (ou mantém) o cinturão. Devolve o que aconteceu para quem chamar
   // aplicar reputação/popularidade e disparar conquistas.
-  async resolveTitleFight(promo, weightClass, winnerId, loserId, absWeekNow) {
+  async resolveTitleFight(promo, weightClass, winnerId, loserId, absWeekNow, playerFighterId = null) {
     const { retained, defenses } = promo.crown(winnerId, weightClass);
     promo.titleFightsHosted++;
     await this.db.put('organization', promo);
@@ -312,7 +311,7 @@ export class TitleService {
       await this.fighterCtrl.updateFighter(loser);
     }
 
-    const playerInvolved = winner?.gymId === GYM_CONFIG.ID || loser?.gymId === GYM_CONFIG.ID;
+    const playerInvolved = !!playerFighterId && (winner?.id === playerFighterId || loser?.id === playerFighterId);
 
     // Notícia do mundo só quando o jogador não está envolvido — se estiver,
     // quem narra é o WorldService, com o peso que o momento merece.

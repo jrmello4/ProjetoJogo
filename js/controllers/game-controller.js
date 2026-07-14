@@ -520,6 +520,7 @@ export class GameController {
         // ofertas/patrocínios acima, mas sem risco (nenhuma outra opção é
         // estritamente "melhor" sem ler o contexto de rivalidade).
         await this.resolveSocialPrompt('stay_quiet');
+        await this.resolveRivalryInteraction('ignore').catch(() => {});
 
         const simFighter = await this.getPlayerFighter();
         try {

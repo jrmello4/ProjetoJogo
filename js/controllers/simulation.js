@@ -603,6 +603,15 @@ export class SimulationEngine {
     } else {
       fighter.record.losses++;
       fighter.applyMoraleChange(-12);
+      // Épico D — derrota por decisão: moral cai o dobro
+      if (method && method.startsWith('Decision')) {
+        fighter.applyMoraleChange(-12);
+      }
+      // KO/TKO: penalidade física temporária
+      if (method && (method.startsWith('KO') || method.startsWith('TKO'))) {
+        fighter.attributes.chin = clamp(fighter.attributes.chin - 2, 1, 99);
+        fighter.attributes.durability = clamp(fighter.attributes.durability - 1, 1, 99);
+      }
     }
 
     fighter.applyFatigue(15 + round * 5);

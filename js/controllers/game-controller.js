@@ -573,9 +573,13 @@ export class GameController {
       fighter.applyMoraleChange(3);
     } else {
       const specialtyBonus = academy?.specialtyBonus(focus) || 0;
-      const gainChance = Math.min(0.9, 0.35 + (fighter.hidden.discipline / 100) * 0.4 + facilityBonus + specialtyBonus);
+      let gainChance = Math.min(0.9, 0.20 + (fighter.hidden.discipline / 100) * 0.4 + facilityBonus + specialtyBonus);
       for (const attr of meta.attrs) {
-        if (Math.random() < gainChance) {
+        const attrVal = fighter.attributes[attr] || 50;
+        let attrChance = gainChance;
+        if (attrVal >= 85) attrChance *= 0.25;
+        else if (attrVal >= 70) attrChance *= 0.5;
+        if (Math.random() < attrChance) {
           fighter.attributes[attr] = clamp(fighter.attributes[attr] + 1, 0, fighter.effectiveCeiling(attr));
         }
       }
@@ -956,6 +960,35 @@ export class GameController {
 
     await this.db.put('gameState', state);
     return unlocked;
+  }
+
+  // ===== Contrato exclusivo com conflito de cinturão (Épico B/C) =====
+  // Verifica se o lutador segura cinturão em promoção diferente da que
+  // está assinando. Se sim, o jogador precisa escolher entre vacar o
+  // título e subir, ou adiar o contrato.
+  async getSigningConflict(fighterId, promoName) {
+    const belts = await this.titleService.beltsOf(fighterId);
+    const otherBelts = belts.filter(b => b.promotionName !== promoName);
+    return otherBelts.length > 0 ? otherBelts : null;
+  }
+
+  // Assina o contrato, vaga todos os cinturões de outras promoções e
+  // cancela ofertas de luta concorrentes. Retorna { fighter, vacated, cancelledOffers }.
+  async signContractWithVacate(fighterId, promoId, absWeekNow) {
+    const fighter = await this.fighterCtrl.getFighter(fighterId);
+    const vacated = await this.titleService.vacateBeltsOf(fighterId);
+    const result = await this.contractService.accept(fighterId, promoId, absWeekNow);
+    const cancelledOffers = await this.offerService.cancelOffersNotFrom(fighterId, promoId);
+
+    for (const v of vacated) {
+      await this.notifService.add(
+        'warning',
+        'Cinturão Vagado',
+        `${fighter?.name || 'Atleta'} abdicou do cinturão ${v.weightClass} do ${v.promotionShort} para assinar contrato exclusivo.`
+      );
+    }
+
+    return { fighter: result, vacated, cancelledOffers };
   }
 
   // ===== Dashboard =====

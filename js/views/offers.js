@@ -164,7 +164,23 @@ export class OffersView {
     `;
   }
 
-  static render(pending, accepted, history, fighter, now, dossiers = {}, contractProposals = []) {
+  // §Fase 3b — o dilema. A promoção não te oferece o seu parceiro de treino por
+  // acaso: essa luta costuma ser a boa. O jogador precisa ver o preço ANTES de
+  // clicar em aceitar, senão não é uma decisão — é uma pegadinha.
+  static _renderTeammateWarning(t) {
+    if (!t) return '';
+    return `
+      <div class="mt-2 p-2" style="border-left:3px solid var(--danger);background:color-mix(in srgb, var(--danger) 8%, transparent);border-radius:4px">
+        <p class="text-sm"><strong>🥋 ${t.name} treina com você.</strong> <span class="text-muted">${t.bondLabel}.</span></p>
+        <p class="text-xs text-muted mt-1">
+          Aceitar acaba com o vínculo — e ele conhece o seu jogo por dentro, não pela fita.
+          Recusar mantém o parceiro e devolve a luta para a promoção.
+        </p>
+      </div>
+    `;
+  }
+
+  static render(pending, accepted, history, fighter, now, dossiers = {}, contractProposals = [], teammates = {}) {
     const fighterOf = () => fighter;
 
     const tierBadge = (tier) => {
@@ -228,6 +244,7 @@ export class OffersView {
                     <div class="text-sm font-bold">${getWeightClassShort(o.weightClass)}</div>
                   </div>
                 </div>
+                ${this._renderTeammateWarning(teammates[o.id])}
                 <div class="flex gap-2">
                   <button class="btn btn-sm btn-success offer-accept" data-id="${o.id}">Aceitar Luta</button>
                   <button class="btn btn-sm btn-secondary offer-decline" data-id="${o.id}">Recusar</button>

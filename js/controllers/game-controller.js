@@ -15,6 +15,7 @@ import { TitleService } from '../services/title-service.js';
 import { ScoutingService } from '../services/scouting-service.js';
 import { ContractService } from '../services/contract-service.js';
 import { RetentionService } from '../services/retention-service.js';
+import { TrainingPartnersService } from '../services/training-partners-service.js';
 import { ManagerService } from '../services/manager-service.js';
 import { CareerLogService } from '../services/career-log-service.js';
 import { RivalryService } from '../services/rivalry-service.js';
@@ -42,6 +43,7 @@ import {
   WEIGH_IN_CONFIG,
   RIVALRY_CONFIG,
   TAPE_CONFIG,
+  PARTNER_CONFIG,
   DNA_DISCOVERY_MAGNITUDE,
   absWeek,
 } from '../config/game-config.js';
@@ -90,6 +92,7 @@ export class GameController {
     // precisa de rivalryService para detectar "rival mudou de academia".
     this.rivalryService = new RivalryService(this.db, this.careerLogService);
     this.retentionService = new RetentionService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.managerService, this.careerLogService, this.rivalryService);
+    this.partnersService = new TrainingPartnersService(this.db, this.fighterCtrl, this.notifService, this.careerLogService);
     // Construído depois do RivalryService: _computePressureLevel precisa de
     // rivalryService para pressão extra em revanche 'grudge'.
     this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.scoutingService, this.contractService, this.managerService, this.careerLogService, this.rivalryService);
@@ -177,11 +180,19 @@ export class GameController {
     // Empresários (§C.1)
     await this.managerService.bootstrap();
 
-    // Agentes livres recrutáveis (adversários de IA sem promoção ainda)
+    // Agentes livres recrutáveis (adversários de IA sem promoção ainda).
+    //
+    // §Fase 3b — eles nascem filiados a uma academia. Antes disto, só os
+    // prospectos do draft anual recebiam `academyId`, e a sala de treino do
+    // jogador ficava literalmente vazia pelos primeiros anos de carreira: um
+    // sistema inteiro invisível até o mundo girar sozinho o bastante.
     for (let i = 0; i < WORLD_CONFIG.FREE_AGENT_POOL; i++) {
       const weightClass = CORE_WEIGHT_CLASSES[i % CORE_WEIGHT_CLASSES.length];
       const agent = DataGenerator.generateFighter(null, { weightClass, skillRange: [30, 55] });
       agent.id = generateId();
+      if (Math.random() < WORLD_CONFIG.ACADEMY_AFFILIATION_CHANCE) {
+        agent.academyId = ACADEMIES[Math.floor(Math.random() * ACADEMIES.length)].id;
+      }
       await this.db.put('fighters', agent);
     }
 
@@ -1040,9 +1051,23 @@ export class GameController {
     } catch { /* sem luta marcada */ }
 
     // A academia entra aqui porque é ela que define quais armas existem pra
-    // você e o quão rápido você as instala (§Fase 3).
+    // você e o quão rápido você as instala (§Fase 3). E a sala de treino deixa
+    // de ser um `[]` — o `team` sempre foi um parâmetro real que nunca recebeu
+    // ninguém (§Fase 3b).
     const academy = await this.getAcademy(fighter.academyId);
-    const result = TrainingCamp.processCamp(fighter, academy, [], absWeekNow, opponentArchetype);
+    const team = await this.partnersService.getTeammates(fighter);
+    const result = TrainingCamp.processCamp(fighter, academy, team, absWeekNow, opponentArchetype);
+
+    if (result?.sparring) {
+      const s = result.sparring;
+      if (s.osmosis) {
+        await this.notifService.add('info', '🥋 Sala de Treino', `Rodando com ${s.partnerName}, você roubou um pedaço do jogo dele (${s.osmosis}).`);
+      }
+      if (s.partnerInjured) {
+        const partner = team.find(f => f.id === fighter.campConfig.sparringPartnerId);
+        if (partner) await this.partnersService.injurePartner(partner, s.injuryWeeks, absWeekNow, fighter.name);
+      }
+    }
 
     if (result?.weapon) {
       const plan = GAME_PLANS[fighter.campConfig.weaponTarget];
@@ -1095,6 +1120,48 @@ export class GameController {
     offer.bait = false;
     await this.db.put('offers', offer);
     return { ok: true, plan };
+  }
+
+  // ===== Fase 3b — o dilema do companheiro =====
+  // Não existe escolha limpa aqui, e é esse o ponto. Aceitar rende a luta (e
+  // ela costuma ser a boa: a promoção não oferece o seu parceiro à toa).
+  // Recusar preserva a pessoa e custa a oportunidade.
+  async acceptOffer(offerId, absWeekNow) {
+    const fighter = await this.getPlayerFighter();
+    const data = await this.db.get('offers', offerId);
+    const teammate = data ? await this.partnersService.isTeammate(fighter, data.opponentId) : null;
+
+    // `accept` devolve null quando a oferta não está mais pendente. Sem esta
+    // guarda, o vínculo com o parceiro seria destruído por uma luta que nem
+    // chegou a ser marcada.
+    const result = await this.offerService.accept(offerId, absWeekNow);
+    if (!result) return null;
+
+    if (teammate) {
+      await this.partnersService.breakBond(fighter, teammate.id, absWeekNow);
+      await this.fighterCtrl.updateFighter(fighter);
+    }
+    return result;
+  }
+
+  // Recusar por lealdade não é de graça: a promoção segue procurando outro. Mas
+  // o vínculo sobrevive — e um parceiro que sabe que você recusou lutar contra
+  // ele treina diferente com você.
+  async declineOffer(offerId, absWeekNow) {
+    const fighter = await this.getPlayerFighter();
+    const data = await this.db.get('offers', offerId);
+    const teammate = data ? await this.partnersService.isTeammate(fighter, data.opponentId) : null;
+
+    const result = await this.offerService.decline(offerId);
+
+    if (teammate) {
+      TrainingPartnersService._setBond(fighter, teammate.id, teammate.bond + PARTNER_CONFIG.BOND_ON_LOYALTY);
+      fighter.applyMoraleChange(PARTNER_CONFIG.MORALE_ON_LOYALTY);
+      await this.fighterCtrl.updateFighter(fighter);
+      await this.notifService.add('success', '🤝 Você Recusou', `${teammate.name} soube que você disse não. Alguns vínculos valem mais que uma bolsa.`);
+      await this.careerLogService.publish(fighter.id, 'refused_friend', absWeekNow, 65, { partnerName: teammate.name });
+    }
+    return result;
   }
 
   // Fase 3 — a isca. Só existe se você tem uma reputação pra fingir e o plano

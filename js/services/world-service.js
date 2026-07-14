@@ -59,6 +59,9 @@ export class WorldService {
       bait: !!booking.bait,
       rivalryIntensity,
       opponentAcademy: ACADEMIES.find(a => a.id === opponent.academyId) || null,
+      // O vazamento (§Fase 3b): quem dividiu o tatame com você não precisa da
+      // fita. Ele te viu.
+      sparredWeeks: player.sparredWith?.[opponent.id] || 0,
       planEdgeFn: (plan, target) => SimulationEngine._planEdge(plan, target),
     });
   }
@@ -373,8 +376,18 @@ export class WorldService {
 
     if (tactics.weaponReveal) {
       const plan = GAME_PLANS[tactics.weaponReveal.planKey];
-      await this.notifService.add('success', '🧰 Carta na Manga', `Ninguém esperava. Você entrou com ${plan.label} e ${result.fighterBName === fighter.name ? result.fighterAName : result.fighterBName} preparou a luta contra outro lutador.`);
-      await log('weapon_revealed', 60, { plan: plan.label, opponentName: result.winnerName, won: !!won });
+      const opponentName = result.fighterBName === fighter.name ? result.fighterAName : result.fighterBName;
+
+      // A arma não surpreende quem esteve do outro lado dela no sparring. Esse
+      // é o preço do bom parceiro de treino, e ele só cobra aqui — depois de
+      // você ter gasto um camp inteiro instalando a coisa.
+      if (tactics.weaponReveal.sawItComing) {
+        await this.notifService.add('warning', '🥋 Ele Já Tinha Visto', `${opponentName} rodou com você no treino. ${plan.label} não surpreendeu ninguém — ele estava do outro lado dela todo dia.`);
+        await log('weapon_seen_coming', 55, { plan: plan.label, opponentName });
+      } else {
+        await this.notifService.add('success', '🧰 Carta na Manga', `Ninguém esperava. Você entrou com ${plan.label} e ${opponentName} preparou a luta contra outro lutador.`);
+        await log('weapon_revealed', 60, { plan: plan.label, opponentName, won: !!won });
+      }
     }
 
     if (tactics.baitOutcome === 'success') {
@@ -808,7 +821,7 @@ export class WorldService {
     for (const p of prospects) {
       p.status = 'roster';
       p.organizationId = tier3Promos[Math.floor(Math.random() * tier3Promos.length)].id;
-      if (ACADEMIES.length > 0 && Math.random() < 0.4) {
+      if (ACADEMIES.length > 0 && Math.random() < WORLD_CONFIG.ACADEMY_AFFILIATION_CHANCE) {
         const academy = ACADEMIES[Math.floor(Math.random() * ACADEMIES.length)];
         p.academyId = academy.id;
         affiliated++;

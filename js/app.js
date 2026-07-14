@@ -749,9 +749,17 @@ class App {
       if (d) dossiers[o.id] = d;
     }
 
+    // §Fase 3b — o dilema. Uma oferta contra um companheiro de treino não é uma
+    // oferta como as outras, e o jogador precisa saber ANTES de aceitar.
+    const teammates = {};
+    for (const o of pending) {
+      const t = await this.game.partnersService.isTeammate(fighter, o.opponentId);
+      if (t) teammates[o.id] = t;
+    }
+
     const contractProposals = await this._loadContractProposals(fighter);
 
-    const html = OffersView.render(pending, accepted, history, fighter, now, dossiers, contractProposals);
+    const html = OffersView.render(pending, accepted, history, fighter, now, dossiers, contractProposals, teammates);
     await LayoutView.render(html);
 
     document.querySelectorAll('.study-opponent').forEach(btn => {
@@ -780,14 +788,17 @@ class App {
 
     document.querySelectorAll('.offer-accept').forEach(btn => {
       btn.addEventListener('click', async () => {
-        await this.game.offerService.accept(btn.dataset.id, now);
+        // Passa pelo controller, não direto no service: aceitar uma luta contra
+        // um companheiro de treino tem consequência, e ela não pode depender de
+        // qual botão o jogador clicou (§Fase 3b).
+        await this.game.acceptOffer(btn.dataset.id, now);
         this.renderOffers();
       });
     });
 
     document.querySelectorAll('.offer-decline').forEach(btn => {
       btn.addEventListener('click', async () => {
-        await this.game.offerService.decline(btn.dataset.id);
+        await this.game.declineOffer(btn.dataset.id, now);
         this.notificationService.add('info', 'Oferta Recusada', 'A promoção seguirá procurando outros lutadores.');
         this.renderOffers();
       });
@@ -1199,7 +1210,8 @@ class App {
     // academia virar uma aposta de carreira, e não um bônus numérico.
     const academy = await this.game.getAcademy(fighter.academyId);
     const weaponOptions = TapeService.installablePlans(academy);
-    const html = TrainingCampView.render(fighter, booking, now, weaponOptions);
+    const team = await this.game.partnersService.getTeammates(fighter);
+    const html = TrainingCampView.render(fighter, booking, now, weaponOptions, team);
     await LayoutView.render(html);
     this._bindTrainingCamp(fighter, booking, now);
   }
@@ -1231,8 +1243,9 @@ class App {
         const weaponTarget = spec === 'install_weapon'
           ? document.querySelector(`.camp-weapon-target[data-fighter="${fighter.id}"]`)?.value || null
           : null;
+        const partnerId = document.querySelector(`.camp-partner[data-fighter="${fighter.id}"]`)?.value || null;
 
-        TrainingCamp.configureCamp(fighter, intensity, spec || 'striking', null, weaponTarget);
+        TrainingCamp.configureCamp(fighter, intensity, spec || 'striking', partnerId, weaponTarget);
         await this.game.fighterCtrl.updateFighter(fighter);
 
         const cost = CAMP_CONFIG.WEEKLY_COST[intensity] || 0;

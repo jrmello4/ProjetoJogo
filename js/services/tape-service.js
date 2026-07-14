@@ -68,13 +68,21 @@ export class TapeService {
   // fightIQ é a capacidade de ler; a academia dele é a estrutura de análise.
   // Um rival ganha um bônus de graça — ele te conhece por fora da fita, e é
   // isso que torna a terceira luta de uma trilogia brutal.
-  static readQuality(opponent, target, { rivalryIntensity = 0, opponentAcademy = null } = {}) {
+  static readQuality(opponent, target, { rivalryIntensity = 0, opponentAcademy = null, sparredWeeks = 0 } = {}) {
     const exposure = this.tapeOf(target).exposure / 100;
     const iq = 0.5 + (opponent.attributes?.fightIQ ?? 50) / TAPE_CONFIG.READ_IQ_SCALE;
     const structure = 0.7 + ((opponentAcademy?.reputation ?? 30) / 100) * 0.3;
     const rivalry = rivalryIntensity > 0 ? TAPE_CONFIG.READ_RIVALRY_BONUS : 0;
 
-    return clamp(exposure * iq * structure + rivalry, 0, 1);
+    // O vazamento (Fase 3b): quem dividiu o tatame com você não precisa da
+    // fita. Ele não te leu — ele te VIU. Nem a arma nova escapa de quem estava
+    // do outro lado dela todo dia no treino.
+    const sparring = Math.min(
+      sparredWeeks * TAPE_CONFIG.READ_SPARRING_PER_WEEK,
+      TAPE_CONFIG.READ_SPARRING_CAP
+    );
+
+    return clamp(exposure * iq * structure + rivalry + sparring, 0, 1);
   }
 
   // O plano que o adversário traz. Sem leitura suficiente ou sem assinatura
@@ -118,13 +126,16 @@ export class TapeService {
     );
   }
 
-  // Chamado a cada semana de camp com spec `install_weapon`.
-  static progressWeapon(fighter, academy, planKey) {
+  // Chamado a cada semana de camp com spec `install_weapon`. `partnerBoost`
+  // vem da sala de treino (Fase 3b): um parceiro forte na especialidade acelera
+  // a instalação — e, de quebra, passa a ser a única pessoa no mundo em quem a
+  // arma não vai funcionar, porque ele a viu nascer.
+  static progressWeapon(fighter, academy, planKey, partnerBoost = 0) {
     const tape = this.tapeOf(fighter);
     if (!tape.weapon || tape.weapon.planKey !== planKey || tape.weapon.revealed) {
       tape.weapon = { planKey, mastery: 0, revealed: false };
     }
-    const gained = this.installRate(fighter, academy, planKey);
+    const gained = this.installRate(fighter, academy, planKey) * (1 + partnerBoost);
     tape.weapon.mastery = clamp(tape.weapon.mastery + gained, 0, 100);
     return { gained: Math.round(gained), mastery: Math.round(tape.weapon.mastery), ready: tape.weapon.mastery >= TAPE_CONFIG.WEAPON_READY_MASTERY };
   }
@@ -134,11 +145,11 @@ export class TapeService {
   // motor de luta entende: `edgeA` (o jogador) e `edgeB` (o adversário).
   // `planEdgeFn` é injetado pelo chamador (SimulationEngine._planEdge) para não
   // duplicar aqui a leitura de traços por atributos que o motor já faz.
-  static resolveTactics({ player, opponent, gamePlanKey, bait = false, rivalryIntensity = 0, opponentAcademy = null, planEdgeFn }) {
+  static resolveTactics({ player, opponent, gamePlanKey, bait = false, rivalryIntensity = 0, opponentAcademy = null, sparredWeeks = 0, planEdgeFn }) {
     const tape = this.tapeOf(player);
     const plan = GAME_PLANS[gamePlanKey] || GAME_PLANS.balanced;
 
-    const oppRead = this.opponentPlanFor(opponent, player, { rivalryIntensity, opponentAcademy });
+    const oppRead = this.opponentPlanFor(opponent, player, { rivalryIntensity, opponentAcademy, sparredWeeks });
     const opponentPlan = GAME_PLANS[oppRead.planKey] || GAME_PLANS.balanced;
 
     let edgeA = planEdgeFn(plan, opponent) + this.planMasteryBonus(player, gamePlanKey);
@@ -164,10 +175,23 @@ export class TapeService {
       const factor = clamp(weapon.mastery / TAPE_CONFIG.WEAPON_READY_MASTERY, 0, 1);
       planModFactorA = factor;
       edgeA -= TAPE_CONFIG.WEAPON_RAW_PENALTY * (1 - factor);
-      edgeA += TAPE_CONFIG.WEAPON_SURPRISE_BONUS;
-      // Quanto mais ele confiou na fita, pior pra ele.
-      edgeB = GAME_PLAN_EDGE.weak * oppRead.read;
-      weaponReveal = { planKey: gamePlanKey, mastery: Math.round(weapon.mastery), ready: factor >= 1 };
+
+      // A consequência mais cruel do cruzamento entre a fita e a sala de treino:
+      // a arma nova não surpreende quem esteve do outro lado dela todo dia no
+      // sparring. O seu melhor parceiro é a única pessoa do mundo em quem ela
+      // não funciona — e é exatamente ele que a promoção vai te oferecer.
+      const sawItComing = sparredWeeks >= TAPE_CONFIG.WEAPON_SEEN_SPARRING_WEEKS;
+      if (!sawItComing) {
+        edgeA += TAPE_CONFIG.WEAPON_SURPRISE_BONUS;
+        // Quanto mais ele confiou na fita, pior pra ele.
+        edgeB = GAME_PLAN_EDGE.weak * oppRead.read;
+      }
+      weaponReveal = {
+        planKey: gamePlanKey,
+        mastery: Math.round(weapon.mastery),
+        ready: factor >= 1,
+        sawItComing,
+      };
     }
 
     // A isca. Só existe se você TEM uma reputação pra fingir, e só paga se ele

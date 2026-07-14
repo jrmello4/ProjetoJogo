@@ -208,6 +208,9 @@ export const EXPECTATION_CONFIG = {
 export const WORLD_CONFIG = {
   FREE_AGENT_POOL: 14,
   FREE_AGENT_MIN: 8,
+  // Quantos lutadores do mundo treinam numa academia. Alto de propósito: a sala
+  // de treino do jogador precisa ter gente dentro dela desde a semana 1 (§3b).
+  ACADEMY_AFFILIATION_CHANCE: 0.6,
   AI_FIGHTS_PER_EVENT: 5, // lutas de IA por evento (fora as do jogador)
 
   // Lesões pós-luta
@@ -516,6 +519,46 @@ export const TAPE_CONFIG = {
   // --- careerLog ---
   FIGURED_OUT_READ: 0.60,       // duas derrotas seguidas sob leitura alta = decifrado
   REINVENTION_WINS: 3,
+
+  // --- o vazamento (Fase 3b) ---
+  // Quem dividiu o tatame com você não precisa da fita. A exposição pública é
+  // uma coisa; o cara que te viu treinar todo dia por 8 semanas é outra — dele
+  // não há arma nova que se esconda. É o custo humano de ter sparring bom.
+  // Medido: a 0.04/semana (cap 0.35), 8 semanas de sparring derrubavam a
+  // vitória de 67% para 43%. Isso não é uma consequência, é uma proibição —
+  // "treinar sozinho" viraria a estratégia dominante e a sala de treino inteira
+  // morreria antes de existir. A 0.015 (cap 0.15) o vazamento continua sendo um
+  // preço real de ter bom sparring, sem tornar o parceiro um erro.
+  READ_SPARRING_PER_WEEK: 0.015,
+  READ_SPARRING_CAP: 0.15,
+  // A arma nova não surpreende quem estava do outro lado dela no treino.
+  WEAPON_SEEN_SPARRING_WEEKS: 3,
+};
+
+// ===== A sala de treino viva (Fase 3b) =====
+// Os companheiros de academia deixam de ser "cor local" e viram pessoas.
+export const PARTNER_CONFIG = {
+  BOND_DEFAULT: 30,
+  BOND_PER_WEEK: { light: 2, moderate: 3, intense: 4 },
+  BOND_ON_INJURY: -25,          // você acabou com a preparação dele
+  BOND_AFTER_BETRAYAL: 0,       // aceitar lutar contra ele não deixa vínculo
+  BOND_ON_LOYALTY: 20,          // recusar lutar contra ele custa a bolsa, não a pessoa
+  MORALE_ON_LOYALTY: 6,
+  BETRAYAL_LOG_MIN_BOND: 50,    // abaixo disso não era amizade, era divisão de tatame
+
+  // Osmose: você rouba um pedaço do jogo de quem te bate — mas só de quem
+  // gosta de você. Um parceiro ressentido não te ensina, só te machuca.
+  OSMOSIS_BASE_CHANCE: 0.30,
+  OSMOSIS_INTENSITY: { light: 0.5, moderate: 1.0, intense: 1.5 },
+
+  // Sparring duro machuca gente de verdade. O parceiro tem carreira própria.
+  PARTNER_INJURY_CHANCE: { light: 0.005, moderate: 0.02, intense: 0.06 },
+  PARTNER_INJURY_MIN_WEEKS: 2,
+  PARTNER_INJURY_SPREAD: 5,
+
+  // Não se instala wrestling sem alguém que saiba wrestling te jogando no chão.
+  WEAPON_PARTNER_MIN_SCORE: 55,
+  WEAPON_PARTNER_BOOST: 0.40,
 };
 
 // Instruções de córner — escolhidas pelo jogador entre rounds na luta ao

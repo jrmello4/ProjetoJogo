@@ -46,6 +46,9 @@ const MOMENT_ICONS = {
   figured_out: '📖',
   reinvention: '🔄',
   bait_success: '🎣',
+  weapon_seen_coming: '🥋',
+  fought_friend: '💔',
+  refused_friend: '🤝',
 };
 
 function humanizeType(type) {
@@ -95,6 +98,13 @@ function describeMoment(entry) {
       return 'Reinventou-se depois de ser decifrado — voltou outro lutador';
     case 'bait_success':
       return `Iscou o adversário${d.plan ? `, que entrou preparado para ${d.plan}` : ''}`;
+    // A sala de treino viva — o que o tatame cobra fora da luta.
+    case 'weapon_seen_coming':
+      return `Mostrou ${d.plan || 'a arma nova'} para quem já a tinha visto nascer no treino${d.opponentName ? ` — ${d.opponentName}` : ''}`;
+    case 'fought_friend':
+      return `Aceitou lutar contra ${d.partnerName || 'um parceiro de treino'}`;
+    case 'refused_friend':
+      return `Recusou lutar contra ${d.partnerName || 'um parceiro de treino'}`;
     default: {
       const parts = Object.entries(d)
         .filter(([, v]) => v !== null && v !== undefined && v !== '')

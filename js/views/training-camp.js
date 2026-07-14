@@ -1,5 +1,6 @@
 import { formatCurrency, getWeightClassShort } from '../utils/helpers.js';
 import { CAMP_CONFIG, GAME_PLANS, TAPE_CONFIG } from '../config/game-config.js';
+import { TrainingPartnersService } from '../services/training-partners-service.js';
 
 // Épico D: Acampamento de verdade.
 // Configura intensidade e foco pra próxima luta. Sem sparring partner —
@@ -61,10 +62,45 @@ export class TrainingCampView {
     `;
   }
 
-  static render(fighter, booking, now, weaponOptions = []) {
+  // §Fase 3b — a sala de treino. Quem está no tatame com você não é um bônus
+  // percentual: é um lutador com carreira própria, que você pode machucar, de
+  // quem você pode aprender, e que vai te conhecer melhor que qualquer fita.
+  static _renderPartners(fighter, cfg, team) {
+    if (team.length === 0) {
+      return `
+        <div class="form-group">
+          <label class="text-xs font-bold text-secondary">Sparring</label>
+          <p class="text-xs text-muted">Ninguém treina com você aqui. Uma academia vazia é você contra o espelho.</p>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="form-group">
+        <label class="text-xs font-bold text-secondary">Parceiro de Sparring</label>
+        <select class="form-select camp-partner" data-fighter="${fighter.id}">
+          <option value="">— Treinar sozinho —</option>
+          ${team.map(p => {
+            const bond = TrainingPartnersService.bondOf(fighter, p.id);
+            const weeks = fighter.sparredWith?.[p.id] || 0;
+            return `<option value="${p.id}" ${cfg.sparringPartnerId === p.id ? 'selected' : ''}>
+              ${p.name} · OVR ${p.overallRating} · ${TrainingPartnersService.bondLabel(bond)}${weeks > 0 ? ` · ${weeks} sem juntos` : ''}
+            </option>`;
+          }).join('')}
+        </select>
+        <p class="text-xs text-muted mt-1">
+          Você aprende com quem confia em você. Sparring duro acelera o camp — e pode
+          acabar com a preparação dele. E quem roda com você passa a te ler sem precisar de fita.
+        </p>
+      </div>
+    `;
+  }
+
+  static render(fighter, booking, now, weaponOptions = [], team = []) {
     const hasFight = !!booking;
     const cfg = fighter.campConfig || {};
     const weaponHtml = this._renderWeapon(fighter, cfg, weaponOptions);
+    const partnersHtml = this._renderPartners(fighter, cfg, team);
     const weeksUntilFight = booking ? Math.max(0, booking.eventAbsWeek - now) : 0;
     const injured = fighter.status === 'injured';
     const suspended = fighter.availableFromAbsWeek > now;
@@ -131,6 +167,7 @@ export class TrainingCampView {
               </div>
             </div>
 
+            ${partnersHtml}
             ${weaponHtml}
 
             <div class="flex items-center justify-between">

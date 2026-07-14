@@ -1,6 +1,7 @@
 import { clamp } from '../utils/helpers.js';
 import { CAMP_CONFIG, TAPE_CONFIG, PLAN_SPECIALTY } from '../config/game-config.js';
 import { TapeService } from '../services/tape-service.js';
+import { TrainingPartnersService } from '../services/training-partners-service.js';
 
 // Épico D: Acampamento de verdade.
 // O camp deixa de ser um botão manual e vira uma configuração que roda
@@ -47,30 +48,44 @@ export class TrainingCamp {
     const installing = spec === 'install_weapon' && weaponTarget && TapeService.canInstall(academy, weaponTarget);
     const gains = this._calcGains(intensity, installing ? PLAN_SPECIALTY[weaponTarget] : spec);
 
-    let weapon = null;
-    if (installing) {
-      weapon = TapeService.progressWeapon(fighter, academy, weaponTarget);
-      for (const attr of Object.keys(gains)) {
-        gains[attr] = Math.floor(gains[attr] * TAPE_CONFIG.WEAPON_CAMP_GAIN_SCALE);
+    // A sala de treino (Fase 3b). Antes daqui, `team` chegava sempre vazio e
+    // este bloco inteiro era código morto: existia um sistema de sparring
+    // desenhado e nunca povoado. Agora o parceiro é uma pessoa — você aprende
+    // com ele, você o machuca, e ele passa a te conhecer melhor que qualquer
+    // fita pública.
+    //
+    // Roda ANTES da instalação da arma porque um parceiro forte na
+    // especialidade acelera o aprendizado: não se instala wrestling sem alguém
+    // que saiba wrestling te jogando no chão.
+    let sparringBonus = 0;
+    let sparring = null;
+    const partner = sparringPartnerId ? team.find(f => f.id === sparringPartnerId) : null;
+
+    if (partner) {
+      if (partner.weightClass === fighter.weightClass) {
+        sparringBonus += CAMP_CONFIG.SPARRING_CLOSE_WEIGHT_BONUS;
       }
+      // O parceiro que imita o adversário da semana vale mais que um bom
+      // parceiro genérico — é para isso que serve um camp.
+      if (opponentArchetype && this._getArchetype(partner) === opponentArchetype) {
+        sparringBonus += CAMP_CONFIG.SPARRING_MATCH_BONUS;
+      }
+
+      sparring = TrainingPartnersService.spar(
+        fighter, partner, intensity, installing ? weaponTarget : null
+      );
     }
 
-    // Bônus de sparring partner
-    let sparringBonus = 0;
-    if (sparringPartnerId) {
-      const partner = team.find(f => f.id === sparringPartnerId);
-      if (partner) {
-        // Bônus de peso próximo
-        if (partner.weightClass === fighter.weightClass) {
-          sparringBonus += CAMP_CONFIG.SPARRING_CLOSE_WEIGHT_BONUS;
-        }
-        // Bônus de arquétipo: se o parceiro imita o adversário
-        if (opponentArchetype) {
-          const partnerArchetype = this._getArchetype(partner);
-          if (partnerArchetype === opponentArchetype) {
-            sparringBonus += CAMP_CONFIG.SPARRING_MATCH_BONUS;
-          }
-        }
+    // Fase 3 — instalar arma nova. Os atributos que o camp treina são os da
+    // especialidade da própria arma (instalar um wrestling treina wrestling),
+    // mas mal: você está gastando as semanas aprendendo um movimento em vez de
+    // afiar o que já sabe. Esse é o custo real da reinvenção — você chega pior
+    // nesta luta pra ganhar as próximas três.
+    let weapon = null;
+    if (installing) {
+      weapon = TapeService.progressWeapon(fighter, academy, weaponTarget, sparring?.weaponBoost ?? 0);
+      for (const attr of Object.keys(gains)) {
+        gains[attr] = Math.floor(gains[attr] * TAPE_CONFIG.WEAPON_CAMP_GAIN_SCALE);
       }
     }
 
@@ -87,6 +102,7 @@ export class TrainingCamp {
       gains,
       sparringBonus,
       weapon,
+      sparring,
       injured: false,
       overtrained: false,
       canceledFight: false,

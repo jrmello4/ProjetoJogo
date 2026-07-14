@@ -69,6 +69,12 @@ export class Fighter {
     // (TapeService.tapeOf) e o construtor só preserva o que veio do save.
     this.tape = data.tape || null;
 
+    // A sala de treino viva (Fase 3b). `bonds`: o vínculo com cada companheiro
+    // de academia. `sparredWith`: quantas semanas você dividiu o tatame com
+    // cada um — é o que faz um ex-parceiro te ler melhor que qualquer fita.
+    this.bonds = data.bonds || {};
+    this.sparredWith = data.sparredWith || {};
+
     // Auto-descoberta de DNA (§B.1): chaves de `dna`/hidden numéricos já
     // reveladas ao jogador. Sem estar aqui, a interface mostra faixa/rótulo
     // vago em vez do valor exato — mesma função de blur do scouting.

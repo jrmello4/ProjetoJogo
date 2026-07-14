@@ -528,10 +528,10 @@ export class Fighter {
     const req = perk.requirements;
     if (req.style && req.style !== this.style) return false;
     if (req.level && this.level < req.level) return false;
-    for (const [attr, min] of Object.entries(req.attrs)) {
+    for (const [attr, min] of Object.entries(req.attrs || {})) {
       if ((this.attributes[attr] || 0) < min) return false;
     }
-    for (const pre of req.perks) {
+    for (const pre of req.perks || []) {
       if (!this.hasPerk(pre)) return false;
     }
     return true;

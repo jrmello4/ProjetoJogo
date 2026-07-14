@@ -18,26 +18,26 @@ export class SocialMedia {
       choices.push({
         key: 'provoke',
         text: `Provocar ${rivalName || 'seu rival'} publicamente`,
-        hint: `Popularidade +${SOCIAL_CONFIG.PROVOKE_POPULARITY}, risco de moral`,
+        hint: 'Pode aumentar sua popularidade, mas é arriscado',
       });
     }
 
     choices.push({
       key: 'title_shot',
       text: 'Pedir uma chance de título publicamente',
-      hint: 'Só rende bem se você já tem crédito para isso',
+      hint: 'Depende do seu momento na carreira...',
     });
 
     choices.push({
       key: 'respond_critics',
       text: 'Responder às críticas',
-      hint: 'Pequeno e neutro',
+      hint: 'Uma resposta segura, sem grandes riscos',
     });
 
     choices.push({
       key: 'stay_quiet',
       text: 'Manter postura profissional e ficar quieto',
-      hint: `Moral +${SOCIAL_CONFIG.STAY_QUIET_MORALE}`,
+      hint: 'Postura profissional, sempre uma escolha sólida',
     });
 
     return choices;
@@ -53,34 +53,43 @@ export class SocialMedia {
   }
 
   // Aplica a escolha. Muta `fighter` (popularidade/moral) — o chamador
-  // persiste. Retorna { effects, provoked } — `provoked` diz ao chamador
-  // se precisa publicar careerLog + mexer na rivalidade.
-  static applyChoice(fighter, key, { plausibleTitleContender = false } = {}) {
+  // persiste. Retorna { effects, provoked, viral } — `provoked` diz ao
+  // chamador se precisa publicar careerLog + mexer na rivalidade; `viral`
+  // indica que o post teve alcance excepcional.
+  static applyChoice(fighter, key, { plausibleTitleContender = false, streakActive = false, lostRecent = false } = {}) {
     switch (key) {
       case 'provoke': {
-        fighter.updatePopularity(SOCIAL_CONFIG.PROVOKE_POPULARITY);
-        fighter.applyMoraleChange(SOCIAL_CONFIG.PROVOKE_MORALE_RISK);
-        return {
-          provoked: true,
-          effects: { popularity: SOCIAL_CONFIG.PROVOKE_POPULARITY, morale: SOCIAL_CONFIG.PROVOKE_MORALE_RISK },
-        };
+        const basePop = 2 + Math.floor(Math.random() * 4);        // 2-5
+        const baseMorale = -(1 + Math.floor(Math.random() * 5));  // -1 a -5
+        const viral = fighter.popularity > 50 && Math.random() < 0.08;
+        const streakBonus = streakActive ? 2 : 0;
+        const lossPenalty = lostRecent ? 2 : 0;
+        const popGain = basePop + (viral ? 6 : 0) + streakBonus;
+        const moraleCost = baseMorale - lossPenalty;
+        fighter.updatePopularity(popGain);
+        fighter.applyMoraleChange(moraleCost);
+        return { provoked: true, viral, effects: { popularity: popGain, morale: moraleCost } };
       }
       case 'title_shot': {
         if (plausibleTitleContender) {
-          fighter.updatePopularity(SOCIAL_CONFIG.TITLE_SHOT_POPULARITY);
-          return { provoked: false, effects: { popularity: SOCIAL_CONFIG.TITLE_SHOT_POPULARITY, morale: 0 } };
+          const pop = 1 + Math.floor(Math.random() * 4); // 1-4
+          fighter.updatePopularity(pop);
+          return { provoked: false, effects: { popularity: pop, morale: 0 } };
         }
-        fighter.applyMoraleChange(SOCIAL_CONFIG.TITLE_SHOT_EMBARRASSMENT_MORALE);
-        return { provoked: false, effects: { popularity: 0, morale: SOCIAL_CONFIG.TITLE_SHOT_EMBARRASSMENT_MORALE } };
+        const moralePenalty = -(2 + Math.floor(Math.random() * 5)); // -2 a -6
+        fighter.applyMoraleChange(moralePenalty);
+        return { provoked: false, effects: { popularity: 0, morale: moralePenalty } };
       }
       case 'respond_critics': {
-        fighter.updatePopularity(SOCIAL_CONFIG.RESPOND_CRITICS_POPULARITY);
-        return { provoked: false, effects: { popularity: SOCIAL_CONFIG.RESPOND_CRITICS_POPULARITY, morale: 0 } };
+        const pop = Math.floor(Math.random() * 3); // 0-2
+        fighter.updatePopularity(pop);
+        return { provoked: false, effects: { popularity: pop, morale: 0 } };
       }
       case 'stay_quiet':
       default: {
-        fighter.applyMoraleChange(SOCIAL_CONFIG.STAY_QUIET_MORALE);
-        return { provoked: false, effects: { popularity: 0, morale: SOCIAL_CONFIG.STAY_QUIET_MORALE } };
+        const morale = 1 + Math.floor(Math.random() * 4); // 1-4
+        fighter.applyMoraleChange(morale);
+        return { provoked: false, effects: { popularity: 0, morale } };
       }
     }
   }

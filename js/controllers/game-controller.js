@@ -686,11 +686,13 @@ export class GameController {
     const pending = state.pending;
     if (!pending) return { ok: false, reason: 'Nenhum post pendente.' };
 
-    const plausibleTitleContender = SocialMedia.isPlausibleTitleContender(fighter);
-    const result = SocialMedia.applyChoice(fighter, choice, { plausibleTitleContender });
-
     const seasonState = await this.seasonService.getState();
     const now = absWeek(seasonState);
+
+    const plausibleTitleContender = SocialMedia.isPlausibleTitleContender(fighter);
+    const streakActive = (fighter.winStreak || 0) >= 2;
+    const lostRecent = fighter.lastFightAbsWeek && (now - fighter.lastFightAbsWeek) <= 4 && (fighter.record?.losses || 0) > 0;
+    const result = SocialMedia.applyChoice(fighter, choice, { plausibleTitleContender, streakActive, lostRecent });
 
     if (result.provoked) {
       await this.careerLogService.publish(fighter.id, 'provocation', now, SOCIAL_CONFIG.PROVOCATION_MAGNITUDE, {
@@ -706,6 +708,13 @@ export class GameController {
           rivalry.addEvent('provocation', `Provocação pública contra ${pending.rivalName || 'rival'} nas redes sociais`);
           await this.db.put('rivalries', rivalry);
         }
+      }
+    }
+
+    if (result.viral) {
+      await this.notifService.add('headline', '🔥 Viral!', 'Seu post explodiu nas redes sociais! Popularidade extra e novos olhos no seu trabalho.');
+      if (this.careerLogService) {
+        await this.careerLogService.publish(fighter.id, 'viral', now, 65, {});
       }
     }
 

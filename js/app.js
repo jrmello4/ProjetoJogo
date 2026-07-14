@@ -17,6 +17,7 @@ import { NotificationsView } from './views/notifications.js';
 import { GameController } from './controllers/game-controller.js';
 import { TrainingCamp } from './controllers/training-camp.js';
 import { PressConference } from './controllers/press-conference.js';
+import { CornerAdvice } from './controllers/corner-advice.js';
 import { RivalryService } from './services/rivalry-service.js';
 import { SeasonService } from './services/season-service.js';
 import { NotificationService } from './services/notification-service.js';
@@ -24,8 +25,8 @@ import { SaveService } from './services/save-service.js';
 import { ThreeArena } from './three-arena.js';
 import { ThreeBackground } from './three-background.js';
 import { motion } from './motion/motion-engine.js';
-import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, ARCHETYPES, ORIGINS, absWeekToLabel } from './config/game-config.js';
-import { getWeightClassName, formatCurrency, getAdjacentWeightClasses } from './utils/helpers.js';
+import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, ARCHETYPES, ORIGINS, absWeekToLabel, SYNERGY_CONFIG } from './config/game-config.js';
+import { getWeightClassName, formatCurrency, getAdjacentWeightClasses, clamp } from './utils/helpers.js';
 import { CAMP_CONFIG, HYPE_PURSE_RATIO, absWeek } from './config/game-config.js';
 
 // Depois de publicar no itch.io, cole a URL da página do jogo aqui pra ela
@@ -66,7 +67,7 @@ class App {
       `;
       return;
     }
-    this.rivalryService = new RivalryService(this.game.db);
+    this.rivalryService = new RivalryService(this.game.db, this.game.careerLogService);
 
     this.threeBackground = new ThreeBackground('mainContent');
 
@@ -372,6 +373,16 @@ class App {
       });
     });
 
+    document.querySelectorAll('[data-social-choice]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const result = await this.game.resolveSocialPrompt(btn.dataset.socialChoice);
+        if (!result.ok) {
+          this.notificationService.add('warning', 'Redes Sociais', result.reason);
+        }
+        this.renderDashboard();
+      });
+    });
+
     this._bindFighterClicks();
     this._bindEventClicks();
   }
@@ -399,6 +410,35 @@ class App {
     const btn = document.getElementById('weekAdvanceBtn');
     if (btn) btn.disabled = true;
 
+    // §C.2 — sinergia técnico-atleta. Snapshot da Academia/coachSynergy ANTES
+    // da luta: as sugestões de córner ao vivo usam esse valor o tempo todo
+    // (a sinergia só muda DEPOIS da luta resolvida, ver _applyCoachSynergyChange).
+    let coachPersonality = 'analytical';
+    let coachSynergyAtFightStart = 40;
+    try {
+      const preFighter = await this.game.getPlayerFighter();
+      const preAcademy = preFighter ? await this.game.getAcademy(preFighter.academyId) : null;
+      coachPersonality = preAcademy?.headCoach?.personality || 'analytical';
+      coachSynergyAtFightStart = preFighter?.coachSynergy ?? 40;
+    } catch { /* sem academia/lutador ainda (onboarding) — segue com o default */ }
+
+    // Tally da luta inteira: cada decisão de córner (rodada em que passou a
+    // valer, sugestão do técnico, escolha do jogador) some para cornerTally
+    // assim que o round QUE ELA GOVERNOU termina — só então dá pra saber se
+    // foi vencido ou perdido. `pendingDecision` guarda a escolha ainda não
+    // resolvida (a mais recente, cujo round ainda está em andamento).
+    const cornerTally = [];
+    let pendingDecision = null;
+    const resolvePendingDecision = (roundEntry) => {
+      if (!pendingDecision || !roundEntry) return;
+      cornerTally.push({
+        ...pendingDecision,
+        won: roundEntry.scoreA > roundEntry.scoreB,
+        lost: roundEntry.scoreA < roundEntry.scoreB,
+      });
+      pendingDecision = null;
+    };
+
     const cornerHooks = {
       onFightStart: async ({ fighter, opponent, promo }) => {
         const html = EventsView.renderCornerFightIntro(fighter, opponent, promo.name);
@@ -406,6 +446,14 @@ class App {
         await new Promise(r => setTimeout(r, 1000));
       },
       onRoundEnd: (info) => new Promise((resolve) => {
+        // O round que acabou de terminar é o que a ÚLTIMA escolha de córner
+        // governou — resolve o tally antes de pedir a PRÓXIMA escolha.
+        resolvePendingDecision(info.roundResult);
+
+        // §C.2 — sugestão do técnico da Academia atual, já passada pelo
+        // embaralho de sinergia (CornerAdvice.applySynergyNoise).
+        const suggestion = CornerAdvice.getSuggestion(coachPersonality, coachSynergyAtFightStart, info);
+
         const html = EventsView.renderCornerRound({
           fighterName: info.fighter.name,
           opponentName: info.opponent.name,
@@ -415,10 +463,22 @@ class App {
           totalScoreB: info.totalScoreB,
           cardA: info.cardA,
           cardB: info.cardB,
+          suggested: suggestion.key,
         });
         LayoutView.render(html).then(() => {
           document.querySelectorAll('.corner-choice').forEach(b => {
-            b.addEventListener('click', () => resolve(b.dataset.instruction));
+            b.addEventListener('click', () => {
+              const chosenKey = b.dataset.instruction;
+              // 'instinct' bypassa o córner (não é conselho de ninguém) —
+              // nunca conta como "seguiu a sugestão", mesmo que coincida.
+              pendingDecision = {
+                round: info.round + 1,
+                suggestedKey: suggestion.key,
+                chosenKey,
+                followed: chosenKey !== 'instinct' && chosenKey === suggestion.key,
+              };
+              resolve(chosenKey);
+            });
           });
         });
       }),
@@ -427,15 +487,11 @@ class App {
     const summary = await this.game.processWeek(cornerHooks);
     const { world, offersCreated, economy, milestonesUnlocked, now } = summary;
 
-    for (const evt of world.playerEvents) {
-      for (const result of evt.playerResults) {
-        const fighterA = await this.game.fighterCtrl.getFighter(result.fighterAId);
-        const fighterB = await this.game.fighterCtrl.getFighter(result.fighterBId);
-        if (fighterA && fighterB) {
-          await this.rivalryService.checkPostFight(fighterA, fighterB, result, result.card === 'main');
-        }
-      }
-    }
+    // §D.3 — checkPostFight (criação/derivação de tipo de rivalidade) agora
+    // roda dentro de GameController.processWeek() (ver game-controller.js),
+    // pra também disparar durante o fast-forward (simulateWeeks). Chamar de
+    // novo aqui duplicaria o efeito (intensity +2, dois eventos de histórico
+    // por rematch) toda vez que o jogador avança semana a semana.
 
     for (const id of milestonesUnlocked) {
       await this.notificationService.add('achievement', 'Conquista Desbloqueada!', MILESTONE_LABELS[id] || id);
@@ -446,6 +502,22 @@ class App {
       'Semana Iniciada',
       `${absWeekToLabel(now)}. Fluxo pessoal: ${economy.net >= 0 ? '+' : ''}$${economy.net.toLocaleString()}${offersCreated.length > 0 ? ` · ${offersCreated.length} nova${offersCreated.length === 1 ? '' : 's'} oferta${offersCreated.length === 1 ? '' : 's'} de luta` : ''}.`
     );
+
+    // §C.2 — a escolha de córner do ÚLTIMO round instruído nunca passa por
+    // resolvePendingDecision dentro do hook (não há onRoundEnd depois do
+    // round final da luta) — resolve aqui contra o resultado real, e só
+    // então ajusta coachSynergy. Fetch-mutate-save próprio e isolado, ANTES
+    // de qualquer outro código abaixo buscar `fA` fresco — nada depois deste
+    // ponto salva o mesmo Fighter, então não há risco de sobrescrever.
+    const playerFightResult = world.playerEvents[0]?.playerResults?.[0] || null;
+    if (pendingDecision && playerFightResult) {
+      const roundEntry = playerFightResult.rounds?.find(rd => rd.round === pendingDecision.round)
+        || playerFightResult.rounds?.[playerFightResult.rounds.length - 1];
+      resolvePendingDecision(roundEntry);
+    }
+    if (playerFightResult && cornerTally.length > 0) {
+      await this._applyCoachSynergyChange(playerFightResult.fighterAId, cornerTally);
+    }
 
     const featured = world.playerEvents[0];
     if (featured) {
@@ -482,6 +554,42 @@ class App {
     }
 
     this.renderDashboard();
+  }
+
+  // §C.2 — ajusta coachSynergy a partir do tally da luta ao vivo que acabou
+  // de acontecer: cada round em que a instrução foi SEGUIDA e o round foi
+  // VENCIDO soma; cada round em que foi IGNORADA e o round foi PERDIDO
+  // subtrai — ambos escalados por GROWTH_RATE_BY_FACILITY (academia pequena
+  // = atenção individual = sinergia cresce/cai mais rápido). Só chamado pelo
+  // caminho AO VIVO (advanceWeek) — simulateWeeks() não tem cornerHooks, logo
+  // nunca preenche cornerTally, e este método nunca é chamado por lá
+  // (simplificação aceita pelo spec §C.2/pedido explícito da tarefa).
+  //
+  // Fetch-mutate-save PRÓPRIO e isolado: busca o Fighter fresco (pós-luta,
+  // já com todas as mutações que WorldService/GameController salvaram
+  // durante processWeek) em vez de reusar alguma variável local mais antiga
+  // — ver a nota de app.js/game-controller.js sobre esse bug já ter
+  // acontecido de verdade neste projeto.
+  async _applyCoachSynergyChange(fighterId, cornerTally) {
+    let followedAndWon = 0;
+    let ignoredAndLost = 0;
+    for (const t of cornerTally) {
+      if (t.followed && t.won) followedAndWon++;
+      else if (!t.followed && t.lost) ignoredAndLost++;
+    }
+    if (followedAndWon === 0 && ignoredAndLost === 0) return;
+
+    const fighter = await this.game.fighterCtrl.getFighter(fighterId);
+    if (!fighter) return;
+    const academy = await this.game.getAcademy(fighter.academyId);
+    const growthRate = SYNERGY_CONFIG.GROWTH_RATE_BY_FACILITY[(academy?.facilityLevel || 1) - 1] ?? 1;
+
+    const delta = Math.round(
+      followedAndWon * SYNERGY_CONFIG.GAIN_ON_INSTRUCTION_FOLLOWED_AND_WON * growthRate +
+      ignoredAndLost * SYNERGY_CONFIG.LOSS_ON_INSTRUCTION_IGNORED_AND_LOST * growthRate
+    );
+    fighter.coachSynergy = clamp(fighter.coachSynergy + delta, 0, 100);
+    await this.game.fighterCtrl.updateFighter(fighter);
   }
 
   // ===== Simular Período =====
@@ -1093,7 +1201,33 @@ class App {
       return;
     }
 
-    const html = RetirementCeremonyView.render(entry);
+    // §B.3 — o entry do Hall da Fama é só o snapshot resumido feito na
+    // indução (ver hall-of-fame.js); o documentário precisa de dados que
+    // NÃO estão nesse snapshot: fights[] completo (pra estreia/pico/zebra/
+    // streak), permanentScars, discoveredTraits e rivalidades. Isso é uma
+    // leitura pura (getFighter), sem nenhum updateFighter() depois — não
+    // corre o risco do bug de fetch-mutate-save duplo já visto nesta sessão.
+    const fighter = await this.game.fighterCtrl.getFighter(fighterId);
+    const topMoments = this.game.careerLogService ? await this.game.careerLogService.topByMagnitude(8) : [];
+
+    let rivalryInfo = null;
+    if (fighter && this.rivalryService) {
+      const rivalries = await this.rivalryService.getRivalries(fighter.id);
+      if (rivalries.length > 0) {
+        const top = rivalries.reduce((a, b) => (b.intensity > a.intensity ? b : a));
+        const otherId = top.fighterAId === fighter.id ? top.fighterBId : top.fighterAId;
+        const fromFights = fighter.fights.find(f => f.opponentId === otherId)?.opponent;
+        const otherFighter = fromFights ? null : await this.game.fighterCtrl.getFighter(otherId);
+        rivalryInfo = { rivalry: top, opponentName: fromFights || otherFighter?.name || 'Adversário desconhecido' };
+      }
+    }
+
+    const html = RetirementCeremonyView.render(entry, {
+      fighter,
+      topMoments,
+      rivalryInfo,
+      startedAt: gameState?.startedAt || null,
+    });
     await LayoutView.render(html);
 
     document.getElementById('viewFullCareerBtn')?.addEventListener('click', () => {

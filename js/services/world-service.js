@@ -18,6 +18,7 @@ import {
   TIER_MOVEMENT_CONFIG,
   PERMANENT_SCAR_TABLE,
   DNA_DISCOVERY_CONFIG,
+  RIVALRY_CONFIG,
   absWeekToDate,
   computeSuspensionWeeks,
 } from '../config/game-config.js';
@@ -25,7 +26,7 @@ import {
 // Motor do mundo vivo: cada promoção de IA agenda e realiza os próprios
 // eventos. Lutas do jogador entram nos cards via ofertas aceitas.
 export class WorldService {
-  constructor(db, fighterCtrl, notifService, titleService = null, scoutingService = null, contractService = null, managerService = null, careerLogService = null) {
+  constructor(db, fighterCtrl, notifService, titleService = null, scoutingService = null, contractService = null, managerService = null, careerLogService = null, rivalryService = null) {
     this.db = db;
     this.fighterCtrl = fighterCtrl;
     this.notifService = notifService;
@@ -34,6 +35,7 @@ export class WorldService {
     this.contractService = contractService;
     this.managerService = managerService;
     this.careerLogService = careerLogService;
+    this.rivalryService = rivalryService;
   }
 
   async getPromotions() {
@@ -202,7 +204,7 @@ export class WorldService {
       const gamePlan = fight.booking?.gamePlan || 'balanced';
 
       const fightDateISO = absWeekToDate(absWeekNow, startedAt).toISOString();
-      const pressureLevel = this._computePressureLevel(fight, promo);
+      const pressureLevel = await this._computePressureLevel(fight, promo);
       // §B.1 — pressurePerformer/bigEventNervous só se descobrem numa luta
       // que realmente pesa (metade do gatilho de C.3: pressão alta).
       if (pressureLevel >= 50) {
@@ -452,17 +454,21 @@ export class WorldService {
 
   // §C.3 — pressão psicológica da luta (0-100): escala pressurePerformer/
   // bigEventNervous/composure em SimulationEngine em vez do antigo binário
-  // isBigEvent (só tier 1). Sinais disponíveis aqui sem dependência nova:
-  // título em jogo, palco de elite, reencontro, sequência em risco de
-  // qualquer lado. Rivalidade tipo 'grudge' (§D.3) soma quando esse sistema
-  // existir — por ora fica de fora, não há acesso a rivalryService aqui.
-  _computePressureLevel(fight, promo) {
+  // isBigEvent (só tier 1). Sinais disponíveis aqui: título em jogo, palco
+  // de elite, reencontro, sequência em risco de qualquer lado, e — agora
+  // que RivalryService está disponível (§D.3) — rivalidade tipo 'grudge'
+  // entre os dois: uma revanche contra o rival que te provocou pesa mais.
+  async _computePressureLevel(fight, promo) {
     let pressure = 0;
     if (fight.titleWeightClass) pressure += 50;
     if (promo.tier === 1) pressure += 20;
     if (fight.booking?.isReencounter) pressure += 15;
     if ((fight.fighterA.winStreak || 0) >= 3) pressure += 10;
     if ((fight.fighterB.winStreak || 0) >= 3) pressure += 10;
+    if (this.rivalryService) {
+      const rivalry = await this.rivalryService.getRivalryBetween(fight.fighterA.id, fight.fighterB.id);
+      if (rivalry?.type === 'grudge') pressure += RIVALRY_CONFIG.GRUDGE_PRESSURE_BONUS;
+    }
     return Math.min(100, pressure);
   }
 

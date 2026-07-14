@@ -437,6 +437,28 @@
 
 .corner-choice-desc { line-height: 1.45; }
 
+/* §C.2 — sugestão do técnico (sinergia) e instinto (bypass do córner) */
+.corner-choice--suggested {
+  border-top-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold-glow) inset;
+}
+
+.corner-choice-tag {
+  font-family: var(--font-display);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  margin-bottom: 0.35rem;
+}
+
+.corner-choice--instinct {
+  border-top-style: dashed;
+  opacity: 0.92;
+}
+
+.corner-choice--instinct:hover { border-top-color: var(--chalk); }
+
 /* ==========================================================================
    Roster / market cards
    ========================================================================== */

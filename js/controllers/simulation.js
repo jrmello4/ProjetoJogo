@@ -73,7 +73,17 @@ export class SimulationEngine {
     for (let r = 1; r <= maxRounds; r++) {
       if (winner) break; // fight already finished
 
-      const cornerModA = CORNER_INSTRUCTIONS[cornerInstruction] || CORNER_INSTRUCTIONS.balanced;
+      // §C.2 — "lutar no instinto": bypassa o córner por completo. Em vez de
+      // um CORNER_INSTRUCTIONS fixo, os mods vêm dinamicamente de
+      // composure/fightIQ do PRÓPRIO lutador (ver _instinctMod). Escolhido
+      // dinâmico (não uma entrada estática em CORNER_INSTRUCTIONS) porque o
+      // efeito precisa escalar com o lutador que está lutando, não ser um
+      // valor único pra todo mundo — diff pequeno aqui, e evita inflar o
+      // catálogo de instruções "de verdade" com uma opção que não é conselho
+      // de ninguém.
+      const cornerModA = cornerInstruction === 'instinct'
+        ? this._instinctMod(fighterA)
+        : (CORNER_INSTRUCTIONS[cornerInstruction] || CORNER_INSTRUCTIONS.balanced);
       const staminaFactorA = Math.max(10, staminaA * (1 - (r - 1) * 0.12) - staminaDebtA);
       const staminaFactorB = Math.max(10, staminaB * (1 - (r - 1) * 0.12) - staminaDebtB);
 
@@ -182,7 +192,11 @@ export class SimulationEngine {
           cardA,
           cardB,
         });
-        if (chosen && CORNER_INSTRUCTIONS[chosen]) cornerInstruction = chosen;
+        // 'instinct' não é uma chave de CORNER_INSTRUCTIONS (ver _instinctMod)
+        // — sem este ramo, o lookup abaixo a rejeitaria como desconhecida e a
+        // escolha do jogador seria silenciosamente ignorada.
+        if (chosen === 'instinct') cornerInstruction = 'instinct';
+        else if (chosen && CORNER_INSTRUCTIONS[chosen]) cornerInstruction = chosen;
       }
     }
 
@@ -301,6 +315,30 @@ export class SimulationEngine {
       loser.attributes.chin = clamp(loser.attributes.chin - damage, 1, 99);
       loser.attributes.durability = clamp(loser.attributes.durability - Math.floor(damage * 0.7), 1, 99);
     }
+  }
+
+  // §C.2 — "lutar no instinto": nenhum bônus/penalidade de córner, nenhuma
+  // leitura (certa ou errada) de ninguém além do próprio lutador. Em vez
+  // disso, escala em torno de 1.0 conforme composure/fightIQ — quem tem a
+  // cabeça no lugar e lê bem o jogo se vira sozinho tão bem quanto (ou
+  // melhor) que um bom conselho; quem não tem, sofre um pouco por decidir
+  // tudo sozinho no calor da luta. fatigueMod fica neutro (1.0): instinto
+  // não impõe um ritmo artificial, então não deveria cobrar nem poupar
+  // fôlego como 'aggressive'/'defensive' fazem.
+  static _instinctMod(fighter) {
+    const composure = fighter.attributes.composure ?? 50;
+    const fightIQ = fighter.attributes.fightIQ ?? 50;
+    const selfReliance = (composure + fightIQ) / 2;
+    // ~0.8x em 0, 1.0x em 50, ~1.2x em 100 — mesma ordem de grandeza dos
+    // mods dinâmicos já usados em _calcRoundPerformance (ex: strikingPower).
+    const factor = 1 + (selfReliance - 50) / 250;
+    return {
+      label: 'Instinto', icon: '🧭', desc: 'Sem córner — só a sua própria leitura da luta.',
+      strikingMod: factor,
+      grapplingMod: factor,
+      fatigueMod: 1.0,
+      chinMod: factor,
+    };
   }
 
   static _calcRoundPerformance(fighter, opponent, pressureLevel, staminaFactor, cornerMod = null, plan = null, planEdge = 0) {

@@ -1,8 +1,13 @@
 import { Rivalry } from '../models/rivalry.js';
+import { RIVALRY_CONFIG } from '../config/game-config.js';
 
 export class RivalryService {
-  constructor(db) {
+  // careerLogService (opcional/nullable, mesmo padrão de SponsorService) —
+  // sem ele, a derivação de tipo 'grudge' (§D.3) simplesmente não dispara,
+  // igual ao fail-safe já usado em SponsorService._checkImageClauseBroken.
+  constructor(db, careerLogService = null) {
     this.db = db;
+    this.careerLogService = careerLogService;
   }
 
   async getRivalries(fighterId) {
@@ -38,7 +43,10 @@ export class RivalryService {
     return rivalry;
   }
 
-  async checkPostFight(fighterA, fighterB, result, isMainCard) {
+  // atAbsWeek (opcional): semana atual, usada só pra janela de busca do
+  // careerLog na derivação de tipo 'grudge' (§D.3). Sem ela, a checagem de
+  // grudge é pulada (ainda funciona a de 'robbery', que não depende de semana).
+  async checkPostFight(fighterA, fighterB, result, isMainCard, atAbsWeek = null) {
     const existing = await this.getRivalryBetween(fighterA.id, fighterB.id);
 
     if (existing) {
@@ -46,6 +54,16 @@ export class RivalryService {
       const rivalry = new Rivalry(existing);
       rivalry.increaseIntensity(1);
       rivalry.addEvent('rematch', `Rematch — ${result.winnerName} venceu`);
+
+      // §D.3 — uma rivalidade que ainda não tem identidade própria
+      // ('competitive', o default) pode ganhar uma origem retroativa se
+      // ESTE rematch for controverso ou se uma provocação recente colou
+      // nela. Nunca rebaixa uma rivalidade já identificada como
+      // 'grudge'/'robbery' de volta pra 'competitive'.
+      if (rivalry.type === 'competitive') {
+        rivalry.type = await this._deriveType(fighterA.id, fighterB.id, result, atAbsWeek, rivalry.type);
+      }
+
       await this.db.put('rivalries', rivalry);
       return rivalry;
     }
@@ -55,11 +73,42 @@ export class RivalryService {
     const shouldCreate = isMainCard || isClose;
 
     if (shouldCreate) {
-      const type = isClose ? 'competitive' : 'personal';
+      const fallback = isClose ? 'competitive' : 'personal';
+      const type = await this._deriveType(fighterA.id, fighterB.id, result, atAbsWeek, fallback);
       return await this.createRivalry(fighterA.id, fighterB.id, type);
     }
 
     return null;
+  }
+
+  // §D.3 — deriva a origem/identidade da rivalidade a partir da luta
+  // gatilho e do careerLog (§D.1). Prioridade: 'robbery' (decisão
+  // controversa nesta luta) > 'grudge' (provocação recente mirando um dos
+  // dois) > fallback (comportamento anterior, preservado pra não quebrar a
+  // distinção 'competitive'/'personal' que já existia aqui).
+  async _deriveType(fighterAId, fighterBId, result, atAbsWeek, fallback = 'competitive') {
+    if (this._isRobberyMethod(result?.method)) return 'robbery';
+    if (await this._hasRecentGrudgeSpark(fighterAId, fighterBId, atAbsWeek)) return 'grudge';
+    return fallback;
+  }
+
+  _isRobberyMethod(method) {
+    return !!method && (method.startsWith('Decision (Split)') || method.startsWith('Decision (Majority)'));
+  }
+
+  // A entrada 'provocation' do careerLog (publicada por
+  // GameController.resolveSocialPrompt, §D.2) só guarda `targetFighterId`
+  // (quem foi provocado) — não guarda quem provocou, porque hoje só o
+  // jogador tem a opção de provocar nas redes. "Referencia os dois
+  // lutadores da rivalidade" então quer dizer, na prática: o alvo é um dos
+  // dois (o outro é implicitamente quem provocou).
+  async _hasRecentGrudgeSpark(fighterAId, fighterBId, atAbsWeek) {
+    if (!this.careerLogService || atAbsWeek == null) return false;
+    const recent = await this.careerLogService.recentSince(atAbsWeek, RIVALRY_CONFIG.GRUDGE_LOOKBACK_WEEKS);
+    return recent.some(e =>
+      e.type === 'provocation' &&
+      (e.data?.targetFighterId === fighterAId || e.data?.targetFighterId === fighterBId)
+    );
   }
 
   async getAllActive() {

@@ -130,7 +130,7 @@ export class DashboardView {
   }
 
   static render(data, weekLabel) {
-    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, now } = data;
+    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, now } = data;
 
     const tierBadge = (tier) => `<span class="badge ${tierBadgeCls(tier)}">${TIER_LABELS[tier]}</span>`;
 
@@ -158,6 +158,28 @@ export class DashboardView {
                   <span class="text-sm font-bold" style="color:var(--success)">${formatCurrency(o.purse)}</span>
                 </div>
               </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // ===== Redes sociais em semana livre (§D.2) =====
+    let socialHtml = '';
+    if (socialPrompt) {
+      socialHtml = `
+        ${pendingOffers.length === 0 ? '<div class="section-label" data-reveal>Decisões Pendentes</div>' : ''}
+        <div class="card mb-4" data-reveal style="border-top-color:var(--gold)">
+          <div class="card-header">
+            <span class="card-title">📱 Momento nas Redes</span>
+          </div>
+          <p class="text-sm text-muted mb-2">Você tem a atenção da mídia social esta semana — como vai se posicionar?</p>
+          <div class="flex flex-col gap-2">
+            ${socialPrompt.choices.map(c => `
+              <button class="btn btn-secondary" data-social-choice="${c.key}" style="text-align:left">
+                ${c.text}
+                <span class="text-xs text-muted ml-2">(${c.hint})</span>
+              </button>
             `).join('')}
           </div>
         </div>
@@ -378,6 +400,7 @@ export class DashboardView {
       </div>
 
       ${offersHtml}
+      ${socialHtml}
       ${sponsorsHtml}
       ${bookingsHtml}
       ${fighterHtml}

@@ -17,6 +17,10 @@ import { ContractService } from '../services/contract-service.js';
 import { RetentionService } from '../services/retention-service.js';
 import { ManagerService } from '../services/manager-service.js';
 import { CareerLogService } from '../services/career-log-service.js';
+import { RivalryService } from '../services/rivalry-service.js';
+import { SocialMediaService } from '../services/social-media-service.js';
+import { SocialMedia } from './social-media.js';
+import { Rivalry } from '../models/rivalry.js';
 import { FightOffer } from '../models/fight-offer.js';
 import { generateId, clamp } from '../utils/helpers.js';
 import { TrainingCamp } from './training-camp.js';
@@ -34,6 +38,7 @@ import {
   GAME_PLANS,
   CAMP_CONFIG,
   EXPECTATION_CONFIG,
+  SOCIAL_CONFIG,
   absWeek,
 } from '../config/game-config.js';
 
@@ -60,6 +65,8 @@ export class GameController {
     this.retentionService = null;
     this.managerService = null;
     this.careerLogService = null;
+    this.rivalryService = null;
+    this.socialMediaService = null;
   }
 
   async init() {
@@ -75,9 +82,14 @@ export class GameController {
     this.contractService = new ContractService(this.db, this.fighterCtrl, this.notifService);
     this.managerService = new ManagerService(this.db, this.notifService);
     this.retentionService = new RetentionService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.managerService);
-    this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.scoutingService, this.contractService, this.managerService, this.careerLogService);
+    // Construído antes do WorldService de propósito: §D.3 pede acesso a
+    // rivalryService dentro de _computePressureLevel (pressão extra em
+    // revanche 'grudge'), então a dependência precisa existir primeiro.
+    this.rivalryService = new RivalryService(this.db, this.careerLogService);
+    this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.scoutingService, this.contractService, this.managerService, this.careerLogService, this.rivalryService);
     this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.contractService);
     this.sponsorService = new SponsorService(this.db, this.notifService, this.careerLogService);
+    this.socialMediaService = new SocialMediaService(this.db, this.notifService);
 
     const meta = await this.db.get('gameState', 'meta');
     if (!meta || meta.mode !== WORLD_MODE || meta.schemaVersion !== WORLD_SCHEMA) {
@@ -324,6 +336,23 @@ export class GameController {
 
     const world = await this.worldService.processWeek(now, nextWeekState.startedAt, preFightId, cornerHooks);
 
+    // §D.3 — criação/atualização de rivalidade tem que rodar aqui (dentro de
+    // processWeek), não só no advanceWeek() ao vivo do app.js, senão o
+    // fast-forward (simulateWeeks -> processWeek em loop) nunca cria nem
+    // deriva tipo de rivalidade nenhuma. checkPostFight só LÊ os Fighters
+    // passados (id) e escreve na store 'rivalries' — nunca chama
+    // fighterCtrl.updateFighter, então não corre o risco de pisar em cima
+    // do fetch-mutate-save do WorldService feito logo acima.
+    for (const evt of world.playerEvents) {
+      for (const result of evt.playerResults) {
+        const fighterA = await this.fighterCtrl.getFighter(result.fighterAId);
+        const fighterB = await this.fighterCtrl.getFighter(result.fighterBId);
+        if (fighterA && fighterB) {
+          await this.rivalryService.checkPostFight(fighterA, fighterB, result, result.card === 'main', now);
+        }
+      }
+    }
+
     // Rebusca DEPOIS do tick do mundo — WorldService busca e salva sua
     // PRÓPRIA instância do lutador ao resolver a luta (record, popularidade,
     // caixa, lesão, descobertas de DNA...). Continuar mutando o `fighter`
@@ -368,6 +397,15 @@ export class GameController {
 
     await this._generateHeadlines(now, world, fighter);
     await this._generateCallouts(now, fighter);
+
+    // §D.2 — só lê `fighter` (id/status), nunca muta nem salva: os efeitos
+    // de popularidade/moral só acontecem quando o jogador responde ao
+    // prompt (resolveSocialPrompt), bem depois do save único deste método.
+    if (fighter.status !== 'retired') {
+      const bookings = await this.offerService.getAccepted();
+      const hasBooking = bookings.some(b => b.fighterId === fighter.id);
+      await this._rollSocialMediaPrompt(now, fighter, hasBooking);
+    }
 
     fighter.checkNumericDiscovery(); // §B.1 — idempotente, roda toda semana
 
@@ -568,6 +606,67 @@ export class GameController {
 
     const phrase = calloutPhrases[Math.floor(Math.random() * calloutPhrases.length)];
     await this.notifService.add('headline', 'Callout', phrase);
+  }
+
+  // ===== Redes sociais em semana livre (§D.2) =====
+  // Resolve QUEM é o rival ativo mais intenso (se houver) antes de rolar a
+  // chance semanal — a opção de provocar só existe quando isso resolve para
+  // um fighter de verdade. Só LÊ dados; quem muta/salva o fighter é
+  // resolveSocialPrompt(), chamado depois pelo clique do jogador.
+  async _rollSocialMediaPrompt(now, fighter, hasBooking) {
+    const activeRivalries = await this.rivalryService.getRivalries(fighter.id);
+    let rivalInfo = null;
+    if (activeRivalries.length > 0) {
+      const rivalry = [...activeRivalries].sort((a, b) => b.intensity - a.intensity)[0];
+      const rivalFighterId = rivalry.fighterAId === fighter.id ? rivalry.fighterBId : rivalry.fighterAId;
+      const rivalFighter = await this.fighterCtrl.getFighter(rivalFighterId);
+      if (rivalFighter) {
+        rivalInfo = { rivalryId: rivalry.id, fighterId: rivalFighterId, name: rivalFighter.name };
+      }
+    }
+    return await this.socialMediaService.processWeek(now, hasBooking, rivalInfo);
+  }
+
+  // Resolve o prompt pendente com a escolha do jogador. Fetch-mutate-save
+  // PRÓPRIO e isolado (busca o fighter fresco, muta, salva uma vez só) —
+  // chamado direto por um clique do jogador (padrão idêntico a
+  // accept/declineSponsorOffer), nunca de dentro de processWeek, então não
+  // há risco do bug de "outro código já salvou uma instância mais nova".
+  async resolveSocialPrompt(choice) {
+    const fighter = await this.getPlayerFighter();
+    if (!fighter) return { ok: false, reason: 'Nenhum lutador ativo.' };
+
+    const state = await this.socialMediaService.getState();
+    const pending = state.pending;
+    if (!pending) return { ok: false, reason: 'Nenhum post pendente.' };
+
+    const plausibleTitleContender = SocialMedia.isPlausibleTitleContender(fighter);
+    const result = SocialMedia.applyChoice(fighter, choice, { plausibleTitleContender });
+
+    const seasonState = await this.seasonService.getState();
+    const now = absWeek(seasonState);
+
+    if (result.provoked) {
+      await this.careerLogService.publish('provocation', now, SOCIAL_CONFIG.PROVOCATION_MAGNITUDE, {
+        targetFighterId: pending.rivalFighterId || null,
+        targetName: pending.rivalName || null,
+      });
+
+      if (pending.rivalryId) {
+        const rivalryData = await this.db.get('rivalries', pending.rivalryId);
+        if (rivalryData) {
+          const rivalry = new Rivalry(rivalryData);
+          rivalry.increaseIntensity(SOCIAL_CONFIG.PROVOKE_RIVALRY_INTENSITY_GAIN);
+          rivalry.addEvent('provocation', `Provocação pública contra ${pending.rivalName || 'rival'} nas redes sociais`);
+          await this.db.put('rivalries', rivalry);
+        }
+      }
+    }
+
+    await this.fighterCtrl.updateFighter(fighter);
+    await this.socialMediaService.clearPending();
+
+    return { ok: true, choice, effects: result.effects };
   }
 
   async _checkExpectations(now, fighter) {
@@ -830,6 +929,17 @@ export class GameController {
     const state = await this.seasonService.getState();
     const sponsors = await this.sponsorService.getState();
 
+    const socialState = await this.socialMediaService.getState();
+    const socialPrompt = socialState.pending
+      ? {
+          ...socialState.pending,
+          choices: SocialMedia.getChoices({
+            hasActiveRival: !!socialState.pending.rivalryId,
+            rivalName: socialState.pending.rivalName,
+          }),
+        }
+      : null;
+
     const allFighters = await this.fighterCtrl.getAllFighters();
     const active = allFighters.filter(f => f.status !== 'retired');
     const rankings = RankingService.calculateRankings(active);
@@ -852,6 +962,7 @@ export class GameController {
       champions,
       rankings,
       sponsors,
+      socialPrompt,
       state,
       now: absWeek(state),
     };

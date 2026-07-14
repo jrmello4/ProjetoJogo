@@ -298,7 +298,10 @@ export class EventsView {
     `;
   }
 
-  static renderCornerRound({ fighterName, opponentName, round, roundResult, totalScoreA, totalScoreB, cardA, cardB }) {
+  // `suggested`: chave de CORNER_INSTRUCTIONS sugerida pelo técnico da
+  // Academia atual para o PRÓXIMO round (§C.2 — já passou pelo embaralho de
+  // sinergia em CornerAdvice antes de chegar aqui; esta view só destaca).
+  static renderCornerRound({ fighterName, opponentName, round, roundResult, totalScoreA, totalScoreB, cardA, cardB, suggested = null }) {
     // Cartões oficiais (10-point must acumulado). Fallback pra performance
     // bruta só em chamadas antigas que não passam cardA/cardB.
     const cA = cardA ?? totalScoreA;
@@ -350,12 +353,18 @@ export class EventsView {
       <div class="section-label">Instruções de córner para o round ${round + 1}</div>
       <div class="corner-choice-grid">
         ${Object.entries(CORNER_INSTRUCTIONS).map(([key, meta]) => `
-          <button class="card corner-choice" data-instruction="${key}">
+          <button class="card corner-choice${key === suggested ? ' corner-choice--suggested' : ''}" data-instruction="${key}">
+            ${key === suggested ? '<div class="corner-choice-tag">Sugestão do técnico</div>' : ''}
             <div class="corner-choice-icon">${meta.icon}</div>
             <div class="corner-choice-label">${meta.label}</div>
             <div class="corner-choice-desc text-xs text-muted">${meta.desc}</div>
           </button>
         `).join('')}
+        <button class="card corner-choice corner-choice--instinct" data-instruction="instinct">
+          <div class="corner-choice-icon">🧭</div>
+          <div class="corner-choice-label">Lutar no Instinto</div>
+          <div class="corner-choice-desc text-xs text-muted">Ignora o córner. Vale sua própria composição e leitura de jogo.</div>
+        </button>
       </div>
     `;
   }

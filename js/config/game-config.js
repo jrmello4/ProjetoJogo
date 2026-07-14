@@ -464,6 +464,39 @@ export const SPONSOR_BRANDS = [
   { id: 'sp-apexmedia',name: 'Apex Global Media',         tier: 1, weekly: 2200, goalWins: 4, goalWeeks: 39, bonus: 60000, minPopularity: 75, imageClause: 'clean' },
 ];
 
+// Redes sociais como sistema contínuo — ver spec §D.2. ESTENDE o mesmo
+// espírito da coletiva de imprensa (PressConference) para semanas LIVRES
+// (sem luta marcada): 1-2x/mês (~15% de chance por semana livre) surge um
+// prompt leve de "publicar nas redes" com 3-4 escolhas curtas. Deliberadamente
+// SEPARADO de `pcHype` (isso é específico de bolsa de luta, já usado pela
+// coletiva pré-luta) — aqui só popularidade/moral pequenos e diretos, mais
+// (quando provoca) uma entrada no careerLog que o SponsorService já lê para
+// decidir cláusulas de imagem 'clean'/'villain' (§E.2).
+export const SOCIAL_CONFIG = {
+  WEEKLY_CHANCE: 0.15,        // chance por semana livre (sem reserva aceita) de surgir um prompt
+  PROMPT_EXPIRY_WEEKS: 3,     // some sozinho se ignorado por tempo demais
+  PROVOKE_POPULARITY: 3,
+  PROVOKE_MORALE_RISK: -3,
+  PROVOKE_RIVALRY_INTENSITY_GAIN: 1,
+  PROVOCATION_MAGNITUDE: 20,  // magnitude (0-100) da entrada no careerLog
+  TITLE_SHOT_MIN_WINS: 5,     // mínimo de vitórias pra pedido soar plausível
+  TITLE_SHOT_POPULARITY: 3,
+  TITLE_SHOT_EMBARRASSMENT_MORALE: -4, // penalidade se pedir sem crédito nenhum
+  RESPOND_CRITICS_POPULARITY: 1,       // nudge neutro, quase imperceptível
+  STAY_QUIET_MORALE: 3,
+};
+
+// Rivalidades com origem e identidade — ver spec §D.3. `Rivalry.type` deixa
+// de ser sempre 'competitive': vira 'robbery' quando a luta que criou/
+// reacendeu a rivalidade terminou em decisão dividida/majoritária (resultado
+// controverso); vira 'grudge' quando existe uma provocação pública recente
+// (careerLog §D.2, type 'provocation') mirando um dos dois lutadores; senão
+// continua 'competitive' (comportamento de hoje).
+export const RIVALRY_CONFIG = {
+  GRUDGE_LOOKBACK_WEEKS: 10, // janela pra uma provocação recente ainda "plantar" um grudge
+  GRUDGE_PRESSURE_BONUS: 20, // §C.3 — pressão extra numa revanche de rivalidade grudge
+};
+
 // Presets de simulação de período (fast-forward)
 export const SIMULATE_PERIOD_PRESETS = [
   { weeks: 4, label: '1 Mês' },

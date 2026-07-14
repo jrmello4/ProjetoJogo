@@ -87,6 +87,7 @@ export class WorldService {
     await this._processYearEnd(absWeekNow, playerFighterId, startedAt);
     // G1: verificar cinturões interinos (toda semana)
     await this._checkInterimTitles(absWeekNow, promotions);
+    await this._evolveAIFighters(absWeekNow, playerFighterId);
 
     return { playerEvents };
   }
@@ -866,5 +867,30 @@ export class WorldService {
       purged++;
     }
     return purged;
+  }
+
+  // Evolução semanal para IA — compensa a ausência de _applyWeeklyTraining.
+  // Roda a cada 4 semanas: fighters de IA ganham uma versão light do
+  // evolve() pós-luta para não estagnarem entre lutas. Jovens (< 30)
+  // têm o dobro da chance de insight.
+  async _evolveAIFighters(absWeekNow, playerFighterId) {
+    if (absWeekNow % 4 !== 0) return;
+    const all = await this.fighterCtrl.getAllFighters();
+    for (const data of all) {
+      if (data.id === playerFighterId) continue;
+      if (data.status === 'retired' || data.status === 'injured') continue;
+      const fighter = new Fighter(data);
+      const isYoung = (fighter.age || 30) < 30;
+      let evolved = false;
+      for (const key of Object.keys(fighter.attributes)) {
+        if (Math.random() > (isYoung ? 0.15 : 0.08)) continue;
+        const gain = Math.random() * 1.5 + 0.3;
+        fighter.attributes[key] = Math.min(gain + (fighter.attributes[key] || 50), fighter.effectiveCeiling(key));
+        evolved = true;
+      }
+      if (evolved) {
+        await this.fighterCtrl.updateFighter(fighter);
+      }
+    }
   }
 }

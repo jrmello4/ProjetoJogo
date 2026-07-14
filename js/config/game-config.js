@@ -723,6 +723,221 @@ export const SIMULATE_PERIOD_PRESETS = [
   { weeks: 52, label: '1 Ano' },
 ];
 
+// ============================================================
+// SISTEMA DE CUSTOMIZAÇÃO — Estilos, Golpes e Perks
+// ============================================================
+
+export const FIGHTING_STYLES = {
+  boxer: {
+    id: 'boxer', label: 'Boxer',
+    desc: 'Soco afiado, footwork preciso. Perfura defesas no 1-2.',
+    bonusAttrs: ['boxing', 'headMovement', 'footwork'],
+    evolutionRate: { striking: 1.3, grappling: 0.8, physical: 1.0, mental: 1.0 },
+    matchup: { advantage: ['muayThai'], disadvantage: ['wrestler'] },
+    stylePerkId: 'fastHands',
+    poolMoves: ['jab', 'cross', 'hook', 'uppercut', 'overhand', 'bodyShot', 'takedown'],
+  },
+  muayThai: {
+    id: 'muayThai', label: 'Muay Thai',
+    desc: 'Oito armas. Joelhadas, cotoveladas, clinque mortal.',
+    bonusAttrs: ['muayThai', 'clinch', 'kickboxing'],
+    evolutionRate: { striking: 1.2, grappling: 1.1, physical: 1.0, mental: 0.9 },
+    matchup: { advantage: ['wrestler'], disadvantage: ['boxer'] },
+    stylePerkId: 'eightWeapons',
+    poolMoves: ['jab', 'cross', 'legKick', 'lowKick', 'headKick', 'elbow', 'knee', 'clinchKnee', 'takedown'],
+  },
+  wrestler: {
+    id: 'wrestler', label: 'Wrestler',
+    desc: 'Queda, controle, ground and pound. Ninguém te tira do chão.',
+    bonusAttrs: ['wrestling', 'takedowns', 'takedownDefense', 'strength'],
+    evolutionRate: { striking: 0.8, grappling: 1.4, physical: 1.2, mental: 0.9 },
+    matchup: { advantage: ['boxer'], disadvantage: ['muayThai', 'bjj'] },
+    stylePerkId: 'groundAndPound',
+    poolMoves: ['jab', 'cross', 'takedown', 'singleLeg', 'doubleLeg', 'slam', 'groundAndPound'],
+  },
+  bjj: {
+    id: 'bjj', label: 'BJJ',
+    desc: 'Finalização letal. Do guard à montada, você tem o golpe.',
+    bonusAttrs: ['bjj', 'submissionOffense', 'submissionDefense', 'groundControl'],
+    evolutionRate: { striking: 0.7, grappling: 1.5, physical: 0.9, mental: 1.1 },
+    matchup: { advantage: ['wrestler'], disadvantage: ['boxer'] },
+    stylePerkId: 'berimbolo',
+    poolMoves: ['takedown', 'groundAndPound', 'armbar', 'guillotine', 'rearNaked', 'triangle'],
+  },
+  freestyle: {
+    id: 'freestyle', label: 'Freestyle',
+    desc: 'Versátil. Sem especialidade, sem fraqueza.',
+    bonusAttrs: ['fightIQ', 'adaptability'],
+    evolutionRate: { striking: 1.0, grappling: 1.0, physical: 1.0, mental: 1.3 },
+    matchup: { advantage: [], disadvantage: [] },
+    stylePerkId: 'versatility',
+    poolMoves: ['jab', 'cross', 'hook', 'uppercut', 'legKick', 'lowKick', 'takedown', 'singleLeg', 'armbar', 'rearNaked', 'groundAndPound'],
+  },
+};
+
+export const STYLE_SWITCH_CONFIG = {
+  LOCK_WEEKS: 4,
+  COST: 500,
+};
+
+export const MOVES = {
+  jab:         { name: 'Jab',     type: 'strike',     baseAttr: 'boxing',             staminaCost: 3,  damage: 1.0, tags: ['quick', 'range'] },
+  cross:       { name: 'Cross',   type: 'strike',     baseAttr: 'boxing',             staminaCost: 5,  damage: 1.4, tags: ['power', 'range'] },
+  hook:        { name: 'Hook',    type: 'strike',     baseAttr: 'power',              staminaCost: 6,  damage: 1.6, tags: ['power', 'close'] },
+  uppercut:    { name: 'Uppercut',type: 'strike',     baseAttr: 'power',              staminaCost: 6,  damage: 1.5, tags: ['power', 'close'] },
+  overhand:    { name: 'Overhand',type: 'strike',     baseAttr: 'power',              staminaCost: 7,  damage: 1.8, tags: ['power', 'risky'] },
+  bodyShot:    { name: 'Body Shot',type: 'strike',    baseAttr: 'cardio',             staminaCost: 4,  damage: 1.0, tags: ['body', 'setup'] },
+  legKick:     { name: 'Leg Kick', type: 'strike',    baseAttr: 'kickboxing',         staminaCost: 4,  damage: 0.8, tags: ['range', 'body'] },
+  lowKick:     { name: 'Low Kick', type: 'strike',    baseAttr: 'kickboxing',         staminaCost: 5,  damage: 1.0, tags: ['range', 'cripple'] },
+  headKick:    { name: 'Head Kick',type: 'strike',    baseAttr: 'kickboxing',         staminaCost: 8,  damage: 2.0, tags: ['power', 'risky'] },
+  elbow:       { name: 'Cotovelada',type: 'strike',   baseAttr: 'muayThai',           staminaCost: 6,  damage: 1.7, tags: ['power', 'close', 'cut'] },
+  knee:        { name: 'Joelhada',type: 'strike',     baseAttr: 'muayThai',           staminaCost: 5,  damage: 1.5, tags: ['power', 'close'] },
+  clinchKnee:  { name: 'Clinch Knee',type: 'strike',  baseAttr: 'muayThai',           staminaCost: 4,  damage: 1.3, tags: ['clinch', 'body'] },
+  takedown:    { name: 'Queda',   type: 'takedown',   baseAttr: 'takedowns',          staminaCost: 6,  damage: 0,   tags: ['grappling'] },
+  singleLeg:   { name: 'Single Leg',type: 'takedown', baseAttr: 'takedowns',          staminaCost: 7,  damage: 0,   tags: ['grappling', 'speed'] },
+  doubleLeg:   { name: 'Double Leg',type: 'takedown', baseAttr: 'takedowns',          staminaCost: 8,  damage: 0,   tags: ['grappling', 'power'] },
+  slam:        { name: 'Slam',    type: 'takedown',   baseAttr: 'strength',           staminaCost: 9,  damage: 1.2, tags: ['grappling', 'power'] },
+  armbar:      { name: 'Armbar',  type: 'submission', baseAttr: 'submissionOffense',  staminaCost: 7,  damage: 0,   tags: ['submission'] },
+  guillotine:  { name: 'Guilhotina',type: 'submission',baseAttr: 'submissionOffense', staminaCost: 7,  damage: 0,   tags: ['submission'] },
+  rearNaked:   { name: 'Mata-Leão',type: 'submission',baseAttr: 'submissionOffense',  staminaCost: 6,  damage: 0,   tags: ['submission'] },
+  triangle:    { name: 'Triângulo',type: 'submission',baseAttr: 'submissionOffense',  staminaCost: 8,  damage: 0,   tags: ['submission', 'guard'] },
+  groundAndPound: { name: 'Ground and Pound', type: 'strike', baseAttr: 'power',      staminaCost: 5,  damage: 1.3, tags: ['ground'] },
+};
+
+export const PERKS = {
+  fastHands: {
+    id: 'fastHands', name: 'Mão Rápida', category: 'striking',
+    desc: 'Combinações de 2+ golpes gastam 15% menos stamina',
+    requirements: { attrs: { speed: 50 }, style: null, level: 1, perks: [] },
+    effect: { type: 'stamina_combo_reduction', value: 0.85 },
+  },
+  heavyHands: {
+    id: 'heavyHands', name: 'Pé Pesado', category: 'striking',
+    desc: 'Dano de power golpes +10%',
+    requirements: { attrs: { power: 60 }, style: null, level: 2, perks: [] },
+    effect: { type: 'power_multiplier', value: 1.10 },
+  },
+  lightningJab: {
+    id: 'lightningJab', name: 'Jab de Raios', category: 'striking',
+    desc: 'Jab gasta 20% menos stamina e acerta 10% mais',
+    requirements: { attrs: { boxing: 50, speed: 45 }, style: null, level: 1, perks: [] },
+    effect: { type: 'move_buff', moveId: 'jab', staminaMult: 0.80, damageMult: 1.10 },
+  },
+  crossRespect: {
+    id: 'crossRespect', name: 'Cruzado de Respeito', category: 'striking',
+    desc: 'Cross tem +15% de chance de knockdown',
+    requirements: { attrs: { boxing: 65, power: 55 }, style: 'boxer', level: 3, perks: ['heavyHands'] },
+    effect: { type: 'move_buff', moveId: 'cross', kdChanceBonus: 0.15 },
+  },
+  comboLightning: {
+    id: 'comboLightning', name: 'Combinação Relâmpago', category: 'striking',
+    desc: 'Combos de 3+ golpes têm +20% de velocidade',
+    requirements: { attrs: { boxing: 70, speed: 60 }, style: null, level: 4, perks: ['fastHands', 'heavyHands'] },
+    effect: { type: 'stamina_combo_reduction', value: 0.70 },
+  },
+  knockoutArtist: {
+    id: 'knockoutArtist', name: 'Nocauteador', category: 'striking',
+    desc: '+8% chance de KO quando oponente está atordoado',
+    requirements: { attrs: { power: 70 }, style: null, level: 5, perks: ['heavyHands', 'crossRespect'] },
+    effect: { type: 'ko_chance_bonus', value: 0.08 },
+  },
+  bornFinisher: {
+    id: 'bornFinisher', name: 'Finalizador Nato', category: 'grappling',
+    desc: 'Finalizações no ground têm +12% de chance de sucesso',
+    requirements: { attrs: { submissionOffense: 55, groundControl: 50 }, style: null, level: 2, perks: [] },
+    effect: { type: 'submission_chance_mult', value: 1.12 },
+  },
+  iceOnGround: {
+    id: 'iceOnGround', name: 'Gelo no Chão', category: 'grappling',
+    desc: 'Nunca é finalizado quando está cansado (stamina < 30)',
+    requirements: { attrs: { submissionDefense: 60, composure: 50 }, style: null, level: 3, perks: [] },
+    effect: { type: 'never_submitted_low_stamina', value: true },
+  },
+  suffocatingPressure: {
+    id: 'suffocatingPressure', name: 'Pressão Sufocante', category: 'grappling',
+    desc: 'Ground control drena 20% mais stamina do oponente',
+    requirements: { attrs: { wrestling: 60, groundControl: 55 }, style: null, level: 3, perks: [] },
+    effect: { type: 'ground_stamina_drain_mult', value: 1.20 },
+  },
+  ironBody: {
+    id: 'ironBody', name: 'Corpo de Ferro', category: 'physical',
+    desc: 'Dano físico recebido -8%',
+    requirements: { attrs: { durability: 60, strength: 50 }, style: null, level: 2, perks: [] },
+    effect: { type: 'damage_taken_reduction', value: 0.92 },
+  },
+  warTank: {
+    id: 'warTank', name: 'Tanque de Guerra', category: 'physical',
+    desc: 'Cardio regenera 10% entre rounds (em vez de cair)',
+    requirements: { attrs: { cardio: 65, recovery: 55 }, style: null, level: 3, perks: ['ironBody'] },
+    effect: { type: 'cardio_regeneration', value: 0.10 },
+  },
+  endlessGas: {
+    id: 'endlessGas', name: 'Fôlego Infinito', category: 'physical',
+    desc: 'Stamina decai 15% menos por round',
+    requirements: { attrs: { cardio: 70, recovery: 65 }, style: null, level: 4, perks: ['warTank'] },
+    effect: { type: 'stamina_decay_reduction', value: 0.85 },
+  },
+  coldCalculator: {
+    id: 'coldCalculator', name: 'Frio Calculista', category: 'mental',
+    desc: 'Composure +10% em rounds de decisão (3o/5o round)',
+    requirements: { attrs: { composure: 55, fightIQ: 55 }, style: null, level: 2, perks: [] },
+    effect: { type: 'composure_late_rounds', value: 1.10 },
+  },
+  killerInstinct: {
+    id: 'killerInstinct', name: 'Instinto Assassino', category: 'mental',
+    desc: '+10% striking nos 2 minutos finais de cada round',
+    requirements: { attrs: { aggression: 60, composure: 50 }, style: null, level: 3, perks: [] },
+    effect: { type: 'striking_late_round', value: 1.10 },
+  },
+  lionsHeart: {
+    id: 'lionsHeart', name: 'Coração de Leão', category: 'mental',
+    desc: 'Se perder, morale cai 50% menos',
+    requirements: { attrs: { determination: 40 }, style: null, level: 2, perks: [] },
+    effect: { type: 'morale_loss_reduction', value: 0.50 },
+  },
+  eightWeapons: {
+    id: 'eightWeapons', name: 'Oito Armas', category: 'style',
+    desc: 'Joelhada e cotovelada no clinch têm +15% de dano',
+    requirements: { attrs: {}, style: 'muayThai', level: 1, perks: [] },
+    effect: { type: 'style_perk', moveBonus: { elbow: 1.15, knee: 1.15, clinchKnee: 1.15 } },
+  },
+  groundAndPound: {
+    id: 'groundAndPound', name: 'Ground and Pound', category: 'style',
+    desc: 'Ground strikes têm +15% de dano e +10% knockdown chance',
+    requirements: { attrs: {}, style: 'wrestler', level: 1, perks: [] },
+    effect: { type: 'style_perk', moveBonus: { groundAndPound: 1.15 }, kdChanceBonus: 0.10 },
+  },
+  berimbolo: {
+    id: 'berimbolo', name: 'Berimbolo', category: 'style',
+    desc: 'Tentativas de finalização têm +12% de chance a partir do round 2',
+    requirements: { attrs: {}, style: 'bjj', level: 1, perks: [] },
+    effect: { type: 'style_perk', subChanceLateRounds: 0.12 },
+  },
+  versatility: {
+    id: 'versatility', name: 'Versatilidade', category: 'style',
+    desc: '10% de chance de anular vantagem de estilo do oponente',
+    requirements: { attrs: {}, style: 'freestyle', level: 1, perks: [] },
+    effect: { type: 'style_perk', nullifyMatchupChance: 0.10 },
+  },
+};
+
+export const LEVEL_CONFIG = {
+  XP_PER_LEVEL: 100,
+  XP_PER_FIGHT: 20,
+  XP_PER_WIN_BONUS: 10,
+  XP_PER_WEEK_TRAINED: 5,
+  PERK_POINT_PER_LEVEL: 1,
+  PERK_POINT_EVERY_N_LEVELS: 3,
+  PERK_POINT_MILESTONES: {
+    firstWin: 1,
+    fiveWins: 1,
+    firstTitleShot: 1,
+    firstBelt: 2,
+    firstDefense: 1,
+  },
+  MAX_LEVEL: 50,
+};
+
 export function absWeek(state) {
   return (state.year - 1) * 52 + state.week;
 }

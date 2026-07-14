@@ -48,6 +48,7 @@ import {
   absWeek,
 } from '../config/game-config.js';
 import { TapeService } from '../services/tape-service.js';
+import { LEVEL_CONFIG } from '../config/game-config.js';
 
 const WORLD_MODE = 'career-1-fighter';
 // v4: carreira de 1 lutador — Academy substitui Gym/RivalGym, economia
@@ -405,6 +406,16 @@ export class GameController {
     const fighter = await this.getPlayerFighter();
     const academy = await this.getAcademy(fighter.academyId);
 
+    // XP por luta
+    for (const evt of world.playerEvents) {
+      for (const result of evt.playerResults) {
+        if (result && result.winnerId) {
+          const xpGain = LEVEL_CONFIG.XP_PER_FIGHT + (result.winnerId === fighter.id ? LEVEL_CONFIG.XP_PER_WIN_BONUS : 0);
+          fighter.addXP(xpGain);
+        }
+      }
+    }
+
     await this.offerService.expireOld(now);
     const promotions = await this.worldService.getPromotions();
     const manager = fighter.managerId ? await this.managerService.getManager(fighter.managerId) : null;
@@ -420,6 +431,11 @@ export class GameController {
     const economy = this._applyWeeklyEconomy(fighter, academy, now);
     const sponsorActivity = await this.sponsorService.processWeek(now, fighter);
     await this._applyWeeklyTraining(fighter, academy);
+
+    // XP: treinar dá XP
+    if (fighter) {
+      fighter.addXP(LEVEL_CONFIG.XP_PER_WEEK_TRAINED);
+    }
 
     // Fase 3 — sumir do mapa te torna um enigma de novo. É a única forma
     // gratuita de baixar a exposição, e ela cobra o preço mais alto do jogo:

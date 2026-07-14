@@ -5,6 +5,7 @@ import {
   COUNTER_OF,
   PLAN_SPECIALTY,
   TAPE_CONFIG,
+  FIGHTING_STYLES,
 } from '../config/game-config.js';
 
 // O Livro Sobre Você — Fase 3.
@@ -33,6 +34,8 @@ export class TapeService {
 
   static tapeOf(fighter) {
     if (!fighter.tape) fighter.tape = this.defaultTape();
+    fighter.tape.style = fighter.style;
+    fighter.tape.styleLabel = FIGHTING_STYLES[fighter.style]?.label || 'Freestyle';
     return fighter.tape;
   }
 

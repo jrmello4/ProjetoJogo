@@ -1,3 +1,5 @@
+import { StyleService } from './style-service.js';
+
 const FIRST_NAMES_MALE = [
   'Carlos', 'João', 'Pedro', 'Lucas', 'Rafael', 'Felipe', 'Bruno', 'Thiago',
   'Diego', 'André', 'Gabriel', 'Leonardo', 'Marcos', 'Eduardo', 'Rodrigo',
@@ -188,6 +190,9 @@ export class DataGenerator {
       lastCutImpact: 0,
     };
 
+    const fightStyle = StyleService.randomStyle();
+    const moveset = StyleService.randomMoveset(fightStyle, 6);
+
     return {
       id: null,
       name: DataGenerator.randomName(),
@@ -195,6 +200,8 @@ export class DataGenerator {
       nationality: nat,
       weightClass: weight,
       fightingStyle: style,
+      style: fightStyle,
+      moveset,
       record: { wins, losses, draws },
       attributes,
       hidden,

@@ -96,6 +96,16 @@ export class TrainingCamp {
       fighter.attributes[attr] = clamp(fighter.attributes[attr] + boosted, 0, fighter.effectiveCeiling(attr));
     }
 
+    // Proficiência de golpes
+    if (fighter.moveset && fighter.moveset.length > 0) {
+      const profGain = { light: 1, moderate: 2, intense: 3 }[intensity] || 1;
+      const shuffled = [...fighter.moveset].sort(() => Math.random() - 0.5);
+      const count = Math.min(2, shuffled.length);
+      for (let i = 0; i < count; i++) {
+        fighter.gainProficiency(shuffled[i], profGain);
+      }
+    }
+
     // Riscos
     const risks = this._calcRisks(intensity, fighter);
     const result = {

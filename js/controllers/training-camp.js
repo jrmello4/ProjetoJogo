@@ -15,12 +15,13 @@ export class TrainingCamp {
   // funcionam sem luta como treino normal aprimorado).
   // `weaponTarget` (Fase 3): só usado quando spec === 'install_weapon'. É o
   // gamePlanKey da arma que o lutador está instalando.
-  static configureCamp(fighter, intensity, spec, sparringPartnerId = null, weaponTarget = null) {
+  static configureCamp(fighter, intensity, spec, sparringPartnerId = null, weaponTarget = null, proficiencyFocus = null) {
     fighter.campConfig = {
       intensity,
       spec,
       sparringPartnerId,
       weaponTarget,
+      proficiencyFocus,
     };
     fighter.campProcessedThisWeek = false;
   }
@@ -97,12 +98,27 @@ export class TrainingCamp {
     }
 
     // Proficiência de golpes
+    const profGains = {};
     if (fighter.moveset && fighter.moveset.length > 0) {
       const profGain = { light: 1, moderate: 2, intense: 3 }[intensity] || 1;
-      const shuffled = [...fighter.moveset].sort(() => Math.random() - 0.5);
-      const count = Math.min(2, shuffled.length);
-      for (let i = 0; i < count; i++) {
-        fighter.gainProficiency(shuffled[i], profGain);
+      const focus = cfg.proficiencyFocus;
+      if (focus && fighter.moveset.includes(focus)) {
+        // Golpe focado ganha 2x, se houver segundo slot vai pra outro aleatório
+        profGains[focus] = profGain * 2;
+        fighter.gainProficiency(focus, profGain * 2);
+        const others = fighter.moveset.filter(m => m !== focus);
+        if (others.length > 0) {
+          const second = others[Math.floor(Math.random() * others.length)];
+          profGains[second] = profGain;
+          fighter.gainProficiency(second, profGain);
+        }
+      } else {
+        const shuffled = [...fighter.moveset].sort(() => Math.random() - 0.5);
+        const count = Math.min(2, shuffled.length);
+        for (let i = 0; i < count; i++) {
+          profGains[shuffled[i]] = profGain;
+          fighter.gainProficiency(shuffled[i], profGain);
+        }
       }
     }
 
@@ -110,6 +126,7 @@ export class TrainingCamp {
     const risks = this._calcRisks(intensity, fighter);
     const result = {
       gains,
+      profGains,
       sparringBonus,
       weapon,
       sparring,

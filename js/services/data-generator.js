@@ -83,10 +83,6 @@ const WEIGHT_CLASSES = [
   'Heavyweight',
 ];
 
-const STYLES = [
-  'Boxing', 'Kickboxing', 'Muay Thai', 'Wrestling', 'BJJ', 'Mixed',
-];
-
 export class DataGenerator {
   static randomName() {
     const first = FIRST_NAMES_MALE[Math.floor(Math.random() * FIRST_NAMES_MALE.length)];
@@ -102,15 +98,16 @@ export class DataGenerator {
     return WEIGHT_CLASSES[Math.floor(Math.random() * WEIGHT_CLASSES.length)];
   }
 
+  /** @deprecated Usar StyleService.randomStyle() */
   static randomStyle() {
-    return STYLES[Math.floor(Math.random() * STYLES.length)];
+    return ['Boxing', 'Kickboxing', 'Muay Thai', 'Wrestling', 'BJJ', 'Mixed'][Math.floor(Math.random() * 6)];
   }
 
   static generateFighter(organizationId = null, opts = {}) {
     const age = opts.age ?? Math.floor(Math.random() * 15) + 21;
     const nat = DataGenerator.randomNationality();
     const weight = opts.weightClass || DataGenerator.randomWeightClass();
-    const style = DataGenerator.randomStyle();
+    const style = DataGenerator.randomStyle(); // legacy display string
 
     const [skillMin, skillMax] = opts.skillRange || [30, 60];
     const baseSkill = skillMin + Math.floor(Math.random() * (skillMax - skillMin + 1));
@@ -193,6 +190,14 @@ export class DataGenerator {
     const fightStyle = StyleService.randomStyle();
     const moveset = StyleService.randomMoveset(fightStyle, 6);
 
+    // Proficiência inicial baseada no nível de habilidade do lutador
+    const avgSkill = (boxing + kickboxing + muayThai + wrestling + bjj + cardio + chin + fightIQ) / 8;
+    const profBase = Math.max(10, Math.min(60, Math.round(avgSkill * 0.5 + Math.random() * 15)));
+    const moveProficiency = {};
+    for (const m of moveset) {
+      moveProficiency[m] = Math.min(100, profBase + Math.floor(Math.random() * 21) - 10);
+    }
+
     return {
       id: null,
       name: DataGenerator.randomName(),
@@ -202,6 +207,7 @@ export class DataGenerator {
       fightingStyle: style,
       style: fightStyle,
       moveset,
+      moveProficiency,
       record: { wins, losses, draws },
       attributes,
       hidden,

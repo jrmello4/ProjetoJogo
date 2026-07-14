@@ -129,7 +129,7 @@ export class FighterProfileView {
           ${getNationalityFlag(fighter.nationality.code)} ${fighter.name}
           <button class="btn-icon fighter-rename" data-id="${fighter.id}" title="Renomear lutador" style="font-size:0.8rem;vertical-align:middle;margin-left:0.5rem;cursor:pointer;background:none;border:none;padding:2px;opacity:0.5;transition:opacity 0.2s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.5">✏️</button>
         </h2>
-        <p>${fighter.nationality.name} · ${fighter.age} anos · ${fighter.fightingStyle}</p>
+        <p>${fighter.nationality.name} · ${fighter.age} anos · ${FIGHTING_STYLES[fighter.style]?.label || fighter.fightingStyle}</p>
       </div>
 
       <div class="grid grid-cols-4 mb-4">
@@ -241,7 +241,7 @@ export class FighterProfileView {
             </div>
             <div>
               <div class="text-xs text-muted">Estilo</div>
-              <div class="text-sm font-bold">${fighter.fightingStyle}</div>
+              <div class="text-sm font-bold">${FIGHTING_STYLES[fighter.style]?.label || fighter.fightingStyle}</div>
             </div>
           </div>
 
@@ -358,10 +358,14 @@ export class FighterProfileView {
       <!-- Estilo de Luta e Moveset -->
       ${(() => {
         const styleDef = FIGHTING_STYLES[fighter.style] || FIGHTING_STYLES.freestyle;
+        const poolMoves = styleDef.poolMoves || [];
+        const equippedSet = new Set(fighter.moveset);
+        const maxMoves = fighter.getMaxMoves();
         return `
         <div class="card mt-4">
           <div class="card-header">
             <span class="card-title">Estilo de Luta: ${styleDef.label}</span>
+            ${isPlayer ? '<button class="btn btn-sm btn-secondary style-switch-btn" data-fighter-id="' + fighter.id + '" title="Trocar de estilo (custa $500 e trava 4 semanas)">🔄 Trocar</button>' : ''}
           </div>
           <div class="text-sm text-muted mb-2">${styleDef.desc}</div>
           ${styleDef.bonusAttrs.length > 0 ? `
@@ -370,7 +374,7 @@ export class FighterProfileView {
             </div>
           ` : ''}
           <div class="mt-3">
-            <div class="card-title mb-2">Moveset (${fighter.moveset.length}/${fighter.getMaxMoves()})</div>
+            <div class="card-title mb-2">Moveset (${fighter.moveset.length}/${maxMoves})</div>
             <div class="grid grid-col" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0.5rem">
               ${fighter.moveset.map(moveId => {
                 const move = MOVES[moveId];
@@ -382,10 +386,22 @@ export class FighterProfileView {
                       <div class="progress-fill ${prof >= 70 ? 'high' : prof >= 40 ? 'medium' : 'low'}" style="width:${prof}%"></div>
                     </div>
                     <span class="text-xs text-muted" style="min-width:2.5rem;text-align:right">${Math.round(prof)}%</span>
+                    ${isPlayer && fighter.moveset.length > 1 ? `<button class="btn btn-sm btn-remove-move" data-move-id="${moveId}" style="font-size:0.6rem;padding:1px 6px;color:var(--danger);background:none;border:1px solid var(--danger);border-radius:3px;cursor:pointer">✕</button>` : ''}
                   </div>`;
               }).join('')}
             </div>
           </div>
+          ${isPlayer && fighter.moveset.length < maxMoves ? `
+            <div class="mt-3">
+              <div class="text-xs font-bold text-secondary mb-1">Adicionar golpe (${maxMoves - fighter.moveset.length} slot${maxMoves - fighter.moveset.length > 1 ? 's' : ''} disponíve${maxMoves - fighter.moveset.length > 1 ? 'is' : 'l'})</div>
+              <div class="flex gap-1 flex-wrap">
+                ${poolMoves.filter(m => !equippedSet.has(m)).map(moveId => {
+                  const move = MOVES[moveId];
+                  return `<button class="btn btn-sm btn-add-move" data-move-id="${moveId}" style="font-size:0.65rem;padding:2px 6px;background:var(--bg-raised);border:1px solid var(--border);border-radius:4px;cursor:pointer">+ ${move?.name || moveId}</button>`;
+                }).join('')}
+              </div>
+            </div>
+          ` : ''}
         </div>`;
       })()}
 
@@ -510,7 +526,7 @@ export class FighterProfileView {
     `;
   }
 
-  static bindEvents(fighter, { onPerkLearned } = {}) {
+  static bindEvents(fighter, { onPerkLearned, onMovesetChange, onStyleSwitch } = {}) {
     document.querySelectorAll('.btn-learn-perk').forEach(btn => {
       btn.addEventListener('click', () => {
         const node = btn.closest('.perk-node');
@@ -519,6 +535,31 @@ export class FighterProfileView {
         if (fighter.learnPerk(perkId)) {
           if (onPerkLearned) onPerkLearned();
         }
+      });
+    });
+
+    document.querySelectorAll('.btn-remove-move').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const moveId = btn.dataset.moveId;
+        const idx = fighter.moveset.indexOf(moveId);
+        if (idx === -1) return;
+        fighter.moveset.splice(idx, 1);
+        if (onMovesetChange) onMovesetChange();
+      });
+    });
+
+    document.querySelectorAll('.btn-add-move').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const moveId = btn.dataset.moveId;
+        if (fighter.moveset.length >= fighter.getMaxMoves()) return;
+        fighter.moveset.push(moveId);
+        if (onMovesetChange) onMovesetChange();
+      });
+    });
+
+    document.querySelectorAll('.style-switch-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (onStyleSwitch) onStyleSwitch();
       });
     });
   }

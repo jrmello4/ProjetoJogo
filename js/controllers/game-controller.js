@@ -48,7 +48,7 @@ import {
   absWeek,
 } from '../config/game-config.js';
 import { TapeService } from '../services/tape-service.js';
-import { LEVEL_CONFIG } from '../config/game-config.js';
+import { LEVEL_CONFIG, MOVES } from '../config/game-config.js';
 
 const WORLD_MODE = 'career-1-fighter';
 // v4: carreira de 1 lutador — Academy substitui Gym/RivalGym, economia
@@ -411,7 +411,11 @@ export class GameController {
       for (const result of evt.playerResults) {
         if (result && result.winnerId) {
           const xpGain = LEVEL_CONFIG.XP_PER_FIGHT + (result.winnerId === fighter.id ? LEVEL_CONFIG.XP_PER_WIN_BONUS : 0);
-          fighter.addXP(xpGain);
+          const levelsUp = fighter.addXP(xpGain);
+          if (levelsUp > 0) {
+            const bonusPts = fighter.perkPoints > 0 && levelsUp >= 3 ? ` +${Math.floor(levelsUp / 3)} ponto(s) de perk!` : '';
+            await this.notifService.add('success', '⬆️ Level Up!', `Você subiu para Nv.${fighter.level}!${bonusPts}`);
+          }
         }
       }
     }
@@ -434,7 +438,10 @@ export class GameController {
 
     // XP: treinar dá XP
     if (fighter) {
-      fighter.addXP(LEVEL_CONFIG.XP_PER_WEEK_TRAINED);
+      const levelsUp = fighter.addXP(LEVEL_CONFIG.XP_PER_WEEK_TRAINED);
+      if (levelsUp > 0) {
+        await this.notifService.add('success', '⬆️ Level Up!', `Treino semanal te levou ao Nv.${fighter.level}!`);
+      }
     }
 
     // Fase 3 — sumir do mapa te torna um enigma de novo. É a única forma
@@ -1094,6 +1101,16 @@ export class GameController {
           ? `${plan.label} está pronta (${result.weapon.mastery}%). Traga-a numa luta e ninguém vai estar esperando.`
           : `${plan.label}: ${result.weapon.mastery}% instalada. Usá-la crua é pior que não ter plano.`
       );
+    }
+
+    // Prof Gains: notificar ganhos de proficiência do camp
+    if (result?.profGains && Object.keys(result.profGains).length > 0) {
+      const lines = Object.entries(result.profGains).map(([moveId, amt]) => {
+        const move = MOVES[moveId];
+        const prof = Math.round(fighter.getMoveProficiency(moveId));
+        return `${move?.name || moveId} +${amt}% (${prof}%)`;
+      });
+      await this.notifService.add('info', '🎯 Proficiência', lines.join(' · '));
     }
 
     return { result, canceledFight: !!(result?.canceledFight && result?.injured) };

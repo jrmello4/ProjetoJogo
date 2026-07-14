@@ -1,5 +1,5 @@
 import { formatCurrency, getWeightClassShort, getWeightClassName } from '../utils/helpers.js';
-import { FIGHTING_STYLES, TIER_LABELS, TRAINING_FOCUS_META, TITLE_ROLE } from '../config/game-config.js';
+import { FIGHTING_STYLES, LEVEL_CONFIG, TIER_LABELS, TRAINING_FOCUS_META, TITLE_ROLE } from '../config/game-config.js';
 
 const tierBadgeCls = (tier) => (tier === 1 ? 'badge-danger' : tier === 2 ? 'badge-warning' : 'badge-info');
 
@@ -357,7 +357,7 @@ export class DashboardView {
             <span class="stat-value" style="font-size:1.6rem">${fighter.overallRating}</span>
             <div>
               <div class="text-sm font-bold">${fighter.record.wins}-${fighter.record.losses}-${fighter.record.draws}</div>
-              <div class="text-xs text-muted">${fighter.age} anos · ${fighter.fightingStyle}</div>
+              <div class="text-xs text-muted">${fighter.age} anos · ${FIGHTING_STYLES[fighter.style]?.label || fighter.fightingStyle}</div>
             </div>
           </div>
           ${injured ? `<div class="text-xs" style="color:var(--accent)">🏥 ${fighter.injury?.description || 'Lesionado'}</div>` : bookings[0]
@@ -372,7 +372,7 @@ export class DashboardView {
             <div style="flex:1"><div class="progress-bar" style="height:6px">
               <div class="progress-fill" style="width:${xpPct}%"></div>
             </div></div>
-            <small class="text-xs text-muted">${xpPct}%</small>
+            <small class="text-xs text-muted">${Math.round(fighter.xp)}/${LEVEL_CONFIG.XP_PER_LEVEL} (${xpPct}%)</small>
           </div>
 
           <div class="flex items-center gap-2 mt-2">

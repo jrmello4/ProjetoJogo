@@ -510,6 +510,7 @@ export class Fighter {
       }
     }
     if (this.level >= LEVEL_CONFIG.MAX_LEVEL) this.xp = 0;
+    return gained; // quantos níveis subiu
   }
 
   addPerkPointMilestone(milestoneKey) {

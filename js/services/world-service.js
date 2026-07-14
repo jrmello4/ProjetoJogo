@@ -1002,6 +1002,8 @@ export class WorldService {
       const fighter = new Fighter(data);
       const isYoung = (fighter.age || 30) < 30;
       let evolved = false;
+
+      // Atributos
       for (const key of Object.keys(fighter.attributes)) {
         if (Math.random() > (isYoung ? 0.15 : 0.08)) continue;
         const gain = Math.random() * 1.5 + 0.3;
@@ -1011,6 +1013,19 @@ export class WorldService {
         );
         evolved = true;
       }
+
+      // XP e proficiência de golpes (IA também melhora)
+      if (Math.random() < (isYoung ? 0.20 : 0.10)) {
+        fighter.addXP(Math.floor(Math.random() * 5) + 2);
+        evolved = true;
+      }
+      if (fighter.moveset && fighter.moveset.length > 0 && Math.random() < 0.25) {
+        const moveId = fighter.moveset[Math.floor(Math.random() * fighter.moveset.length)];
+        const gain = Math.floor(Math.random() * 3) + 1;
+        fighter.gainProficiency(moveId, gain);
+        evolved = true;
+      }
+
       if (evolved) toUpdate.push(fighter);
     }
     // Batch write em vez de um DB.put por lutador — 130+ writes/4 sem vs 1

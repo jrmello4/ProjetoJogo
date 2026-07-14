@@ -27,7 +27,7 @@ import { SaveService } from './services/save-service.js';
 import { ThreeArena } from './three-arena.js';
 import { ThreeBackground } from './three-background.js';
 import { motion } from './motion/motion-engine.js';
-import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, ARCHETYPES, ORIGINS, absWeekToLabel, SYNERGY_CONFIG } from './config/game-config.js';
+import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, ARCHETYPES, ORIGINS, absWeekToLabel, SYNERGY_CONFIG, FIGHTING_STYLES, PERKS } from './config/game-config.js';
 import { getWeightClassName, formatCurrency, getAdjacentWeightClasses, clamp } from './utils/helpers.js';
 import { CAMP_CONFIG, HYPE_PURSE_RATIO, absWeek } from './config/game-config.js';
 
@@ -1198,8 +1198,79 @@ class App {
     });
 
     // Task 10: perks teia — aprender perks no perfil
+    // Gap #1: equipar/remover golpes
+    // Gap #2: troca de estilo
     FighterProfileView.bindEvents(fighter, {
       onPerkLearned: () => this.showFighterProfile(fighter.id),
+      onMovesetChange: async () => {
+        await this.game.fighterCtrl.updateFighter(fighter);
+        this.showFighterProfile(fighter.id);
+      },
+      onStyleSwitch: async () => {
+        const state = await this.seasonService.getState();
+        const now = absWeek(state);
+        if (fighter.styleLockedUntilAbsWeek > now) {
+          this.notificationService.add('warning', 'Estilo', `Estilo travado por ${fighter.styleLockedUntilAbsWeek - now} semana${fighter.styleLockedUntilAbsWeek - now > 1 ? 's' : ''}.`);
+          return;
+        }
+        const styleKeys = Object.keys(FIGHTING_STYLES).filter(k => k !== fighter.style);
+        const labels = styleKeys.map(k => `${FIGHTING_STYLES[k].label} (vantagem vs ${FIGHTING_STYLES[k].matchup.advantage.map(s => FIGHTING_STYLES[s]?.label).join(', ') || '—'})`);
+        const choice = prompt(
+          `Trocar de estilo (custa $500 e trava 4 semanas):\n\nEstilo atual: ${FIGHTING_STYLES[fighter.style].label}\n\nDigite o número do novo estilo:\n${styleKeys.map((k, i) => `${i + 1}. ${labels[i]}`).join('\n')}`
+        );
+        if (!choice) return;
+        const idx = parseInt(choice, 10) - 1;
+        if (isNaN(idx) || idx < 0 || idx >= styleKeys.length) {
+          this.notificationService.add('warning', 'Estilo', 'Opção inválida.');
+          return;
+        }
+        if (fighter.cash < 500) {
+          this.notificationService.add('warning', 'Estilo', 'Você precisa de $500 para trocar de estilo.');
+          return;
+        }
+        const newStyleId = styleKeys[idx];
+        fighter.cash -= 500;
+        fighter.addTransaction(now, `Troca de estilo: ${FIGHTING_STYLES[fighter.style].label} → ${FIGHTING_STYLES[newStyleId].label}`, -500);
+        const oldStyleId = fighter.style;
+        fighter.style = newStyleId;
+        fighter.styleLockedUntilAbsWeek = now + 4;
+        fighter.styleChangedAtAbsWeek = now;
+        // Reset moveset to new style's pool
+        const newPool = FIGHTING_STYLES[newStyleId].poolMoves || [];
+        const lostMoves = fighter.moveset.filter(m => !newPool.includes(m));
+        fighter.moveset = fighter.moveset.filter(m => newPool.includes(m)).slice(0, fighter.getMaxMoves());
+        if (fighter.moveset.length === 0 && newPool.length > 0) {
+          fighter.moveset = [newPool[0]];
+        }
+        // Gap #3: auto-conceder/remover stylePerk
+        const oldPerkId = FIGHTING_STYLES[oldStyleId]?.stylePerkId;
+        const newPerkId = FIGHTING_STYLES[newStyleId]?.stylePerkId;
+        if (oldPerkId && fighter.perks.includes(oldPerkId)) {
+          fighter.perks = fighter.perks.filter(id => id !== oldPerkId);
+        }
+        if (newPerkId && !fighter.perks.includes(newPerkId)) {
+          fighter.perks.push(newPerkId);
+          // Check if learned via learnPerk to respect perk point cost—style perks are free
+        }
+        // Perks perdidos por requisito de estilo
+        const lostPerks = fighter.perks.filter(id => {
+          const p = PERKS[id];
+          return p && p.requirements?.style && p.requirements.style !== newStyleId;
+        });
+        fighter.perks = fighter.perks.filter(id => {
+          const p = PERKS[id];
+          return !p || !p.requirements?.style || p.requirements.style === newStyleId;
+        });
+        await this.game.fighterCtrl.updateFighter(fighter);
+        const noticeParts = [`Você mudou para ${FIGHTING_STYLES[newStyleId].label}. Estilo travado por 4 semanas.`];
+        if (lostMoves.length > 0) noticeParts.push(`${lostMoves.length} golpe${lostMoves.length > 1 ? 's' : ''} perdido${lostMoves.length > 1 ? 's' : ''} (não disponíve${lostMoves.length > 1 ? 'is' : ''} no ${FIGHTING_STYLES[newStyleId].label}).`);
+        if (lostPerks.length > 0) {
+          const names = lostPerks.map(id => PERKS[id]?.name || id);
+          noticeParts.push(`Perks perdidos: ${names.join(', ')} (requerem ${FIGHTING_STYLES[oldStyleId].label}).`);
+        }
+        this.notificationService.add('success', '🔄 Troca de Estilo', noticeParts.join(' '));
+        this.showFighterProfile(fighter.id);
+      },
     });
   }
 
@@ -1249,8 +1320,9 @@ class App {
           ? document.querySelector(`.camp-weapon-target[data-fighter="${fighter.id}"]`)?.value || null
           : null;
         const partnerId = document.querySelector(`.camp-partner[data-fighter="${fighter.id}"]`)?.value || null;
+        const profFocus = document.querySelector('#camp-proficiency-focus')?.value || null;
 
-        TrainingCamp.configureCamp(fighter, intensity, spec || 'striking', partnerId, weaponTarget);
+        TrainingCamp.configureCamp(fighter, intensity, spec || 'striking', partnerId, weaponTarget, profFocus);
         await this.game.fighterCtrl.updateFighter(fighter);
 
         const cost = CAMP_CONFIG.WEEKLY_COST[intensity] || 0;

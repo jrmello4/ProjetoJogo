@@ -622,18 +622,6 @@ export class SimulationEngine {
     return { winner, loser, method: chosen };
   }
 
-  static _styleMatchup(attacker, defender) {
-    let advantage = 0;
-    if (attacker.fightingStyle === 'Wrestling' && defender.fightingStyle === 'Boxing') advantage += 3;
-    else if (attacker.fightingStyle === 'BJJ' && defender.fightingStyle === 'Kickboxing') advantage += 3;
-    else if (attacker.fightingStyle === 'Boxing' && defender.fightingStyle === 'BJJ') advantage += 2;
-    else if (attacker.fightingStyle === 'Kickboxing' && defender.fightingStyle === 'Wrestling') advantage += 2;
-
-    const skillDiff = attacker.techniqueScore - defender.techniqueScore;
-    advantage += skillDiff * 0.1;
-    return advantage;
-  }
-
   // `outcome`: 'win' | 'loss' | 'draw'
   static _updateFighter(fighter, opponent, outcome, method, round, dateISO = null) {
     if (outcome === 'win') {

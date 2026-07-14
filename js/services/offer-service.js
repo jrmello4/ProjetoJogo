@@ -119,6 +119,19 @@ export class OfferService {
     return offer;
   }
 
+  // Épico B: ao assinar contrato exclusivo, cancela ofertas de luta
+  // pendentes de outras promoções — atleta comprometido não pode ter
+  // propostas concorrentes na mesa.
+  async cancelOffersNotFrom(fighterId, promoId) {
+    const pending = await this.getPending();
+    const toCancel = pending.filter(o => o.fighterId === fighterId && o.promotionId !== promoId);
+    for (const offer of toCancel) {
+      offer.status = OFFER_STATUS.CANCELLED;
+      await this.db.put('offers', offer);
+    }
+    return toCancel.length;
+  }
+
   async expireOld(absWeekNow) {
     const pending = await this.getPending();
     for (const offer of pending) {

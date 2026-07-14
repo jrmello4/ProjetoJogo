@@ -806,8 +806,8 @@ class App {
         const promoId = btn.dataset.promo;
         const promoName = btn.dataset.promoName;
 
-        // Verificar conflito com cinturão de outra promoção
-        const conflict = await this.game.getSigningConflict(fighterId, promoName);
+        // Verificar conflito com cinturão de outra promoção (compara por id)
+        const conflict = await this.game.getSigningConflict(fighterId, promoId);
 
         if (conflict) {
           this._showContractConflictModal(fighterId, promoId, promoName, conflict, now);

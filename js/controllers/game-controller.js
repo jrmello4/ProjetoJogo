@@ -1088,17 +1088,20 @@ export class GameController {
   // Verifica se o lutador segura cinturão em promoção diferente da que
   // está assinando. Se sim, o jogador precisa escolher entre vacar o
   // título e subir, ou adiar o contrato.
-  async getSigningConflict(fighterId, promoName) {
+  // Compara por promotionId, não pelo nome de exibição: nome é string de UI
+  // (frágil a rename/acento) e não identifica a promoção de forma confiável.
+  async getSigningConflict(fighterId, promoId) {
     const belts = await this.titleService.beltsOf(fighterId);
-    const otherBelts = belts.filter(b => b.promotionName !== promoName);
+    const otherBelts = belts.filter(b => b.promotionId !== promoId);
     return otherBelts.length > 0 ? otherBelts : null;
   }
 
-  // Assina o contrato, vaga todos os cinturões de outras promoções e
-  // cancela ofertas de luta concorrentes. Retorna { fighter, vacated, cancelledOffers }.
+  // Assina o contrato, vaga os cinturões das OUTRAS promoções (mantém o da
+  // promoção assinada, se houver) e cancela ofertas de luta concorrentes.
+  // Retorna { fighter, vacated, cancelledOffers }.
   async signContractWithVacate(fighterId, promoId, absWeekNow) {
     const fighter = await this.fighterCtrl.getFighter(fighterId);
-    const vacated = await this.titleService.vacateBeltsOf(fighterId);
+    const vacated = await this.titleService.vacateBeltsOf(fighterId, promoId);
     const result = await this.contractService.accept(fighterId, promoId, absWeekNow);
     const cancelledOffers = await this.offerService.cancelOffersNotFrom(fighterId, promoId);
 

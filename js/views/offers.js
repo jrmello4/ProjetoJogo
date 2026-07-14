@@ -254,7 +254,7 @@ export class OffersView {
             </div>
           </div>
           <div class="flex gap-2">
-            <button class="btn btn-sm btn-success contract-accept" data-fighter="${cp.fighterId}" data-promo="${cp.promotionId}">Aceitar Contrato</button>
+            <button class="btn btn-sm btn-success contract-accept" data-fighter="${cp.fighterId}" data-promo="${cp.promotionId}" data-promo-name="${cp.promotionName}">Aceitar Contrato</button>
             <button class="btn btn-sm btn-secondary contract-decline" data-fighter="${cp.fighterId}">Recusar</button>
           </div>
         </div>

@@ -117,13 +117,15 @@ export class TitleService {
     return best;
   }
 
-  // Cinturões de um lutador: [{ promotionShort, weightClass, defenses }]
+  // Cinturões de um lutador: [{ promotionId, promotionShort, weightClass, defenses }]
+  // promotionId é o que identifica a promoção de forma confiável — comparar
+  // por nome de exibição é frágil (ver getSigningConflict).
   async beltsOf(fighterId) {
     const promotions = await this._promotions();
     const out = [];
     for (const promo of promotions) {
       for (const wc of promo.beltsHeldBy(fighterId)) {
-        out.push({ promotionShort: promo.short, promotionName: promo.name, tier: promo.tier, weightClass: wc, defenses: promo.defensesOf(wc) });
+        out.push({ promotionId: promo.id, promotionShort: promo.short, promotionName: promo.name, tier: promo.tier, weightClass: wc, defenses: promo.defensesOf(wc) });
       }
     }
     return out;
@@ -361,10 +363,15 @@ export class TitleService {
   }
 
   // Aposentadoria / saída do circuito: o cinturão vaga.
-  async vacateBeltsOf(fighterId) {
+  // `exceptPromotionId`: promoção cujo cinturão NÃO deve vagar. Usado ao
+  // assinar contrato exclusivo (§C.3) — você abre mão dos cinturões das
+  // OUTRAS promoções, mas obviamente mantém o da promoção com quem assinou
+  // (caso de re-assinatura sendo campeão dela).
+  async vacateBeltsOf(fighterId, exceptPromotionId = null) {
     const promotions = await this._promotions();
     const vacated = [];
     for (const promo of promotions) {
+      if (exceptPromotionId && promo.id === exceptPromotionId) continue;
       const belts = promo.beltsHeldBy(fighterId);
       if (belts.length === 0) continue;
       for (const wc of belts) promo.vacate(wc);

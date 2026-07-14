@@ -82,11 +82,12 @@ export class GameController {
     this.scoutingService = new ScoutingService(this.db, this.notifService);
     this.contractService = new ContractService(this.db, this.fighterCtrl, this.notifService);
     this.managerService = new ManagerService(this.db, this.notifService, this.careerLogService);
-    this.retentionService = new RetentionService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.managerService, this.careerLogService, this.rivalryService);
-    // Construído antes do WorldService de propósito: §D.3 pede acesso a
-    // rivalryService dentro de _computePressureLevel (pressão extra em
-    // revanche 'grudge'), então a dependência precisa existir primeiro.
+    // Construído antes de RetentionService de propósito: _checkMilestoneTriggers
+    // precisa de rivalryService para detectar "rival mudou de academia".
     this.rivalryService = new RivalryService(this.db, this.careerLogService);
+    this.retentionService = new RetentionService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.managerService, this.careerLogService, this.rivalryService);
+    // Construído depois do RivalryService: _computePressureLevel precisa de
+    // rivalryService para pressão extra em revanche 'grudge'.
     this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.scoutingService, this.contractService, this.managerService, this.careerLogService, this.rivalryService);
     this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.contractService);
     this.sponsorService = new SponsorService(this.db, this.notifService, this.careerLogService);

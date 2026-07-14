@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "mma-manager",
-      "runtimeExecutable": "node",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
       "runtimeArgs": ["server.js"],
       "autoPort": true
     }

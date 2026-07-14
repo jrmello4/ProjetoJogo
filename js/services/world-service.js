@@ -205,13 +205,23 @@ export class WorldService {
 
       const fightDateISO = absWeekToDate(absWeekNow, startedAt).toISOString();
       const pressureLevel = await this._computePressureLevel(fight, promo);
-      // §B.1 — pressurePerformer/bigEventNervous só se descobrem numa luta
-      // que realmente pesa (metade do gatilho de C.3: pressão alta).
-      if (pressureLevel >= 50) {
+      // §B.1 — pressurePerformer/bigEventNervous se descobrem exatamente na
+      // 1ª luta de tier 1 OU numa disputa de cinturão (condições do spec,
+      // checadas por lutador — não o pressureLevel agregado da luta: tier 1
+      // sozinho só soma +20 em _computePressureLevel, nunca cruzando algum
+      // limiar genérico de "pressão alta" sem título/revanche/sequência).
+      const isTitleFight = !!fight.titleWeightClass;
+      if (isTitleFight || (promo.tier === 1 && !fighterA.reachedTier1)) {
         if (fighterA.hasDNA('pressurePerformer')) fighterA.discoverTrait('pressurePerformer');
         if (fighterA.hasDNA('bigEventNervous')) fighterA.discoverTrait('bigEventNervous');
+      }
+      if (isTitleFight || (promo.tier === 1 && !fighterB.reachedTier1)) {
         if (fighterB.hasDNA('pressurePerformer')) fighterB.discoverTrait('pressurePerformer');
         if (fighterB.hasDNA('bigEventNervous')) fighterB.discoverTrait('bigEventNervous');
+      }
+      if (promo.tier === 1) {
+        fighterA.reachedTier1 = true;
+        fighterB.reachedTier1 = true;
       }
       const result = await SimulationEngine.simulateFight(fighterA, fighterB, promo.tier === 1, hooks, gamePlan, fightDateISO, pressureLevel);
       result.eventId = eventId;
@@ -229,8 +239,8 @@ export class WorldService {
         fighterB.registerPromoResult(promo.id, result.winnerId === fighterB.id);
       }
 
-      this._rollInjury(fighterA, result, absWeekNow);
-      this._rollInjury(fighterB, result, absWeekNow);
+      await this._rollInjury(fighterA, result, absWeekNow, playerFighterId);
+      await this._rollInjury(fighterB, result, absWeekNow, playerFighterId);
       this._applySuspension(fighterA, result, absWeekNow);
       this._applySuspension(fighterB, result, absWeekNow);
 
@@ -482,7 +492,7 @@ export class WorldService {
     fighter.availableFromAbsWeek = Math.max(suspendedUntil, injuryUntil);
   }
 
-  _rollInjury(fighter, result, absWeekNow) {
+  async _rollInjury(fighter, result, absWeekNow, playerFighterId) {
     const won = result.winnerId === fighter.id;
     const isFinish = result.method && !result.method.startsWith('Decision');
 
@@ -529,6 +539,11 @@ export class WorldService {
       });
       for (const [attr, bonus] of Object.entries(template.compensation)) {
         fighter.attributes[attr] = Math.min(fighter.effectiveCeiling(attr), (fighter.attributes[attr] || 50) + bonus);
+      }
+      // §F — só a sequela do lutador do jogador vira "momento marcante";
+      // _rollInjury roda pra todo lutador de toda luta do mundo.
+      if (this.careerLogService && fighter.id === playerFighterId) {
+        await this.careerLogService.publish(fighter.id, 'permanent_scar', absWeekNow, 55, { bodyPart: template.bodyPart });
       }
     }
   }

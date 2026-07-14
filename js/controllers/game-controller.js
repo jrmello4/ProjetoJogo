@@ -1,6 +1,6 @@
 import { Academy } from '../models/academy.js';
 import { Promotion } from '../models/promotion.js';
-import { Fighter } from '../models/fighter.js';
+import { Fighter, DNA_TRAIT_NAMES } from '../models/fighter.js';
 import { DB } from '../services/db.js';
 import { DataGenerator } from '../services/data-generator.js';
 import { RankingService } from '../services/ranking.js';
@@ -39,6 +39,7 @@ import {
   CAMP_CONFIG,
   EXPECTATION_CONFIG,
   SOCIAL_CONFIG,
+  DNA_DISCOVERY_MAGNITUDE,
   absWeek,
 } from '../config/game-config.js';
 
@@ -80,8 +81,8 @@ export class GameController {
     this.titleService = new TitleService(this.db, this.fighterCtrl, this.notifService);
     this.scoutingService = new ScoutingService(this.db, this.notifService);
     this.contractService = new ContractService(this.db, this.fighterCtrl, this.notifService);
-    this.managerService = new ManagerService(this.db, this.notifService);
-    this.retentionService = new RetentionService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.managerService);
+    this.managerService = new ManagerService(this.db, this.notifService, this.careerLogService);
+    this.retentionService = new RetentionService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.managerService, this.careerLogService);
     // Construído antes do WorldService de propósito: §D.3 pede acesso a
     // rivalryService dentro de _computePressureLevel (pressão extra em
     // revanche 'grudge'), então a dependência precisa existir primeiro.
@@ -122,13 +123,15 @@ export class GameController {
     for (const store of ['fighters', 'organization', 'events', 'fights', 'rivalries', 'hallOfFame', 'notifications', 'offers']) {
       await this.db.clear(store);
     }
-    // O doc 'careerLog' vive dentro do store 'gameState' (não coberto pelo
-    // clear() acima) e nunca carregava fighterId nas entradas — sem isso,
-    // um mundo novo herdava os "momentos marcantes" da carreira anterior e
-    // o documentário de aposentadoria (§B.3) podia exibi-los como se fossem
-    // do lutador atual. topByMagnitude() agora filtra por fighterId, mas
-    // ainda limpamos aqui para não carregar lixo de mundos antigos.
-    await this.db.delete('gameState', 'careerLog');
+    // Docs que vivem dentro do store 'gameState' (não cobertos pelo clear()
+    // acima) e são keyed por doc singleton, não por fighterId — sem limpá-los
+    // aqui, um mundo novo herdava sponsors/retention/social/careerLog da
+    // carreira anterior. 'careerLog' também filtra por fighterId em
+    // topByMagnitude(), mas ainda limpamos aqui para não acumular lixo de
+    // mundos antigos.
+    for (const docId of ['careerLog', 'sponsors', 'retention', 'socialMedia']) {
+      await this.db.delete('gameState', docId);
+    }
     try { localStorage.removeItem('characterCreationDone'); } catch (e) { /* ambientes sem localStorage */ }
 
     await this.db.put('gameState', {
@@ -192,7 +195,7 @@ export class GameController {
   // Gera o lutador do jogador com viés leve de arquétipo/origem sobre a
   // base do DataGenerator (reaproveita toda a lógica de atributos/DNA/
   // corte de peso já existente — só empurra a semente antes de gerar).
-  async createPlayerFighter({ name, weightClass, archetype, origin, difficultyId, academyId }) {
+  async createPlayerFighter({ name, weightClass, archetype, origin, difficultyId, academyId, managerId = null }) {
     const difficulty = DIFFICULTIES.find(d => d.id === difficultyId) || DIFFICULTIES[1];
     const arch = ARCHETYPES[archetype] || ARCHETYPES.generalist;
     const orig = ORIGINS[origin] || null;
@@ -220,6 +223,7 @@ export class GameController {
     data.organizationId = null;
     data.academyId = academyId;
     data.academyJoinedAbsWeek = 1;
+    data.managerId = managerId;
     data.cash = difficulty.cash;
     data.lifestyleTier = 'modest';
 
@@ -282,6 +286,9 @@ export class GameController {
     fighter.academyJoinedAbsWeek = absWeek(state);
     fighter.coachSynergy = Math.round(fighter.coachSynergy * 0.4); // SYNERGY_CONFIG.CARRY_OVER_RATIO
     await this.fighterCtrl.updateFighter(fighter);
+    if (this.careerLogService) {
+      await this.careerLogService.publish(fighter.id, 'academy_switch', absWeek(state), 40, { academyName: academy.name });
+    }
     return { ok: true, academy };
   }
 
@@ -298,7 +305,8 @@ export class GameController {
   async hireManager(managerId) {
     const fighter = await this.getPlayerFighter();
     if (!fighter) return { ok: false, reason: 'Nenhum lutador ativo.' };
-    const result = await this.managerService.hire(fighter, managerId);
+    const state = await this.seasonService.getState();
+    const result = await this.managerService.hire(fighter, managerId, absWeek(state));
     if (result.ok) await this.fighterCtrl.updateFighter(fighter);
     return result;
   }
@@ -339,7 +347,14 @@ export class GameController {
   async processWeek(cornerHooks = null) {
     const nextWeekState = await this.seasonService.peekNextWeek();
     const now = absWeek(nextWeekState);
-    const preFightId = (await this.getPlayerFighter()).id;
+    const preFight = await this.getPlayerFighter();
+    const preFightId = preFight.id;
+    // §F — snapshot pré-semana pra publicar dna_discovered no careerLog por
+    // diff no fim deste método: descobertas acontecem em vários gatilhos
+    // espalhados (luta, treino, moral) sem acesso a careerLogService — mais
+    // simples comparar o conjunto final contra este snapshot do que plumbing
+    // o service em cada trigger individual.
+    const preDiscoveredTraits = new Set(preFight.discoveredTraits);
 
     const world = await this.worldService.processWeek(now, nextWeekState.startedAt, preFightId, cornerHooks);
 
@@ -355,7 +370,7 @@ export class GameController {
         const fighterA = await this.fighterCtrl.getFighter(result.fighterAId);
         const fighterB = await this.fighterCtrl.getFighter(result.fighterBId);
         if (fighterA && fighterB) {
-          await this.rivalryService.checkPostFight(fighterA, fighterB, result, result.card === 'main', now);
+          await this.rivalryService.checkPostFight(fighterA, fighterB, result, result.card === 'main', now, preFightId);
         }
       }
     }
@@ -416,6 +431,15 @@ export class GameController {
 
     fighter.checkNumericDiscovery(); // §B.1 — idempotente, roda toda semana
 
+    if (this.careerLogService) {
+      for (const trait of fighter.discoveredTraits) {
+        if (preDiscoveredTraits.has(trait)) continue;
+        await this.careerLogService.publish(fighter.id, 'dna_discovered', now, DNA_DISCOVERY_MAGNITUDE[trait] ?? 55, {
+          trait, traitLabel: DNA_TRAIT_NAMES[trait] || trait,
+        });
+      }
+    }
+
     await this.fighterCtrl.updateFighter(fighter);
 
     if (fighter.cash < 0) {
@@ -464,6 +488,17 @@ export class GameController {
         for (const sOffer of sponsorState.offers) {
           await this.acceptSponsorOffer(sOffer.id);
         }
+
+        // §D.2 — sem isto, prompts de rede social só são criados aqui (dentro
+        // do processWeek compartilhado) mas nunca resolvidos durante Simular
+        // Período (resolveSocialPrompt só era chamado por clique em app.js).
+        // Ficavam pendentes até expirar (PROMPT_EXPIRY_WEEKS) sem nunca gerar
+        // efeito — e sem 'provocation' nenhuma publicada, cláusulas de imagem
+        // de patrocínio (§E.2) nunca disparavam durante fast-forward.
+        // 'stay_quiet' é o piloto automático: mesmo espírito de auto-aceitar
+        // ofertas/patrocínios acima, mas sem risco (nenhuma outra opção é
+        // estritamente "melhor" sem ler o contexto de rivalidade).
+        await this.resolveSocialPrompt('stay_quiet');
 
         const simFighter = await this.getPlayerFighter();
         try {
@@ -954,6 +989,7 @@ export class GameController {
 
     const belts = fighter ? await this.titleService.beltsOf(fighter.id) : [];
     const contenderStatus = fighter ? await this.titleService.contenderStatusOf(fighter) : null;
+    const pendingApproach = await this.retentionService.getPending();
 
     return {
       fighter,
@@ -970,8 +1006,22 @@ export class GameController {
       rankings,
       sponsors,
       socialPrompt,
+      pendingApproach,
       state,
       now: absWeek(state),
     };
+  }
+
+  // ===== Sondagem de retenção (§A.4/§C.1) =====
+  // A UI só mostra as 4 opções quando getDashboard().pendingApproach existe;
+  // sem resposta a tempo, _resolveApproach() decide sozinho na próxima
+  // semana (mesmo motor de antes, agora com mais uma via de entrada).
+  async respondToApproach(approachId, responseType) {
+    const fighter = await this.getPlayerFighter();
+    if (!fighter) return { success: false, outcome: 'no_fighter' };
+    const state = await this.seasonService.getState();
+    const result = await this.retentionService.respond(absWeek(state), approachId, responseType, fighter);
+    await this.fighterCtrl.updateFighter(fighter);
+    return result;
   }
 }

@@ -4,9 +4,10 @@ import { MANAGERS, MANAGER_CONFIG } from '../config/game-config.js';
 // Empresário do lutador — ver spec §C.1. Catálogo fixo (como Academy),
 // persistido no store 'organization' com id prefixado 'manager-'.
 export class ManagerService {
-  constructor(db, notifService) {
+  constructor(db, notifService, careerLogService = null) {
     this.db = db;
     this.notifService = notifService;
+    this.careerLogService = careerLogService;
   }
 
   async bootstrap() {
@@ -30,13 +31,16 @@ export class ManagerService {
     return data ? new Manager(data) : null;
   }
 
-  async hire(fighter, managerId) {
+  async hire(fighter, managerId, absWeekNow = 0) {
     const manager = await this.getManager(managerId);
     if (!manager) return { ok: false, reason: 'Empresário não encontrado.' };
     if (fighter.managerId === managerId) return { ok: false, reason: 'Já é seu empresário.' };
 
     fighter.managerId = managerId;
     await this.notifService.add('success', 'Novo Empresário', `${manager.name} agora cuida da sua carreira. Corte: ${Math.round(manager.cut * 100)}%.`);
+    if (this.careerLogService) {
+      await this.careerLogService.publish(fighter.id, 'manager_switch', absWeekNow, 40, { managerName: manager.name });
+    }
     return { ok: true, manager };
   }
 

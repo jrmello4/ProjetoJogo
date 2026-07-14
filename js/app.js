@@ -34,6 +34,14 @@ import { CAMP_CONFIG, HYPE_PURSE_RATIO, absWeek } from './config/game-config.js'
 // Vazio = compartilha só o texto, sem link.
 const SHARE_URL = '';
 
+// §C.1 — rótulos de Manager.style, usados na criação de personagem e na
+// tela de academia/empresário.
+const MANAGER_STYLE_LABELS = {
+  aggressive: 'Agressivo',
+  conservative: 'Conservador',
+  loyal: 'Leal',
+};
+
 class App {
   constructor() {
     this.game = new GameController();
@@ -93,6 +101,7 @@ class App {
   // ===== Criação de personagem (§A.7) =====
   async _showCharacterCreation() {
     const academies = await this.game.getAcademies();
+    const managers = await this.game.getManagers();
 
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
@@ -173,6 +182,18 @@ class App {
           </div>
         </div>
 
+        <div class="form-group">
+          <label class="form-label">Primeiro Empresário</label>
+          <div class="difficulty-grid">
+            ${managers.map((m, i) => `
+              <div class="difficulty-option ${i === 0 ? 'selected' : ''}" data-manager="${m.id}">
+                <div class="difficulty-name">${m.name}</div>
+                <div class="text-xs text-muted mt-2">${MANAGER_STYLE_LABELS[m.style] || m.style} · corte ${Math.round(m.cut * 100)}%</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
         <div class="modal-actions">
           <button class="btn btn-primary w-full" id="characterCreationStartBtn">Começar carreira</button>
         </div>
@@ -204,6 +225,12 @@ class App {
         opt.classList.add('selected');
       });
     });
+    modal.querySelectorAll('[data-manager]').forEach(opt => {
+      opt.addEventListener('click', () => {
+        modal.querySelectorAll('[data-manager]').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
+      });
+    });
 
     modal.querySelector('#characterCreationStartBtn').addEventListener('click', async () => {
       const name = modal.querySelector('#charName').value.trim() || 'Lutador Anônimo';
@@ -212,8 +239,9 @@ class App {
       const origin = modal.querySelector('[data-origin].selected')?.dataset.origin || null;
       const difficultyId = modal.querySelector('[data-difficulty].selected')?.dataset.difficulty || 'normal';
       const academyId = modal.querySelector('[data-academy].selected')?.dataset.academy || academies[0]?.id;
+      const managerId = modal.querySelector('[data-manager].selected')?.dataset.manager || managers[0]?.id;
 
-      await this.game.createPlayerFighter({ name, weightClass, archetype, origin, difficultyId, academyId });
+      await this.game.createPlayerFighter({ name, weightClass, archetype, origin, difficultyId, academyId, managerId });
 
       localStorage.setItem('characterCreationDone', '1');
       modal.remove();
@@ -378,6 +406,18 @@ class App {
         const result = await this.game.resolveSocialPrompt(btn.dataset.socialChoice);
         if (!result.ok) {
           this.notificationService.add('warning', 'Redes Sociais', result.reason);
+        }
+        this.renderDashboard();
+      });
+    });
+
+    document.querySelectorAll('[data-approach-respond]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const result = await this.game.respondToApproach(btn.dataset.approachId, btn.dataset.approachRespond);
+        if (result.success) {
+          this.notificationService.add('success', 'Sondagem Respondida', result.message);
+        } else if (result.outcome !== 'no_fighter') {
+          this.notificationService.add('warning', 'Sondagem', result.message || 'Não foi possível responder agora.');
         }
         this.renderDashboard();
       });
@@ -1125,8 +1165,9 @@ class App {
   // ===== Academia (escolha de onde treinar, §E.3) =====
   async renderAcademy() {
     const academies = await this.game.getAcademies();
+    const managers = await this.game.getManagers();
     const fighter = await this.game.getPlayerFighter();
-    const html = AcademyView.render(academies, fighter);
+    const html = AcademyView.render(academies, fighter, managers);
     await LayoutView.render(html);
 
     document.querySelectorAll('.academy-switch').forEach(btn => {
@@ -1136,6 +1177,27 @@ class App {
           this.notificationService.add('success', 'Academia Trocada', `Agora você treina em ${result.academy.name}.`);
         } else {
           this.notificationService.add('warning', 'Troca Falhou', result.reason);
+        }
+        this.renderAcademy();
+      });
+    });
+
+    document.querySelectorAll('.manager-hire').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        // Trocar de empresário já contratado cobra a multa de rescisão
+        // (§C.1, espelha ContractService.terminate) — só então contrata o novo.
+        if (fighter.managerId) {
+          const termination = await this.game.terminateManager();
+          if (!termination.ok) {
+            this.notificationService.add('warning', 'Troca Falhou', termination.reason);
+            return;
+          }
+        }
+        const result = await this.game.hireManager(btn.dataset.manager);
+        if (result.ok) {
+          this.notificationService.add('success', 'Novo Empresário', `${result.manager.name} agora cuida da sua carreira.`);
+        } else {
+          this.notificationService.add('warning', 'Contratação Falhou', result.reason);
         }
         this.renderAcademy();
       });

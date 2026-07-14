@@ -1,12 +1,13 @@
 import { formatCurrency } from '../utils/helpers.js';
 
 const PERSONALITY_LABEL = { aggressive: 'Agressivo', cautious: 'Cauteloso', analytical: 'Analítico' };
+const MANAGER_STYLE_LABEL = { aggressive: 'Agressivo', conservative: 'Conservador', loyal: 'Leal' };
 
 // Escolha de academia (§E.3): não é mais upgrade de negócio, é decisão de
 // carreira — academia grande treina melhor mas custa mais e come sinergia
 // ao entrar; academia pequena cresce sinergia mais rápido.
 export class AcademyView {
-  static render(academies, fighter) {
+  static render(academies, fighter, managers = []) {
     const cards = academies.map(a => {
       const isCurrent = a.id === fighter.academyId;
       const specialtiesHtml = Object.entries(a.specialties).map(([k, v]) => {
@@ -39,10 +40,36 @@ export class AcademyView {
       `;
     }).join('');
 
+    const managerCards = managers.map(m => {
+      const isCurrent = m.id === fighter.managerId;
+      return `
+        <div class="card stat-card stat-card--span-4 ${isCurrent ? 'stat-card--champion' : ''}" data-reveal>
+          <div class="card-header">
+            <span class="card-title">${m.name}</span>
+            ${isCurrent ? '<span class="badge badge-success">Seu empresário</span>' : ''}
+          </div>
+          <div class="text-xs text-muted mb-2">${MANAGER_STYLE_LABEL[m.style] || m.style}</div>
+          <div class="grid grid-cols-2 gap-2 mb-3">
+            <div>
+              <div class="text-xs text-muted">Corte</div>
+              <div class="text-sm font-bold">${Math.round(m.cut * 100)}%</div>
+            </div>
+            <div>
+              <div class="text-xs text-muted">Conexões</div>
+              <div class="text-sm font-bold">${m.connections}</div>
+            </div>
+          </div>
+          ${isCurrent
+            ? ''
+            : `<button class="btn btn-sm btn-primary manager-hire" data-manager="${m.id}">${fighter.managerId ? 'Trocar (multa de rescisão)' : 'Contratar'}</button>`}
+        </div>
+      `;
+    }).join('');
+
     return `
       <div class="page-header">
-        <h2>Academia</h2>
-        <p>Onde você treina muda seu teto de evolução, o custo semanal e a sinergia com o técnico</p>
+        <h2>Academia & Empresário</h2>
+        <p>Onde você treina muda seu teto de evolução, o custo semanal e a sinergia com o técnico. Quem te representa muda quanto sobra da bolsa e como as negociações correm.</p>
       </div>
 
       <div class="section-label" data-reveal>Sinergia com o técnico atual</div>
@@ -54,6 +81,11 @@ export class AcademyView {
       <div class="section-label" data-reveal>Academias</div>
       <div class="bento-grid mb-4" data-reveal-stagger>
         ${cards}
+      </div>
+
+      <div class="section-label" data-reveal>Empresários</div>
+      <div class="bento-grid mb-4" data-reveal-stagger>
+        ${managerCards}
       </div>
     `;
   }

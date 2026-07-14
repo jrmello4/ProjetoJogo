@@ -4,12 +4,15 @@ import { DNA_DISCOVERY_CONFIG } from '../config/game-config.js';
 
 const LEDGER_LIMIT = 120;
 
-const DNA_TRAIT_NAMES = {
+export const DNA_TRAIT_NAMES = {
   pressurePerformer: 'Cresce sob pressão',
   bigEventNervous: 'Medo em grandes eventos',
   exceptionalRecovery: 'Recuperação excepcional',
   injuryProne: 'Tendência a lesões',
   emotionallyUnstable: 'Instável emocionalmente',
+  potential: 'Potencial',
+  discipline: 'Disciplina',
+  determination: 'Determinação',
 };
 
 const POPULARITY_TIERS = [
@@ -62,6 +65,10 @@ export class Fighter {
     // reveladas ao jogador. Sem estar aqui, a interface mostra faixa/rótulo
     // vago em vez do valor exato — mesma função de blur do scouting.
     this.discoveredTraits = data.discoveredTraits || [];
+    // Marca a 1ª luta em promoção tier 1 — gatilho de descoberta de
+    // pressurePerformer/bigEventNervous (§B.1), independente de título em
+    // jogo (o outro gatilho, esse já reconhecível por fight.titleWeightClass).
+    this.reachedTier1 = data.reachedTier1 || false;
 
     // Sequelas permanentes de lesão (§B.2): { bodyPart, attributeCeilings,
     // compensation, fromFightId, atAbsWeek }. attributeCeilings reduz o

@@ -46,7 +46,11 @@ export class RivalryService {
   // atAbsWeek (opcional): semana atual, usada só pra janela de busca do
   // careerLog na derivação de tipo 'grudge' (§D.3). Sem ela, a checagem de
   // grudge é pulada (ainda funciona a de 'robbery', que não depende de semana).
-  async checkPostFight(fighterA, fighterB, result, isMainCard, atAbsWeek = null) {
+  // playerFighterId (opcional): só publica 'rivalry_born' (§F) se a
+  // rivalidade recém-criada envolver o lutador do jogador — este método só é
+  // chamado hoje com lutas do jogador, mas o parâmetro deixa isso explícito
+  // em vez de implícito no call site.
+  async checkPostFight(fighterA, fighterB, result, isMainCard, atAbsWeek = null, playerFighterId = null) {
     const existing = await this.getRivalryBetween(fighterA.id, fighterB.id);
 
     if (existing) {
@@ -75,7 +79,18 @@ export class RivalryService {
     if (shouldCreate) {
       const fallback = isClose ? 'competitive' : 'personal';
       const type = await this._deriveType(fighterA.id, fighterB.id, result, atAbsWeek, fallback);
-      return await this.createRivalry(fighterA.id, fighterB.id, type);
+      const rivalry = await this.createRivalry(fighterA.id, fighterB.id, type);
+
+      if (this.careerLogService && atAbsWeek != null) {
+        const isPlayerA = fighterA.id === playerFighterId;
+        const isPlayerB = fighterB.id === playerFighterId;
+        if (isPlayerA || isPlayerB) {
+          const opponentName = isPlayerA ? fighterB.name : fighterA.name;
+          await this.careerLogService.publish(playerFighterId, 'rivalry_born', atAbsWeek, 35, { opponentName, type });
+        }
+      }
+
+      return rivalry;
     }
 
     return null;

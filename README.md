@@ -1,14 +1,14 @@
-# MMA Manager — Modo Treinador
+# MMA Manager — Carreira de Lutador
 
-**Você é o dono e treinador de uma academia de MMA. Três atletas desconhecidos. Nenhum cinturão.**
+**Você não é dono de academia. Você é o lutador — do primeiro contrato profissional até a aposentadoria.**
 
-As promoções são controladas pela IA: elas realizam os próprios eventos, coroam campeões e mandam ofertas de luta para os seus atletas. Você decide quais lutas aceitar, o que cada um treina, quanto investir em estudar o adversário — e, no meio do combate, o que gritar do córner.
+O mundo é simulado por baixo: promoções controladas pela IA realizam os próprios eventos, coroam campeões e mandam ofertas de luta. Você decide quais lutas aceitar, onde treinar, quanto investir em estudar o adversário — e, no meio do combate, o que gritar do córner.
 
 ![Jogo em pt-BR](https://img.shields.io/badge/idioma-pt--BR-green) ![Sem backend](https://img.shields.io/badge/backend-nenhum-lightgrey)
 
-> 📋 **O que falta construir está em [`docs/PRD.md`](docs/PRD.md)** — fonte de verdade do roadmap, dos bugs conhecidos e das convenções do projeto.
+> 📋 **O design completo desta carreira está em [`docs/superpowers/specs/2026-07-13-carreira-sistemica-1-lutador-design.md`](docs/superpowers/specs/2026-07-13-carreira-sistemica-1-lutador-design.md)** — fonte de verdade de por que cada sistema existe.
 >
-> Os arquivos `ROADMAP_FUTURE.md` e `TODO_REMAINING.md` descrevem o antigo *modo organização* e estão **superados**.
+> `CONCEITO_RPG.md` e `FATIA_VERTICAL.md` descrevem uma tentativa de pivot anterior (bifurcação estrela/gângster) e ficam como histórico, não como direção ativa.
 
 ## O loop
 
@@ -24,14 +24,22 @@ As promoções são controladas pela IA: elas realizam os próprios eventos, cor
 
 | Sistema | O que faz |
 |---|---|
-| **Mundo vivo** | 5 promoções de IA (regional → nacional → elite mundial) com calendário e eventos próprios |
+| **Carreira de 1 lutador** | Sem elenco pra gerenciar — um personagem só, criado no onboarding (nome, categoria de peso, arquétipo, origem esportiva), até a aposentadoria |
+| **DNA oculto, auto-descoberto** | Potencial, disciplina e traços como "trava nos grandes palcos" existem desde o dia 1, mas só se revelam aos poucos, através de eventos da carreira — nem o jogador vê os números de cara |
+| **Mundo vivo** | 5 promoções de IA (regional → nacional → elite mundial) com calendário, elenco e eventos próprios |
 | **Cinturões** | Campeão por divisão em cada promoção. A chance de título é do **desafiante mandatório**, não de quem empilhou vitórias |
-| **Névoa de guerra** | Você conhece seus atletas por inteiro; de quem está de fora, só o que investigou. Olheiro, scouting pago, e "lutar contra alguém ensina de graça — tarde demais" |
-| **Plano de jogo** | 5 planos que leem o adversário. A leitura pesa mais que a instrução de córner |
+| **Névoa de guerra** | Adversários são só o que você investigou — olheiro, scouting pago, ou "lutar contra alguém ensina de graça — tarde demais" |
+| **Escolha de academia** | Sem dono de academia — você escolhe onde treinar, a qualquer momento. Academia grande tem treino melhor mas te trata como número; pequena cresce sinergia com o técnico mais rápido |
+| **Empresário** | Negocia sua bolsa em troca de um corte. Agressivo abre portas mais cedo mas queima pontes com promoções; leal nunca te trai mas tem pior faro pra oportunidades |
+| **Sinergia técnico-atleta** | Confiança no córner cresce seguindo o conselho e vencendo, cai ignorando e perdendo. Sinergia baixa pode virar sugestão errada no meio do round |
 | **Córner ao vivo** | Instrução a cada round: pressionar, recuar, levar pro chão. Cada uma cobra fôlego ou expõe o queixo |
-| **Suspensão médica** | Ninguém luta toda semana. 1 a 16 semanas conforme a violência do desfecho |
-| **Academia** | Instalações (4 níveis), comissão técnica, olheiro, patrocínios, extrato financeiro |
-| **Academias rivais** | Disputam os mesmos agentes livres e seduzem seus atletas insatisfeitos |
+| **Psicologia de momento crítico** | Título, revanche, sequência em risco: a pressão sobe de verdade, e DNA como `bigEventNervous`/`pressurePerformer` responde a ela na pele |
+| **Lesões com sequelas** | Lesão grave pode deixar marca permanente — teto de atributo reduzido pro resto da carreira, às vezes com um ganho mental compensando |
+| **Custo de vida pessoal** | Subir o padrão de vida no auge sente bem, mas é compromisso semanal que continua existindo numa fase de baixa |
+| **Patrocínios com cláusula de imagem** | Marca "limpa" paga bem mas cancela o contrato se você virar vilão demais; marca "vilão" exige que você mantenha o hype |
+| **Redes sociais** | Provocar, pedir title shot ou ficar quieto — mesmo em semana livre, sua persona pública precede você em cada evento |
+| **Rivalidades com origem** | Nascida de provocação (grudge), decisão polêmica (robbery) ou puro choque de ranking (competitive) — cada tipo muda o tom da imprensa e a pressão de uma revanche |
+| **Legado & documentário** | Na aposentadoria, sua carreira vira um documentário em capítulos — montado só com o que você viveu, sem roteiro escrito |
 | **Simular período** | 1 mês a 1 ano em automático, com resumo agregado |
 
 ## Como rodar
@@ -63,6 +71,4 @@ compartilhamento de resultado de luta e Hall da Fama.
 
 ## Design
 
-Tema **"Red Corner / Blue Corner"**: o sistema de informação do próprio esporte vira o da interface. Vermelho é sua academia, azul é o adversário, e ouro é só para cinturões. Tipografia `Archivo` (eixo de largura variável), `IBM Plex Sans` no corpo e `IBM Plex Mono` nos dados — um treinador lê cartéis e scorecards, não marketing.
-
-Convenções críticas (contraste, animação, tokens) estão documentadas no [PRD](docs/PRD.md#0-como-usar-este-documento).
+Tema **"Red Corner / Blue Corner"**: o sistema de informação do próprio esporte vira o da interface. Vermelho é você, azul é o adversário, e ouro é só para cinturões. Tipografia `Archivo` (eixo de largura variável), `IBM Plex Sans` no corpo e `IBM Plex Mono` nos dados — um lutador lê cartéis e scorecards, não marketing.

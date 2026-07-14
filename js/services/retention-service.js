@@ -12,12 +12,13 @@ import { ACADEMIES, MANAGERS, EXPECTATION_CONFIG } from '../config/game-config.j
 const APPROACH_DEADLINE_WEEKS = 2;
 
 export class RetentionService {
-  constructor(db, fighterCtrl, notifService, titleService, managerService = null) {
+  constructor(db, fighterCtrl, notifService, titleService, managerService = null, careerLogService = null) {
     this.db = db;
     this.fighterCtrl = fighterCtrl;
     this.notifService = notifService;
     this.titleService = titleService;
     this.managerService = managerService;
+    this.careerLogService = careerLogService;
   }
 
   // ===== Sondagem =====
@@ -179,15 +180,28 @@ export class RetentionService {
   }
 
   // Deixar ir: aceita a sondagem imediatamente — troca de academia/empresário
+  //
+  // Muta o `fighter` em memória em vez de chamar fighterCtrl.setAcademy()
+  // (que faz seu próprio fetch-mutate-save): o caller (respond()/processWeek())
+  // salva esse mesmo objeto logo depois, e um save duplo sobrescreveria
+  // academyJoinedAbsWeek/previousAcademyIds com os valores obsoletos deste
+  // objeto, fazendo o período de carência de generateApproaches() nunca
+  // resetar após uma troca.
   async _letGo(fighter, approach, absWeekNow) {
     if (approach.targetType === 'academy') {
-      await this.fighterCtrl.setAcademy(fighter.id, approach.rivalId, absWeekNow);
+      if (fighter.academyId && fighter.academyId !== approach.rivalId && !fighter.previousAcademyIds.includes(fighter.academyId)) {
+        fighter.previousAcademyIds.push(fighter.academyId);
+      }
       fighter.academyId = approach.rivalId;
+      fighter.academyJoinedAbsWeek = absWeekNow;
       fighter.coachSynergy = Math.round(fighter.coachSynergy * 0.4); // SYNERGY_CONFIG.CARRY_OVER_RATIO
+      if (this.careerLogService) {
+        await this.careerLogService.publish(fighter.id, 'academy_switch', absWeekNow, 40, { academyName: approach.rivalName });
+      }
       return { success: true, outcome: 'switched', message: `Você trocou para ${approach.rivalName}.` };
     }
     if (this.managerService) {
-      await this.managerService.hire(fighter, approach.rivalId);
+      await this.managerService.hire(fighter, approach.rivalId, absWeekNow);
     } else {
       fighter.managerId = approach.rivalId;
     }
@@ -216,12 +230,19 @@ export class RetentionService {
     const stayed = Math.random() < clamp(retentionChance, 0, 0.95);
     if (!stayed) {
       if (approach.targetType === 'academy') {
-        await this.fighterCtrl.setAcademy(fighter.id, approach.rivalId, absWeekNow);
+        // Muta em memória em vez de chamar setAcademy() — ver comentário em _letGo().
+        if (fighter.academyId && fighter.academyId !== approach.rivalId && !fighter.previousAcademyIds.includes(fighter.academyId)) {
+          fighter.previousAcademyIds.push(fighter.academyId);
+        }
         fighter.academyId = approach.rivalId;
+        fighter.academyJoinedAbsWeek = absWeekNow;
         fighter.coachSynergy = Math.round(fighter.coachSynergy * 0.4);
+        if (this.careerLogService) {
+          await this.careerLogService.publish(fighter.id, 'academy_switch', absWeekNow, 40, { academyName: approach.rivalName });
+        }
         this.notifService.add('warning', '💔 Você Trocou de Academia', `${approach.rivalName} te convenceu — você deixou sua academia anterior.`);
       } else {
-        if (this.managerService) await this.managerService.hire(fighter, approach.rivalId);
+        if (this.managerService) await this.managerService.hire(fighter, approach.rivalId, absWeekNow);
         else fighter.managerId = approach.rivalId;
         this.notifService.add('warning', '💔 Você Trocou de Empresário', `${approach.rivalName} te convenceu a assinar.`);
       }
@@ -285,6 +306,14 @@ export class RetentionService {
 
     await this._saveApproaches(approaches);
     return resolved;
+  }
+
+  // A sondagem ativa no momento (no máximo 1 por vez, ver generateApproaches),
+  // ainda sem resposta do jogador nem expirada — o que a UI mostra pra dar
+  // as 4 opções (renegociar/bônus/promessa/deixar ir).
+  async getPending() {
+    const approaches = await this._loadApproaches();
+    return approaches.find(a => !a.resolved && !a.response) || null;
   }
 
   // ===== Helpers de banco =====

@@ -53,10 +53,11 @@ export class TrainingCamp {
       }
     }
 
-    // Aplicar ganhos com bônus de sparring
+    // Aplicar ganhos com bônus de sparring — respeita o teto reduzido por
+    // sequela permanente (§B.2), igual Fighter.evolve()
     for (const [attr, amount] of Object.entries(gains)) {
       const boosted = Math.round(amount * (1 + sparringBonus));
-      fighter.attributes[attr] = clamp(fighter.attributes[attr] + boosted, 0, 99);
+      fighter.attributes[attr] = clamp(fighter.attributes[attr] + boosted, 0, fighter.effectiveCeiling(attr));
     }
 
     // Riscos

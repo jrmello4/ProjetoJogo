@@ -130,7 +130,7 @@ export class DashboardView {
   }
 
   static render(data, weekLabel) {
-    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, now } = data;
+    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, pendingApproach, now } = data;
 
     const tierBadge = (tier) => `<span class="badge ${tierBadgeCls(tier)}">${TIER_LABELS[tier]}</span>`;
 
@@ -181,6 +181,45 @@ export class DashboardView {
                 <span class="text-xs text-muted ml-2">(${c.hint})</span>
               </button>
             `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // ===== Sondagem de retenção (§A.4/§C.1) =====
+    let approachHtml = '';
+    if (pendingApproach) {
+      const isAcademy = pendingApproach.targetType === 'academy';
+      const deadline = pendingApproach.deadlineAbsWeek - now;
+      approachHtml = `
+        ${pendingOffers.length === 0 && !socialPrompt ? '<div class="section-label" data-reveal>Decisões Pendentes</div>' : ''}
+        <div class="card mb-4" data-reveal style="border-top-color:var(--danger)">
+          <div class="card-header">
+            <span class="card-title">🔍 Sondagem — ${pendingApproach.rivalName}</span>
+            <span class="badge badge-danger">${deadline <= 0 ? 'última semana' : `${deadline} sem restantes`}</span>
+          </div>
+          <p class="text-sm text-muted mb-2">
+            ${isAcademy
+              ? `${pendingApproach.rivalName} quer te treinar. Como você reage?`
+              : `${pendingApproach.rivalName} quer ser seu empresário. Como você reage?`}
+          </p>
+          <div class="flex flex-col gap-2">
+            <button class="btn btn-secondary" data-approach-respond="renegotiate" data-approach-id="${pendingApproach.id}" style="text-align:left">
+              Renegociar ${isAcademy ? 'com o técnico' : 'o corte'}
+              <span class="text-xs text-muted ml-2">(sem custo, ${isAcademy ? 'sinergia' : 'corte'} e moral melhoram)</span>
+            </button>
+            <button class="btn btn-secondary" data-approach-respond="stay_bonus" data-approach-id="${pendingApproach.id}" style="text-align:left">
+              Pedir bônus de permanência
+              <span class="text-xs text-muted ml-2">(dinheiro agora, lealdade e moral sobem bastante)</span>
+            </button>
+            <button class="btn btn-secondary" data-approach-respond="promise" data-approach-id="${pendingApproach.id}" style="text-align:left">
+              Fazer uma promessa
+              <span class="text-xs text-muted ml-2">(sem custo agora — quebrar depois custa caro)</span>
+            </button>
+            <button class="btn btn-danger" data-approach-respond="let_go" data-approach-id="${pendingApproach.id}" style="text-align:left">
+              Aceitar e trocar agora
+              <span class="text-xs text-muted ml-2">(troca imediata para ${pendingApproach.rivalName})</span>
+            </button>
           </div>
         </div>
       `;
@@ -401,6 +440,7 @@ export class DashboardView {
 
       ${offersHtml}
       ${socialHtml}
+      ${approachHtml}
       ${sponsorsHtml}
       ${bookingsHtml}
       ${fighterHtml}

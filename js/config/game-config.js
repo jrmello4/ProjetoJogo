@@ -252,6 +252,20 @@ export const DNA_DISCOVERY_CONFIG = {
   BIG_MORALE_SWING_THRESHOLD: 20,
 };
 
+// Magnitude (0-100) da entrada 'dna_discovered' no careerLog (§F) — os
+// traços de pressão psicológica só se revelam num momento de fato dramático
+// (§C.3), por isso pesam mais que a revelação em bloco dos 3 numéricos.
+export const DNA_DISCOVERY_MAGNITUDE = {
+  pressurePerformer: 65,
+  bigEventNervous: 65,
+  exceptionalRecovery: 45,
+  injuryProne: 50,
+  emotionallyUnstable: 50,
+  potential: 40,
+  discipline: 40,
+  determination: 40,
+};
+
 // Fase 1b: escada de tiers pra lutadores de IA (espelha o Épico B do
 // jogador — sem isto, os elencos de Nacional/Elite ficam fixos desde o
 // bootstrap do mundo pra sempre, e um prospecto regional nunca sobe).

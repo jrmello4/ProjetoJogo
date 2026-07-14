@@ -216,6 +216,7 @@ export class DashboardView {
             <span class="card-title">🔍 Sondagem — ${pendingApproach.rivalName}</span>
             <span class="badge badge-danger">${deadline <= 0 ? 'última semana' : `${deadline} sem restantes`}</span>
           </div>
+          ${pendingApproach.contextMessage ? `<p class="text-sm text-muted mb-2">${pendingApproach.contextMessage}</p>` : ''}
           <p class="text-sm text-muted mb-2">
             ${isAcademy
               ? `${pendingApproach.rivalName} quer te treinar. Como você reage?`

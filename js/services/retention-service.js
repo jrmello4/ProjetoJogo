@@ -12,13 +12,14 @@ import { ACADEMIES, MANAGERS, EXPECTATION_CONFIG } from '../config/game-config.j
 const APPROACH_DEADLINE_WEEKS = 2;
 
 export class RetentionService {
-  constructor(db, fighterCtrl, notifService, titleService, managerService = null, careerLogService = null) {
+  constructor(db, fighterCtrl, notifService, titleService, managerService = null, careerLogService = null, rivalryService = null) {
     this.db = db;
     this.fighterCtrl = fighterCtrl;
     this.notifService = notifService;
     this.titleService = titleService;
     this.managerService = managerService;
     this.careerLogService = careerLogService;
+    this.rivalryService = rivalryService;
   }
 
   // ===== Sondagem =====
@@ -328,5 +329,106 @@ export class RetentionService {
 
   async _saveApproaches(approaches) {
     await this.db.put('gameState', { id: 'retention', approaches });
+  }
+
+  // ===== Gatilhos contextuais por mérito (Épico E — #5/#6) =====
+  // Gera sondagens baseadas em milestones da carreira, não apenas baixa
+  // sinergia/confiança. Roda semanalmente, respeitando o limite de 1
+  // sondagem ativa por vez.
+  async _checkMilestoneTriggers(now, fighter) {
+    const approaches = await this._loadApproaches();
+    if (approaches.some(a => !a.resolved)) return [];
+
+    const triggers = [];
+
+    // Empresário — streak de 3+ (vitórias consecutivas sem derrota)
+    const streak = fighter.winStreak || 0;
+    if (streak >= 3 && !fighter.managerId) {
+      triggers.push({ type: 'manager', reason: 'win_streak', targetId: 'manager-aggressive', targetName: 'Marcelo Duarte' });
+    }
+
+    // Empresário — cinturão conquistado
+    const belts = this.titleService ? await this.titleService.beltsOf(fighter.id) : [];
+    if (belts.length > 0 && !fighter.managerId) {
+      triggers.push({ type: 'manager', reason: 'belt_won', targetId: 'manager-loyal', targetName: 'Renata Alves' });
+    }
+
+    // Empresário — nocaute recente (sempre pode tentar)
+    if (!fighter.managerId) {
+      triggers.push({ type: 'manager', reason: 'rising', targetId: 'manager-conservative', targetName: 'João Bittencourt' });
+    }
+
+    // Academia — derrota recente (últimas 8 semanas)
+    const lostRecently = fighter.lastFightAbsWeek && (now - fighter.lastFightAbsWeek) <= 8
+      && (fighter.record?.losses || 0) > 0;
+    if (lostRecently && fighter.academyId !== 'academy-blacktiger') {
+      triggers.push({ type: 'academy', reason: 'recent_loss', targetId: 'academy-blacktiger', targetName: 'Black Tiger Team' });
+    }
+
+    // Academia — 2+ vitórias consecutivas (tenta subir de nível)
+    if (streak >= 2) {
+      const currentLevel = ACADEMIES.find(a => a.id === fighter.academyId)?.facilityLevel || 1;
+      const betterAcademy = ACADEMIES.filter(a => a.id !== fighter.academyId && a.facilityLevel > currentLevel)
+        .sort((a, b) => a.facilityLevel - b.facilityLevel)[0];
+      if (betterAcademy) {
+        triggers.push({ type: 'academy', reason: 'rising', targetId: betterAcademy.id, targetName: betterAcademy.name });
+      }
+    }
+
+    // Academia — rival mudou para uma academia diferente
+    const rivalries = this.rivalryService ? await this.rivalryService.getRivalries(fighter.id) : [];
+    for (const r of rivalries) {
+      const rivalId = r.fighterAId === fighter.id ? r.fighterBId : r.fighterAId;
+      const rivalFighter = await this.fighterCtrl.getFighter(rivalId);
+      if (rivalFighter?.academyId && rivalFighter.academyId !== fighter.academyId) {
+        const rivalAcademyName = ACADEMIES.find(a => a.id === rivalFighter.academyId)?.name || rivalFighter.academyId;
+        triggers.push({ type: 'academy', reason: 'rival_there', targetId: rivalFighter.academyId, targetName: rivalAcademyName });
+      }
+    }
+
+    const reasonLabels = {
+      win_streak: (t) => `${t.targetName} notou sua sequência de vitórias e quer conversar.`,
+      belt_won: (t) => `${t.targetName} viu sua conquista do cinturão. Quer representar você.`,
+      rising: (t) => t.type === 'manager'
+        ? `${t.targetName} está de olho na sua ascensão. Quer fazer uma proposta.`
+        : `${t.targetName} acompanhou sua evolução. Quer te levar para o próximo nível.`,
+      recent_loss: (t) => `${t.targetName} acredita que pode reconstruir sua carreira. Quer te treinar.`,
+      rival_there: (t) => `${t.targetName} quer te contratar. Seu rival já treina lá.`,
+    };
+
+    const created = [];
+    for (const t of triggers) {
+      if (Math.random() > 0.4) continue;
+      if (created.some(c => c.targetId === t.targetId)) continue;
+
+      const label = reasonLabels[t.reason];
+      const contextMessage = typeof label === 'function' ? label(t) : label;
+
+      const approach = {
+        id: generateId(),
+        targetType: t.type,
+        rivalId: t.targetId,
+        rivalName: t.targetName,
+        rivalScore: 0,
+        reason: t.reason,
+        contextMessage,
+        deadlineAbsWeek: now + 2,
+        createdAt: now,
+        resolved: false,
+        response: null,
+      };
+      created.push(approach);
+    }
+
+    if (created.length > 0) {
+      const all = await this._loadApproaches();
+      all.push(...created);
+      await this._saveApproaches(all);
+      for (const a of created) {
+        await this.notifService.add('warning', '📩 Proposta', a.contextMessage);
+      }
+    }
+
+    return created;
   }
 }

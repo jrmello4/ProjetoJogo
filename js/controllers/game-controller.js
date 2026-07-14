@@ -82,7 +82,7 @@ export class GameController {
     this.scoutingService = new ScoutingService(this.db, this.notifService);
     this.contractService = new ContractService(this.db, this.fighterCtrl, this.notifService);
     this.managerService = new ManagerService(this.db, this.notifService, this.careerLogService);
-    this.retentionService = new RetentionService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.managerService, this.careerLogService);
+    this.retentionService = new RetentionService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.managerService, this.careerLogService, this.rivalryService);
     // Construído antes do WorldService de propósito: §D.3 pede acesso a
     // rivalryService dentro de _computePressureLevel (pressão extra em
     // revanche 'grudge'), então a dependência precisa existir primeiro.
@@ -402,6 +402,7 @@ export class GameController {
 
     const retentionResolutions = await this.retentionService.processWeek(now, fighter);
     await this.retentionService.generateApproaches(now, fighter);
+    await this.retentionService._checkMilestoneTriggers(now, fighter);
 
     await this._checkExpectations(now, fighter);
 

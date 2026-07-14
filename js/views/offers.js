@@ -22,6 +22,46 @@ const ARCHETYPE_LABELS = {
 };
 
 export class OffersView {
+  // Fase 3 — o espelho do dossiê. Até aqui o scouting era via de mão única:
+  // você estudava, o mundo nunca te estudava. Este bloco é o mundo te
+  // devolvendo o olhar.
+  static _renderTheirRead(offer, r) {
+    if (!r) return '';
+
+    const exposureCls = r.exposure >= 75 ? 'badge-danger' : r.exposure >= 50 ? 'badge-warning' : 'badge-info';
+    const sig = r.signature
+      ? `<span class="badge badge-warning">Assinatura: ${GAME_PLANS[r.signature].label}</span>`
+      : '<span class="badge badge-success">Imprevisível — não há o que counter-ar</span>';
+
+    const prediction = r.predictedPlanKey
+      ? `<p class="text-sm mt-2">
+           O córner dele deve trazer <strong>${GAME_PLANS[r.predictedPlanKey].label}</strong>.
+           ${r.reliable
+             ? '<span class="text-xs text-muted">Sua equipe confia nessa leitura.</span>'
+             : '<span class="text-xs" style="color:var(--warning)">⚠️ Sua equipe não tem certeza. Pode estar errado.</span>'}
+         </p>`
+      : '<p class="text-sm text-muted mt-2">Você não faz ideia do que ele preparou. Estude-o para saber o que ele sabe.</p>';
+
+    const weapon = r.weapon
+      ? `<p class="text-xs mt-2" style="color:var(--gold,#d4a843)">
+           🧰 Carta na manga: <strong>${GAME_PLANS[r.weapon.planKey].label}</strong> (${Math.round(r.weapon.mastery)}% instalada).
+           Ninguém sabe que você tem isso — mas só funciona uma vez.
+         </p>`
+      : '';
+
+    return `
+      <div class="dossier mt-3" style="border-left:3px solid var(--warning)">
+        <div class="dossier-header">
+          <span class="dossier-title">📖 O que eles sabem sobre você</span>
+          <span class="badge ${exposureCls}">${r.exposureLabel} · ${r.exposure}%</span>
+        </div>
+        <div class="dossier-reads mt-2">${sig}</div>
+        ${prediction}
+        ${weapon}
+      </div>
+    `;
+  }
+
   // Dossiê do adversário. Sem estudar, tudo é faixa larga e ninguém sabe
   // como ele luta — e aí o plano de jogo vira aposta.
   static _renderDossier(offer, d) {
@@ -62,6 +102,7 @@ export class OffersView {
 
         <div class="mt-3">${tendencies}${dna}</div>
       </div>
+      ${this._renderTheirRead(offer, d.theirRead)}
     `;
   }
 
@@ -93,6 +134,32 @@ export class OffersView {
           `).join('')}
         </div>
         ${!read ? '<div class="text-xs text-muted mt-2">⚠️ Você não estudou o adversário — está escolhendo no escuro.</div>' : ''}
+        ${this._renderBait(offer, d?.theirRead)}
+      </div>
+    `;
+  }
+
+  // A isca. Só aparece quando você TEM uma assinatura pra fingir e escolheu um
+  // plano que não é ela — fingir ser quem você já é não engana ninguém.
+  static _renderBait(offer, r) {
+    if (!r?.signature) return '';
+
+    if (!r.canBait) {
+      return `<div class="text-xs text-muted mt-3">
+        🎣 Iscar exige trazer um plano diferente da sua assinatura (${GAME_PLANS[r.signature].label}).
+      </div>`;
+    }
+
+    return `
+      <div class="mt-3 p-2" style="border:1px dashed var(--warning);border-radius:6px">
+        <label class="flex items-center gap-2 text-sm" style="cursor:pointer">
+          <input type="checkbox" class="bait-toggle" data-offer="${offer.id}" ${r.bait ? 'checked' : ''}>
+          <span><strong>🎣 Iscar</strong> — deixar que ele prepare a luta contra a sua assinatura, e trazer outra coisa.</span>
+        </label>
+        <p class="text-xs text-muted mt-1">
+          Só paga se ele realmente te leu. Contra alguém que não te estudou, você só jogou fora o que sabe fazer.
+          O sucesso depende da sua leitura de luta.
+        </p>
       </div>
     `;
   }

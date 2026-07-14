@@ -46,6 +46,11 @@ export class FightOffer {
     // reserva para que o evento aplique exatamente o impacto combinado.
     this.weighIn = data.weighIn || null;
 
+    // Fase 3 — a isca: fingir a sua assinatura e trazer o oposto. Vive na
+    // reserva, ao lado do plano, porque é uma decisão POR LUTA, não um traço
+    // do lutador.
+    this.bait = data.bait || false;
+
     this.createdAtAbsWeek = data.createdAtAbsWeek ?? 1;
     this.createdAt = data.createdAt || new Date().toISOString();
   }

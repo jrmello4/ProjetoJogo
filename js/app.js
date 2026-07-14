@@ -14,6 +14,7 @@ import { renderCalendar } from './views/calendar.js';
 import { RankingsView } from './views/rankings.js';
 import { FinanceView } from './views/finance.js';
 import { RankingService } from './services/ranking.js';
+import { TapeService } from './services/tape-service.js';
 import { NotificationsView } from './views/notifications.js';
 import { GameController } from './controllers/game-controller.js';
 import { TrainingCamp } from './controllers/training-camp.js';
@@ -769,6 +770,14 @@ class App {
       });
     });
 
+    document.querySelectorAll('.bait-toggle').forEach(box => {
+      box.addEventListener('change', async () => {
+        const result = await this.game.setBait(box.dataset.offer, box.checked);
+        if (!result.ok) this.notificationService.add('warning', 'Isca', result.reason);
+        this.renderOffers();
+      });
+    });
+
     document.querySelectorAll('.offer-accept').forEach(btn => {
       btn.addEventListener('click', async () => {
         await this.game.offerService.accept(btn.dataset.id, now);
@@ -1185,12 +1194,26 @@ class App {
     const state = await this.seasonService.getState();
     const now = (state.year - 1) * 52 + state.week;
     const booking = bookings.find(b => b.fighterId === fighter.id) || null;
-    const html = TrainingCampView.render(fighter, booking, now);
+    // Fase 3 — a academia define quais armas existem pra você. Uma academia
+    // pequena não tem quem te ensine wrestling; é isso que faz a escolha de
+    // academia virar uma aposta de carreira, e não um bônus numérico.
+    const academy = await this.game.getAcademy(fighter.academyId);
+    const weaponOptions = TapeService.installablePlans(academy);
+    const html = TrainingCampView.render(fighter, booking, now, weaponOptions);
     await LayoutView.render(html);
     this._bindTrainingCamp(fighter, booking, now);
   }
 
   _bindTrainingCamp(fighter, booking, now) {
+    // O bloco da arma só faz sentido quando o foco é instalá-la — mostrar as
+    // opções de arma num camp de cardio seria oferecer uma decisão que não
+    // existe.
+    const specSelect = document.querySelector(`.camp-spec[data-fighter="${fighter.id}"]`);
+    const weaponBlock = document.querySelector('[data-weapon-block]');
+    specSelect?.addEventListener('change', () => {
+      if (weaponBlock) weaponBlock.style.display = specSelect.value === 'install_weapon' ? '' : 'none';
+    });
+
     document.querySelectorAll('.camp-save').forEach(btn => {
       btn.addEventListener('click', async () => {
         const intensity = document.querySelector(`.camp-intensity[data-fighter="${fighter.id}"]`)?.value;
@@ -1205,7 +1228,11 @@ class App {
           return;
         }
 
-        TrainingCamp.configureCamp(fighter, intensity, spec || 'striking', null);
+        const weaponTarget = spec === 'install_weapon'
+          ? document.querySelector(`.camp-weapon-target[data-fighter="${fighter.id}"]`)?.value || null
+          : null;
+
+        TrainingCamp.configureCamp(fighter, intensity, spec || 'striking', null, weaponTarget);
         await this.game.fighterCtrl.updateFighter(fighter);
 
         const cost = CAMP_CONFIG.WEEKLY_COST[intensity] || 0;

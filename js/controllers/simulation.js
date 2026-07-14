@@ -33,6 +33,21 @@ export class SimulationEngine {
     return 0;
   }
 
+  // Arma crua (Fase 3): uma arma nova instalada pela metade entrega o plano
+  // pela metade. `factor` 0..1 puxa cada modificador de volta pra 1.0 — o
+  // movimento existe, você só ainda não sabe fazer ele.
+  static _scalePlan(plan, factor) {
+    if (factor >= 1) return plan;
+    const scale = (m) => 1 + (m - 1) * factor;
+    return {
+      ...plan,
+      strikingMod: scale(plan.strikingMod),
+      grapplingMod: scale(plan.grapplingMod),
+      cardioMod: scale(plan.cardioMod),
+      chinMod: scale(plan.chinMod),
+    };
+  }
+
   // cornerHooks (opcional): { onRoundEnd: async ({round, roundResult, totalScoreA, totalScoreB}) => instructionKey }
   // Só afeta o córner A (sempre o lutador do jogador, por convenção do WorldService).
   // Sem cornerHooks, o comportamento é idêntico ao automático de sempre.
@@ -46,13 +61,25 @@ export class SimulationEngine {
   // psicologicamente — título, reencontro, sequência em risco. Escala
   // `pressurePerformer`/`bigEventNervous`/composure em vez de tudo-ou-nada;
   // antes disto, "pressão" era o mesmo booleano que decidia rounds (isBigEvent).
-  static async simulateFight(fighterA, fighterB, fiveRounds = false, cornerHooks = null, gamePlanKey = 'balanced', dateISO = null, pressureLevel = 0) {
+  // `tactics` (Fase 3, opcional): o resultado de TapeService.resolveTactics —
+  // { opponentPlanKey, edgeA, edgeB, planModFactorA }. É por aqui que o
+  // adversário deixa de lutar sem plano nenhum e passa a trazer um counter
+  // contra o que ele leu na sua fita. Sem `tactics`, o comportamento é
+  // idêntico ao de antes: a IA luta equilibrada e sem vantagem. A mudança é
+  // aditiva de propósito — todo call site antigo continua válido.
+  static async simulateFight(fighterA, fighterB, fiveRounds = false, cornerHooks = null, gamePlanKey = 'balanced', dateISO = null, pressureLevel = 0, tactics = null) {
     const maxRounds = fiveRounds ? 5 : 3;
     const rounds = [];
     let totalScoreA = 0, totalScoreB = 0;
 
-    const plan = GAME_PLANS[gamePlanKey] || GAME_PLANS.balanced;
-    const planEdge = this._planEdge(plan, fighterB);
+    const rawPlan = GAME_PLANS[gamePlanKey] || GAME_PLANS.balanced;
+    const plan = this._scalePlan(rawPlan, tactics?.planModFactorA ?? 1);
+    const planEdge = tactics ? tactics.edgeA : this._planEdge(plan, fighterB);
+
+    // O adversário agora tem plano de jogo — o dele é escolhido pela leitura
+    // que ele fez de VOCÊ (TapeService), não por atributos seus.
+    const planB = GAME_PLANS[tactics?.opponentPlanKey] || GAME_PLANS.balanced;
+    const planEdgeB = tactics ? tactics.edgeB : 0;
 
     // Cumulative stats
     const stats = {
@@ -88,7 +115,7 @@ export class SimulationEngine {
       const staminaFactorB = Math.max(10, staminaB * (1 - (r - 1) * 0.12) - staminaDebtB);
 
       const perfA = this._calcRoundPerformance(fighterA, fighterB, pressureLevel, staminaFactorA, cornerModA, plan, planEdge);
-      const perfB = this._calcRoundPerformance(fighterB, fighterA, pressureLevel, staminaFactorB, null);
+      const perfB = this._calcRoundPerformance(fighterB, fighterA, pressureLevel, staminaFactorB, null, planB, planEdgeB);
 
       // Track total scores for decision
       totalScoreA += perfA.score;
@@ -132,7 +159,7 @@ export class SimulationEngine {
       stats.controlTimeB += roundStats.takedownsB * 30;
 
       // Check for finish this round
-      const finish = this._checkRoundFinish(fighterA, fighterB, perfA, perfB, diff, r, roundStats, cornerModA, plan);
+      const finish = this._checkRoundFinish(fighterA, fighterB, perfA, perfB, diff, r, roundStats, cornerModA, plan, planB);
       if (finish) {
         winner = finish.winner;
         loser = finish.loser;
@@ -521,7 +548,10 @@ export class SimulationEngine {
     return beats;
   }
 
-  static _checkRoundFinish(fighterA, fighterB, perfA, perfB, diff, round, roundStats, cornerModA = null, plan = null) {
+  // `planB` (Fase 3): o adversário agora traz plano, então o chinMod dele
+  // também protege o queixo dele. Sem isso, o counter que ele monta contra a
+  // sua fita só valeria na ofensiva — e um plano defensivo não defenderia nada.
+  static _checkRoundFinish(fighterA, fighterB, perfA, perfB, diff, round, roundStats, cornerModA = null, plan = null, planB = null) {
     const finishChance = Math.min(0.4, 0.05 + Math.abs(diff) * 0.008);
 
     if (Math.random() > finishChance * (1 + round * 0.1)) return null;
@@ -540,6 +570,8 @@ export class SimulationEngine {
     if (loser === fighterA) {
       if (cornerModA) chinFactor *= cornerModA.chinMod;
       if (plan) chinFactor *= plan.chinMod;
+    } else if (planB) {
+      chinFactor *= planB.chinMod;
     }
 
     // Submissão: subOffense do vencedor vs subDefense do perdedor

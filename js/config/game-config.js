@@ -414,6 +414,110 @@ export const GAME_PLANS = {
 // Quanto o acerto (ou o erro) de leitura vale na performance de cada round
 export const GAME_PLAN_EDGE = { strong: 0.10, weak: -0.08 };
 
+// ===== O Livro Sobre Você (Fase 3) =====
+// O mundo passa a te estudar de volta. A tese: o plano que te faz vencer é o
+// mesmo que te faz previsível. Ver spec 2026-07-14-o-livro-sobre-voce-design.
+//
+// Contra o que cada assinatura perde. `patient` cai pro `grappler` (não pro
+// `pressure`) porque o contragolpeador vive do erro do adversário — e quem te
+// leva pro chão nunca comete o erro que você está esperando.
+export const COUNTER_OF = {
+  striker: 'grappler',
+  grappler: 'striker',
+  pressure: 'patient',
+  patient: 'grappler',
+};
+
+// Qual especialidade da academia ensina cada plano. Uma academia só pode
+// instalar uma arma se tiver a especialidade correspondente acima do mínimo —
+// é isso que faz a academia deixar de ser um bônus numérico e virar o limite
+// do seu vocabulário técnico.
+export const PLAN_SPECIALTY = {
+  striker: 'striking',
+  grappler: 'grappling',
+  pressure: 'cardio',
+  patient: 'striking',
+};
+
+export const TAPE_CONFIG = {
+  // --- exposição: o quanto o mundo te conhece ---
+  EXPOSURE_BASE_PER_FIGHT: 6,
+  EXPOSURE_POPULARITY_SCALE: 0.10,
+  EXPOSURE_TIER1_BONUS: 6,
+  EXPOSURE_TITLE_BONUS: 8,
+  EXPOSURE_ROOKIE_FIGHTS: 8,     // ninguém estuda um novato
+  EXPOSURE_ROOKIE_SCALE: 0.35,
+  EXPOSURE_IDLE_AFTER_WEEKS: 12, // sumir do mapa te torna um enigma de novo
+  EXPOSURE_IDLE_DECAY: 1,
+  EXPOSURE_NEW_WEAPON_DROP: 25,  // revelar arma nova obriga o mundo a te reestudar
+
+  // --- assinatura: o plano que você repete ---
+  SIGNATURE_WINDOW: 5,
+  SIGNATURE_THRESHOLD: 0.6,
+
+  // --- maestria de plano: repetir afia, e entrega ---
+  PLAN_MASTERY_PER_USE: 12,
+  PLAN_MASTERY_DECAY_PER_FIGHT: 3,
+  PLAN_MASTERY_MAX_BONUS: 0.08,
+
+  // --- a leitura do adversário ---
+  // Calibrado com harness de 2000 lutas por linha. O motor é hipersensível a
+  // vantagem (~3 pontos percentuais de vitória por 0.01 de edge), então estes
+  // números são pequenos de propósito. A primeira versão usava READ_EDGE 0.10
+  // e derrubava a vitória de 83% pra 65% NUM ÚNICO PASSO de exposição — uma
+  // escada, não uma curva.
+  READ_IQ_SCALE: 200,           // 0.5 + fightIQ/200 → um burro lê mal mesmo com a fita na mão
+  READ_RIVALRY_BONUS: 0.25,     // o rival te conhece por fora da fita
+  READ_THRESHOLD: 0.30,         // leitura fraca não vira plano nenhum
+  TAPE_READ_EDGE: 0.03,
+  EDGE_CEIL: 0.12,              // teto de vantagem — simetria, não punição
+  EDGE_FLOOR: -0.12,
+
+  // --- arma nova ---
+  // 0.20 (e não 0.15) porque a 0.15 a Fortaleza ensinava exatamente as mesmas
+  // 4 armas que a Elite — a academia deixava de ser o limite do seu vocabulário
+  // e virava só um preço diferente. A 0.20 vira uma escada de verdade:
+  // Black Tiger não ensina NADA (reinventar-se exige sair de lá), Fortaleza
+  // ensina 3, Elite ensina as 4.
+  WEAPON_MIN_SPECIALTY: 0.20,
+  // A 14/semana a arma ficava pronta em 3 semanas — barato demais para o que o
+  // design cobra por ela. A 7, um jovem na Elite gasta ~6 semanas (um camp
+  // inteiro) e um veterano de 37 gasta ~9 (mais que um camp): a promessa de que
+  // "o velho não se reinventa por arma nova, e sim por leitura" passa a ser
+  // verdade mecânica, não só texto.
+  WEAPON_INSTALL_BASE: 7,       // maestria por semana de camp dedicada
+  WEAPON_SYNERGY_SCALE: 1.0,    // técnico com quem você briga instala devagar
+  WEAPON_ACADEMY_SPEC_BONUS: 1.5,
+  WEAPON_AGE_PENALTY_FROM: 31,  // velho não aprende truque novo
+  WEAPON_AGE_PENALTY_PER_YEAR: 0.06,
+  WEAPON_READY_MASTERY: 60,
+  WEAPON_RAW_PENALTY: 0.12,     // arma crua é pior que não ter plano
+  WEAPON_SURPRISE_BONUS: 0.04,
+  WEAPON_CAMP_GAIN_SCALE: 0.35, // o camp de instalação ainda treina, só que mal
+
+  // --- isca ---
+  // A isca não te deixa mais forte: ela deixa o ADVERSÁRIO fora de posição.
+  // Ele preparou uma luta inteira contra um estilo que não apareceu, e é isso
+  // que `BAIT_OPPONENT_PENALTY` representa. Premiar o jogador em vez de punir
+  // quem se comprometeu não funcionou: medido, a isca ficava negativa para
+  // TODO perfil (-15 a -17pp), porque iscar custa o bônus de maestria e o
+  // counter evitado valia menos que ele. Ninguém usaria.
+  //
+  // Com a punição do lado certo e a chance realmente presa ao fightIQ, o
+  // resultado bate com a intenção do design: o veterano de leitura alta lucra
+  // com a isca, o especialista de IQ médio não. Ele tem que se reinventar por
+  // arma nova — que é justamente o que a idade tira dele.
+  BAIT_BASE: 0.10,
+  BAIT_IQ_SCALE: 0.009,         // fightIQ é oculto: descobrir que ele é burro custa uma luta
+  BAIT_REWARD: 0.04,
+  BAIT_OPPONENT_PENALTY: -0.15,
+  BAIT_PENALTY: -0.05,
+
+  // --- careerLog ---
+  FIGURED_OUT_READ: 0.60,       // duas derrotas seguidas sob leitura alta = decifrado
+  REINVENTION_WINS: 3,
+};
+
 // Instruções de córner — escolhidas pelo jogador entre rounds na luta ao
 // vivo. Afetam apenas o lutador da academia (córner A); o adversário luta
 // no automático. fatigueMod acumula um débito de stamina para os rounds

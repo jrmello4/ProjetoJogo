@@ -9,7 +9,8 @@ const MAX_ENTRIES = 300;
 // entry: { fighterId, type, atAbsWeek, magnitude (0-100), data }
 // types: 'title_won' | 'upset' | 'streak' | 'rematch' | 'dna_discovered' |
 //        'permanent_scar' | 'academy_switch' | 'manager_switch' |
-//        'rivalry_born'
+//        'rivalry_born' | 'finish' | 'provocation' | 'viral' |
+//        'weapon_revealed' | 'figured_out' | 'reinvention' | 'bait_success'
 //
 // fighterId identifica de QUEM é o momento (o lutador do jogador vivendo
 // aquele evento) — obrigatório desde a correção do bug de "Momentos

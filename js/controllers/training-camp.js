@@ -1,5 +1,6 @@
 import { clamp } from '../utils/helpers.js';
-import { CAMP_CONFIG } from '../config/game-config.js';
+import { CAMP_CONFIG, TAPE_CONFIG, PLAN_SPECIALTY } from '../config/game-config.js';
+import { TapeService } from '../services/tape-service.js';
 
 // Épico D: Acampamento de verdade.
 // O camp deixa de ser um botão manual e vira uma configuração que roda
@@ -11,11 +12,14 @@ export class TrainingCamp {
   // Define o camp para o fighter. Só permitido se ele tem luta marcada
   // (intensity === 'intense' exige booking; moderate e light também
   // funcionam sem luta como treino normal aprimorado).
-  static configureCamp(fighter, intensity, spec, sparringPartnerId = null) {
+  // `weaponTarget` (Fase 3): só usado quando spec === 'install_weapon'. É o
+  // gamePlanKey da arma que o lutador está instalando.
+  static configureCamp(fighter, intensity, spec, sparringPartnerId = null, weaponTarget = null) {
     fighter.campConfig = {
       intensity,
       spec,
       sparringPartnerId,
+      weaponTarget,
     };
     fighter.campProcessedThisWeek = false;
   }
@@ -26,13 +30,30 @@ export class TrainingCamp {
   }
 
   // ===== Processamento semanal (chamado por _applyWeeklyTraining) =====
-  // Retorna { gains, injured, overtrained, canceledFight }
-  static processCamp(fighter, gym, team, absWeekNow, opponentArchetype = null) {
+  // Retorna { gains, injured, overtrained, canceledFight, weapon }
+  // `academy`: a academia onde o lutador treina hoje. Precisa dela porque é a
+  // academia que define quais armas ela sabe ensinar e o quão rápido.
+  static processCamp(fighter, academy, team, absWeekNow, opponentArchetype = null) {
     const cfg = fighter.campConfig;
     if (!cfg) return null;
 
-    const { intensity, spec, sparringPartnerId } = cfg;
-    const gains = this._calcGains(intensity, spec);
+    const { intensity, spec, sparringPartnerId, weaponTarget } = cfg;
+
+    // Fase 3 — instalar arma nova. Os atributos que o camp treina são os da
+    // especialidade da própria arma (instalar um wrestling treina wrestling),
+    // mas mal: você está gastando as semanas aprendendo um movimento em vez de
+    // afiar o que já sabe. Esse é o custo real da reinvenção — você chega pior
+    // nesta luta pra ganhar as próximas três.
+    const installing = spec === 'install_weapon' && weaponTarget && TapeService.canInstall(academy, weaponTarget);
+    const gains = this._calcGains(intensity, installing ? PLAN_SPECIALTY[weaponTarget] : spec);
+
+    let weapon = null;
+    if (installing) {
+      weapon = TapeService.progressWeapon(fighter, academy, weaponTarget);
+      for (const attr of Object.keys(gains)) {
+        gains[attr] = Math.floor(gains[attr] * TAPE_CONFIG.WEAPON_CAMP_GAIN_SCALE);
+      }
+    }
 
     // Bônus de sparring partner
     let sparringBonus = 0;
@@ -65,6 +86,7 @@ export class TrainingCamp {
     const result = {
       gains,
       sparringBonus,
+      weapon,
       injured: false,
       overtrained: false,
       canceledFight: false,

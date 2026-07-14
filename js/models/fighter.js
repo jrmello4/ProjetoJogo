@@ -61,6 +61,14 @@ export class Fighter {
     this.managerId = data.managerId || null;
     this.coachSynergy = data.coachSynergy ?? 40;
 
+    // O Livro Sobre Você (Fase 3): a fita pública deste lutador — o que o
+    // mundo consegue observar de fora. Só o que é visível numa transmissão:
+    // qual plano ele trouxe, sob que holofote. Nunca atributos ocultos.
+    // A forma canônica vive em TapeService.defaultTape(); repeti-la aqui
+    // criaria duas fontes de verdade, então o serviço materializa sob demanda
+    // (TapeService.tapeOf) e o construtor só preserva o que veio do save.
+    this.tape = data.tape || null;
+
     // Auto-descoberta de DNA (§B.1): chaves de `dna`/hidden numéricos já
     // reveladas ao jogador. Sem estar aqui, a interface mostra faixa/rótulo
     // vago em vez do valor exato — mesma função de blur do scouting.
@@ -144,6 +152,17 @@ export class Fighter {
     let streak = 0;
     for (const f of this.fights) {
       if (!f.won) break;
+      streak++;
+    }
+    return streak;
+  }
+
+  // O espelho de winStreak. Um empate quebra as duas sequências — ele não é
+  // derrota, então não pode contar como uma.
+  get loseStreak() {
+    let streak = 0;
+    for (const f of this.fights) {
+      if (f.won !== false) break;
       streak++;
     }
     return streak;

@@ -41,9 +41,11 @@ import {
   SOCIAL_CONFIG,
   WEIGH_IN_CONFIG,
   RIVALRY_CONFIG,
+  TAPE_CONFIG,
   DNA_DISCOVERY_MAGNITUDE,
   absWeek,
 } from '../config/game-config.js';
+import { TapeService } from '../services/tape-service.js';
 
 const WORLD_MODE = 'career-1-fighter';
 // v4: carreira de 1 lutador — Academy substitui Gym/RivalGym, economia
@@ -407,6 +409,11 @@ export class GameController {
     const economy = this._applyWeeklyEconomy(fighter, academy, now);
     const sponsorActivity = await this.sponsorService.processWeek(now, fighter);
     await this._applyWeeklyTraining(fighter, academy);
+
+    // Fase 3 — sumir do mapa te torna um enigma de novo. É a única forma
+    // gratuita de baixar a exposição, e ela cobra o preço mais alto do jogo:
+    // não estar lutando.
+    TapeService.decayIdle(fighter, now);
 
     const retentionResolutions = await this.retentionService.processWeek(now, fighter);
     await this.retentionService.generateApproaches(now, fighter);
@@ -1032,7 +1039,22 @@ export class GameController {
       }
     } catch { /* sem luta marcada */ }
 
-    const result = TrainingCamp.processCamp(fighter, null, [], absWeekNow, opponentArchetype);
+    // A academia entra aqui porque é ela que define quais armas existem pra
+    // você e o quão rápido você as instala (§Fase 3).
+    const academy = await this.getAcademy(fighter.academyId);
+    const result = TrainingCamp.processCamp(fighter, academy, [], absWeekNow, opponentArchetype);
+
+    if (result?.weapon) {
+      const plan = GAME_PLANS[fighter.campConfig.weaponTarget];
+      await this.notifService.add(
+        result.weapon.ready ? 'success' : 'info',
+        '🧰 Arma Nova',
+        result.weapon.ready
+          ? `${plan.label} está pronta (${result.weapon.mastery}%). Traga-a numa luta e ninguém vai estar esperando.`
+          : `${plan.label}: ${result.weapon.mastery}% instalada. Usá-la crua é pior que não ter plano.`
+      );
+    }
+
     return { result, canceledFight: !!(result?.canceledFight && result?.injured) };
   }
 
@@ -1067,8 +1089,30 @@ export class GameController {
 
     const offer = new FightOffer(data);
     offer.gamePlan = plan;
+    // Trocar de plano invalida a isca: iscar é trazer o OPOSTO da sua
+    // assinatura. Deixar a flag ligada depois de mudar o plano poderia gerar
+    // uma "isca" com a própria assinatura — que não engana ninguém.
+    offer.bait = false;
     await this.db.put('offers', offer);
     return { ok: true, plan };
+  }
+
+  // Fase 3 — a isca. Só existe se você tem uma reputação pra fingir e o plano
+  // escolhido não é ela. Iscar quem não te leu é jogar fora a assinatura de
+  // graça, mas o jogo não impede: essa é a decisão do jogador, não do sistema.
+  async setBait(offerId, on) {
+    const fighter = await this.getPlayerFighter();
+    const data = await this.db.get('offers', offerId);
+    if (!data || !fighter) return { ok: false, reason: 'Luta não encontrada.' };
+
+    const offer = new FightOffer(data);
+    if (on && !TapeService._canBait(fighter, offer.gamePlan || 'balanced')) {
+      return { ok: false, reason: 'Você não tem uma assinatura pra fingir — ou o plano escolhido JÁ é a sua assinatura.' };
+    }
+
+    offer.bait = !!on;
+    await this.db.put('offers', offer);
+    return { ok: true, bait: offer.bait };
   }
 
   async opponentDossier(offer) {
@@ -1096,7 +1140,50 @@ export class GameController {
       },
       tendencies: ScoutingService.readTendencies(opponent, level),
       dna: ScoutingService.revealsDna(level) ? opponent.dnaTraits : null,
+      theirRead: await this._theirRead(fighter, opponent, offer, level),
     };
+  }
+
+  // Fase 3 — o espelho: "o que eles sabem sobre você". A informação passa pela
+  // MESMA névoa do scouting, o que transforma empresário e academia em
+  // contra-inteligência: o quanto você sabe do que eles sabem.
+  //
+  // A predição é embaralhada por um seed estável (o id da oferta), não por
+  // Math.random(): sem isso o jogador re-renderizaria a tela até a predição
+  // sair do jeito que ele quer, e a névoa não custaria nada.
+  async _theirRead(fighter, opponent, offer, level) {
+    let rivalryIntensity = 0;
+    try {
+      const rivalries = await this.rivalryService.getRivalries(fighter.id);
+      rivalryIntensity = rivalries.find(r => r.fighterAId === opponent.id || r.fighterBId === opponent.id)?.intensity || 0;
+    } catch { /* sem rivalidade */ }
+
+    const truth = TapeService.opponentPlanFor(opponent, fighter, {
+      rivalryIntensity,
+      opponentAcademy: ACADEMIES.find(a => a.id === opponent.academyId) || null,
+    });
+
+    const tape = TapeService.tapeOf(fighter);
+    const base = {
+      exposure: Math.round(tape.exposure),
+      exposureLabel: TapeService.exposureLabel(tape.exposure),
+      signature: truth.signature,
+      canBait: TapeService._canBait(fighter, offer.gamePlan || 'balanced'),
+      bait: !!offer.bait,
+      weapon: tape.weapon && !tape.weapon.revealed ? { ...tape.weapon } : null,
+    };
+
+    // Sem ter estudado nada, você não faz ideia do que o córner dele preparou.
+    if (level === 0) return { ...base, predictedPlanKey: null, reliable: false };
+
+    // Nível 1: a leitura existe, mas sua equipe erra. Um plano errado aqui é
+    // pior que nenhum — é nele que você vai basear a isca.
+    const seed = [...offer.id].reduce((s, c) => s + c.charCodeAt(0), 0);
+    const misread = level === 1 && seed % 3 === 0;
+    const alternatives = Object.keys(GAME_PLANS).filter(k => k !== truth.planKey);
+    const predicted = misread ? alternatives[seed % alternatives.length] : truth.planKey;
+
+    return { ...base, predictedPlanKey: predicted, reliable: level >= 2 };
   }
 
   // ===== Negociação de bolsa (usa modificadores do empresário, §C.1) =====

@@ -42,6 +42,10 @@ const MOMENT_ICONS = {
   academy_switch: '🏋️',
   manager_switch: '🤝',
   rivalry_born: '⚔️',
+  weapon_revealed: '🧰',
+  figured_out: '📖',
+  reinvention: '🔄',
+  bait_success: '🎣',
 };
 
 function humanizeType(type) {
@@ -81,6 +85,16 @@ function describeMoment(entry) {
       return `Trocou de empresário${d.managerName ? ` para ${d.managerName}` : ''}`;
     case 'rivalry_born':
       return `Nasceu uma rivalidade${d.opponentName ? ` com ${d.opponentName}` : ''}`;
+    // O Livro Sobre Você — os três momentos que dão um segundo ato à carreira:
+    // ser decifrado, mostrar algo novo, e voltar outro lutador.
+    case 'weapon_revealed':
+      return `Mostrou ${d.plan || 'uma arma nova'} pela primeira vez — e ninguém estava esperando`;
+    case 'figured_out':
+      return `O mundo abriu o livro: adversários passaram a ler ${d.signature || 'seu jogo'} antes do gongo`;
+    case 'reinvention':
+      return 'Reinventou-se depois de ser decifrado — voltou outro lutador';
+    case 'bait_success':
+      return `Iscou o adversário${d.plan ? `, que entrou preparado para ${d.plan}` : ''}`;
     default: {
       const parts = Object.entries(d)
         .filter(([, v]) => v !== null && v !== undefined && v !== '')

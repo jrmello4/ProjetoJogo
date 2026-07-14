@@ -1,14 +1,70 @@
 import { formatCurrency, getWeightClassShort } from '../utils/helpers.js';
-import { CAMP_CONFIG } from '../config/game-config.js';
+import { CAMP_CONFIG, GAME_PLANS, TAPE_CONFIG } from '../config/game-config.js';
 
 // Épico D: Acampamento de verdade.
 // Configura intensidade e foco pra próxima luta. Sem sparring partner —
 // não há mais colegas de equipe pra escalar (§A.3): o camp é só você e o
 // técnico da sua academia atual.
 export class TrainingCampView {
-  static render(fighter, booking, now) {
+  // Fase 3 — a arma nova. Só aparece se a academia sabe ensinar alguma coisa
+  // que você ainda não mostrou. O bloco só é visível quando o foco do camp é
+  // `install_weapon`, porque instalar é ABRIR MÃO das outras semanas de treino.
+  static _renderWeapon(fighter, cfg, weaponOptions) {
+    // Uma academia pequena não tem quem te ensine nada novo. Isso precisa ser
+    // DITO — se a opção simplesmente sumisse, o jogador leria como recurso
+    // faltando em vez de como o limite real que é. É o que transforma "trocar
+    // de academia" numa decisão de carreira em vez de um upgrade numérico.
+    if (weaponOptions.length === 0) {
+      return `
+        <div class="mt-3 p-3" style="border:1px dashed var(--text-muted);border-radius:6px;opacity:0.75">
+          <div class="text-xs font-bold text-secondary mb-1">🧰 ARMA NOVA</div>
+          <p class="text-xs text-muted">
+            Nesta academia não há quem te ensine um jogo novo. Se um dia o mundo
+            decifrar o seu, reinventar-se vai exigir sair daqui.
+          </p>
+        </div>
+      `;
+    }
+
+    const weapon = fighter.tape?.weapon;
+    const inProgress = weapon && !weapon.revealed ? weapon : null;
+    const target = cfg.weaponTarget || inProgress?.planKey || weaponOptions[0];
+    const ready = inProgress && inProgress.mastery >= TAPE_CONFIG.WEAPON_READY_MASTERY;
+
+    const progress = inProgress
+      ? `<div class="mt-2">
+           <div class="flex items-center justify-between text-xs mb-1">
+             <span>${GAME_PLANS[inProgress.planKey].label}</span>
+             <span class="${ready ? 'text-success' : 'text-muted'}">${Math.round(inProgress.mastery)}% ${ready ? '· pronta' : '· crua'}</span>
+           </div>
+           <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(inProgress.mastery)}%;background:${ready ? 'var(--success)' : 'var(--warning)'}"></div></div>
+           <p class="text-xs text-muted mt-1">
+             ${ready
+               ? 'Traga-a numa luta: o adversário preparou tudo contra o lutador que você era. Mas só funciona uma vez.'
+               : `Abaixo de ${TAPE_CONFIG.WEAPON_READY_MASTERY}% ela entrega o plano pela metade — arma crua é pior que não ter plano.`}
+           </p>
+         </div>`
+      : '';
+
+    return `
+      <div class="camp-weapon mt-3 p-3" style="border:1px dashed var(--gold,#d4a843);border-radius:6px;${cfg.spec === 'install_weapon' ? '' : 'display:none'}" data-weapon-block>
+        <div class="text-xs font-bold text-secondary mb-2">🧰 ARMA NOVA</div>
+        <p class="text-xs text-muted mb-2">
+          Semanas gastas aqui são semanas não gastas afiando o que você já sabe.
+          Você chega pior nesta luta para ganhar as próximas três.
+        </p>
+        <select class="form-select camp-weapon-target" data-fighter="${fighter.id}">
+          ${weaponOptions.map(k => `<option value="${k}" ${target === k ? 'selected' : ''}>${GAME_PLANS[k].icon} ${GAME_PLANS[k].label}</option>`).join('')}
+        </select>
+        ${progress}
+      </div>
+    `;
+  }
+
+  static render(fighter, booking, now, weaponOptions = []) {
     const hasFight = !!booking;
     const cfg = fighter.campConfig || {};
+    const weaponHtml = this._renderWeapon(fighter, cfg, weaponOptions);
     const weeksUntilFight = booking ? Math.max(0, booking.eventAbsWeek - now) : 0;
     const injured = fighter.status === 'injured';
     const suspended = fighter.availableFromAbsWeek > now;
@@ -68,9 +124,14 @@ export class TrainingCampView {
                   <option value="grappling" ${cfg.spec === 'grappling' ? 'selected' : ''}>Grappling</option>
                   <option value="cardio" ${cfg.spec === 'cardio' ? 'selected' : ''}>Cardio</option>
                   <option value="chin" ${cfg.spec === 'chin' ? 'selected' : ''}>Resistência</option>
+                  ${weaponOptions.length > 0
+                    ? `<option value="install_weapon" ${cfg.spec === 'install_weapon' ? 'selected' : ''}>🧰 Instalar arma nova</option>`
+                    : ''}
                 </select>
               </div>
             </div>
+
+            ${weaponHtml}
 
             <div class="flex items-center justify-between">
               <div class="text-xs text-muted">

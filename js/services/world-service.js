@@ -3,6 +3,7 @@ import { Fighter } from '../models/fighter.js';
 import { Event } from '../models/event.js';
 import { OFFER_STATUS } from '../models/fight-offer.js';
 import { SimulationEngine } from '../controllers/simulation.js';
+import { TapeService } from './tape-service.js';
 import { DataGenerator } from './data-generator.js';
 import { HallOfFame } from './hall-of-fame.js';
 import { generateId, getWeightClassName } from '../utils/helpers.js';
@@ -19,6 +20,8 @@ import {
   PERMANENT_SCAR_TABLE,
   DNA_DISCOVERY_CONFIG,
   RIVALRY_CONFIG,
+  GAME_PLANS,
+  TAPE_CONFIG,
   absWeekToDate,
   computeSuspensionWeeks,
 } from '../config/game-config.js';
@@ -36,6 +39,28 @@ export class WorldService {
     this.managerService = managerService;
     this.careerLogService = careerLogService;
     this.rivalryService = rivalryService;
+  }
+
+  // Fase 3 — reúne o contexto que decide o quanto o adversário conhece você.
+  // A intensidade da rivalidade e a academia dele entram aqui porque um rival
+  // te estuda de graça e uma academia grande tem quem assista às fitas.
+  async _resolveTactics(player, opponent, booking) {
+    let rivalryIntensity = 0;
+    if (this.rivalryService) {
+      const rivalries = await this.rivalryService.getRivalries(player.id);
+      const shared = rivalries.find(r => r.fighterAId === opponent.id || r.fighterBId === opponent.id);
+      rivalryIntensity = shared?.intensity || 0;
+    }
+
+    return TapeService.resolveTactics({
+      player,
+      opponent,
+      gamePlanKey: booking.gamePlan || 'balanced',
+      bait: !!booking.bait,
+      rivalryIntensity,
+      opponentAcademy: ACADEMIES.find(a => a.id === opponent.academyId) || null,
+      planEdgeFn: (plan, target) => SimulationEngine._planEdge(plan, target),
+    });
   }
 
   async getPromotions() {
@@ -226,7 +251,36 @@ export class WorldService {
         fighterA.reachedTier1 = true;
         fighterB.reachedTier1 = true;
       }
-      const result = await SimulationEngine.simulateFight(fighterA, fighterB, promo.tier === 1, hooks, gamePlan, fightDateISO, pressureLevel);
+      // Fase 3 — O Livro Sobre Você. Só a luta do jogador é lida: é a única
+      // fita que alguém se dá ao trabalho de estudar, e é a única em que a
+      // decisão (isca, arma nova, plano repetido) foi tomada por uma pessoa.
+      // Luta de IA contra IA segue como sempre — `tactics` nulo = comportamento
+      // anterior, sem custo.
+      const tactics = fight.booking
+        ? await this._resolveTactics(fighterA, fighterB, fight.booking)
+        : null;
+
+      const result = await SimulationEngine.simulateFight(fighterA, fighterB, promo.tier === 1, hooks, gamePlan, fightDateISO, pressureLevel, tactics);
+      result.tactics = tactics;
+
+      // A fita registra o que foi observável: o plano que cada um trouxe, sob
+      // que holofote. Depois da luta, porque o `record` já está atualizado —
+      // é ele que decide se a rampa de novato ainda vale.
+      const wonA = result.isDraw ? null : result.winnerId === fighterA.id;
+      TapeService.recordFight(fighterA, {
+        gamePlanKey: gamePlan,
+        promoTier: promo.tier,
+        isTitleFight: !!fight.titleWeightClass,
+        readQuality: tactics?.readQuality ?? 0,
+        won: wonA,
+      });
+      TapeService.recordFight(fighterB, {
+        gamePlanKey: tactics?.opponentPlanKey ?? 'balanced',
+        promoTier: promo.tier,
+        isTitleFight: !!fight.titleWeightClass,
+        won: wonA === null ? null : !wonA,
+      });
+
       result.eventId = eventId;
       result.card = fight.card;
       result.isTitleFight = !!fight.titleWeightClass;
@@ -307,6 +361,52 @@ export class WorldService {
     return { event, results, playerResults, playerFighterIds };
   }
 
+  // Fase 3 — o que a luta significou pro Livro. É aqui que o sistema deixa de
+  // ser matemática e vira história: a isca que funcionou, a arma que ninguém
+  // esperava, e a noite em que o mundo finalmente te decifrou.
+  async _settleTape(fighter, result, promo, absWeekNow, won, isDraw) {
+    const tactics = result.tactics;
+    if (!tactics) return;
+
+    const tape = TapeService.tapeOf(fighter);
+    const log = (type, magnitude, data) => this.careerLogService?.publish(fighter.id, type, absWeekNow, magnitude, data);
+
+    if (tactics.weaponReveal) {
+      const plan = GAME_PLANS[tactics.weaponReveal.planKey];
+      await this.notifService.add('success', '🧰 Carta na Manga', `Ninguém esperava. Você entrou com ${plan.label} e ${result.fighterBName === fighter.name ? result.fighterAName : result.fighterBName} preparou a luta contra outro lutador.`);
+      await log('weapon_revealed', 60, { plan: plan.label, opponentName: result.winnerName, won: !!won });
+    }
+
+    if (tactics.baitOutcome === 'success') {
+      await this.notifService.add('success', '🎣 A Isca Funcionou', 'Ele lutou contra o seu passado. Você trouxe outra coisa.');
+      await log('bait_success', 50, { plan: GAME_PLANS[tactics.opponentPlanKey]?.label });
+    } else if (tactics.baitOutcome === 'failed') {
+      await this.notifService.add('warning', '🎣 A Isca Falhou', 'Você abandonou o que sabe fazer e não achou o que procurava.');
+    } else if (tactics.countered && !won && !isDraw) {
+      await this.notifService.add('warning', '📖 Ele Te Leu', `Não foi sorte. ${result.winnerName} sabia exatamente o que você ia trazer.`);
+    }
+
+    // Decifrado: duas derrotas seguidas sob leitura alta. Não é uma má fase —
+    // é o mundo tendo aberto o seu livro. Marca o ponto de virada da carreira.
+    const readHigh = tactics.readQuality >= TAPE_CONFIG.FIGURED_OUT_READ;
+    if (!won && !isDraw && readHigh && tape.figuredOutAtAbsWeek === 0 && (fighter.loseStreak || 0) >= 2) {
+      tape.figuredOutAtAbsWeek = absWeekNow;
+      tape.winsSinceFiguredOut = 0;
+      await this.notifService.add('danger', '📖 Decifrado', 'O mundo abriu o livro sobre você. Continuar o mesmo lutador é continuar perdendo.');
+      await log('figured_out', 75, { signature: GAME_PLANS[tactics.signature]?.label || 'seu jogo' });
+    }
+
+    // E a saída: três vitórias depois de ser decifrado. O segundo ato.
+    if (tape.figuredOutAtAbsWeek > 0 && tape.winsSinceFiguredOut >= TAPE_CONFIG.REINVENTION_WINS) {
+      tape.figuredOutAtAbsWeek = 0;
+      tape.winsSinceFiguredOut = 0;
+      await this.notifService.add('success', '🔄 Reinvenção', 'Você voltou outro lutador. O livro que escreveram sobre você não serve mais.');
+      await log('reinvention', 85, { weeks: absWeekNow });
+    }
+
+    await this.fighterCtrl.updateFighter(fighter);
+  }
+
   async _settlePlayerFight(fight, result, promo, absWeekNow, titleOutcome = null) {
     const { booking } = fight;
     const fighter = fight.fighterA; // o lutador do jogador é sempre o córner A
@@ -343,6 +443,8 @@ export class WorldService {
     } else {
       await this.notifService.add('warning', 'Derrota', `Você foi derrotado por ${result.winnerName} (${result.method}). Bolsa líquida: $${netPurse.toLocaleString()}.`);
     }
+
+    await this._settleTape(fighter, result, promo, absWeekNow, won, isDraw);
 
     // Título em empate: o campeão retém automaticamente (regra real do MMA) —
     // resolveTitleFight nunca foi chamado, então o mapa de campeões não mudou.

@@ -169,7 +169,7 @@ export class RivalryService {
   //   rivalPop, choices: [{ key, text }] }.
   // Gatilho: rivalidade ativa intensidade >= 3, chance 30%.
   rollInteraction(fighter, rivalFighter) {
-    if (Math.random() > 0.3) return null;
+    if (Math.random() > RIVALRY_CONFIG.INTERACTION_WEEKLY_CHANCE) return null;
 
     const personality = rivalFighter?.academyId
       ? (ACADEMIES.find(a => a.id === rivalFighter.academyId)?.headCoach?.personality || 'cautious')

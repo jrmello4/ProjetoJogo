@@ -46,6 +46,7 @@ export function renderCalendar(calendarData) {
     <div class="calendar-legend" style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;font-size:0.85rem">
       <span>💪 Treino</span>
       <span>🔥 Camp</span>
+      <span>⚖️ Pesagem</span>
       <span>🥊 Luta</span>
       <span>🏆 Cinturão</span>
       <span>❌ Suspensão</span>

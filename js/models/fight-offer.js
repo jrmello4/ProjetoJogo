@@ -42,6 +42,10 @@ export class FightOffer {
     // Épico F4: o reencontro — adversário foi da academia
     this.isReencounter = data.isReencounter || false;
 
+    // Pesagem pré-luta: a estratégia escolhida é registrada na própria
+    // reserva para que o evento aplique exatamente o impacto combinado.
+    this.weighIn = data.weighIn || null;
+
     this.createdAtAbsWeek = data.createdAtAbsWeek ?? 1;
     this.createdAt = data.createdAt || new Date().toISOString();
   }

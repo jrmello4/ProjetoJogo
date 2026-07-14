@@ -500,6 +500,43 @@ export const SOCIAL_CONFIG = {
   STAY_QUIET_MORALE: 3,
 };
 
+// Pesagem pré-luta: surge na semana anterior ao evento. Não há uma escolha
+// universalmente certa: o corte controlado custa energia, o normal preserva
+// o estado atual e o agressivo pode render uma ótima reidratação ou cobrar
+// muito caro de quem já corta peso com dificuldade.
+export const WEIGH_IN_CONFIG = {
+  WEEKS_BEFORE_FIGHT: 1,
+  AUTO_STRATEGY: 'controlled',
+  AGGRESSIVE_SUCCESS_BASE: 0.20,
+  AGGRESSIVE_SUCCESS_EASE_FACTOR: 0.50,
+  STRATEGIES: {
+    controlled: {
+      label: 'Corte controlado',
+      description: 'Prioriza segurança e reduz o impacto no cardio, mas deixa um débito de energia para a luta.',
+      impactMultiplier: 0.70,
+      fatigueDelta: 7,
+      moraleDelta: 1,
+    },
+    standard: {
+      label: 'Plano habitual',
+      description: 'Segue a rotina prevista: risco e desgaste proporcionais ao seu corte de peso.',
+      impactMultiplier: 1.00,
+      fatigueDelta: 2,
+      moraleDelta: 0,
+    },
+    aggressive: {
+      label: 'Corte agressivo',
+      description: 'Tenta chegar mais leve e reidratar melhor. Pode sair perfeito ou comprometer a noite.',
+      successImpactMultiplier: 0.35,
+      failureImpactMultiplier: 1.65,
+      successFatigueDelta: 0,
+      failureFatigueDelta: 12,
+      successMoraleDelta: 3,
+      failureMoraleDelta: -5,
+    },
+  },
+};
+
 // Rivalidades com origem e identidade — ver spec §D.3. `Rivalry.type` deixa
 // de ser sempre 'competitive': vira 'robbery' quando a luta que criou/
 // reacendeu a rivalidade terminou em decisão dividida/majoritária (resultado
@@ -509,6 +546,26 @@ export const SOCIAL_CONFIG = {
 export const RIVALRY_CONFIG = {
   GRUDGE_LOOKBACK_WEEKS: 10, // janela pra uma provocação recente ainda "plantar" um grudge
   GRUDGE_PRESSURE_BONUS: 20, // §C.3 — pressão extra numa revanche de rivalidade grudge
+  INTERACTION_WEEKLY_CHANCE: 0.30,
+  INTERACTION_PROMPT_EXPIRY_WEEKS: 2,
+};
+
+// Sondagens por mérito. O cooldown evita que o mesmo empresário/academia
+// repita uma abordagem toda semana só porque o gatilho (como uma sequência
+// de vitórias) continua verdadeiro.
+export const RETENTION_CONFIG = {
+  APPROACH_DEADLINE_WEEKS: 2,
+  BASE_APPROACH_CHANCE: 0.03,
+  LOW_TRUST_CHANCE_SCALE: 0.12,
+  CONTEXTUAL_OFFER_CHANCE: 0.40,
+  CONTEXTUAL_COOLDOWN_WEEKS: 26,
+  RECENT_RESULT_WINDOW_WEEKS: 8,
+  RECENT_FINISH_WINDOW_WEEKS: 4,
+  MANAGER_STREAK_MIN: 3,
+  ACADEMY_STREAK_MIN: 2,
+  MANAGER_POPULARITY_THRESHOLD: 50,
+  FAMOUS_RIVALRY_INTENSITY: 6,
+  LOW_SYNERGY_THRESHOLD: 30,
 };
 
 // Presets de simulação de período (fast-forward)

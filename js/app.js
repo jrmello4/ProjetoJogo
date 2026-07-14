@@ -415,6 +415,16 @@ class App {
       });
     });
 
+    document.querySelectorAll('[data-weigh-in-choice]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const result = await this.game.resolveWeighIn(btn.dataset.weighInChoice);
+        if (!result.ok) {
+          this.notificationService.add('warning', 'Pesagem', result.reason);
+        }
+        this.renderDashboard();
+      });
+    });
+
     // Rivalidade — escolha do prompt semanal
     document.querySelectorAll('.rivalry-choice').forEach(btn => {
       btn.addEventListener('click', async () => {

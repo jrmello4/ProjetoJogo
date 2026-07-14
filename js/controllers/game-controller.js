@@ -39,6 +39,8 @@ import {
   CAMP_CONFIG,
   EXPECTATION_CONFIG,
   SOCIAL_CONFIG,
+  WEIGH_IN_CONFIG,
+  RIVALRY_CONFIG,
   DNA_DISCOVERY_MAGNITUDE,
   absWeek,
 } from '../config/game-config.js';
@@ -357,6 +359,11 @@ export class GameController {
     // o service em cada trigger individual.
     const preDiscoveredTraits = new Set(preFight.discoveredTraits);
 
+    // A escolha fica disponível na semana anterior. Se ela for ignorada até
+    // a noite do evento, a equipe executa o plano conservador em vez de
+    // deixar uma reserva travada ou pular a luta silenciosamente.
+    await this._autoResolveDueWeighIn(now, preFight);
+
     const world = await this.worldService.processWeek(now, nextWeekState.startedAt, preFightId, cornerHooks);
 
     // §D.3 — criação/atualização de rivalidade tem que rodar aqui (dentro de
@@ -433,18 +440,27 @@ export class GameController {
 
     // §D.3 — prompt semanal de rivalidade
     if (fighter.status !== 'retired') {
-      const rivalries = await this.rivalryService.getRivalries(fighter.id);
-      const topRivalry = rivalries.sort((a, b) => b.intensity - a.intensity)[0];
-      if (topRivalry && topRivalry.intensity >= 3) {
-        const rivalId = topRivalry.fighterAId === fighter.id ? topRivalry.fighterBId : topRivalry.fighterAId;
-        const rival = await this.fighterCtrl.getFighter(rivalId);
-        if (rival) {
-          const interaction = this.rivalryService.rollInteraction(fighter, rival);
-          if (interaction) {
-            interaction.rivalryId = topRivalry.id;
-            interaction.rivalFighterId = rivalId;
-            await this.db.put('gameState', { id: 'rivalry-prompt', ...interaction });
-            await this.notifService.add('warning', '⚔️ Rivalidade', `${rival.name} está provocando você. Como reagir?`);
+      let activePrompt = await this.db.get('gameState', 'rivalry-prompt');
+      if (activePrompt?.expiresAbsWeek != null && activePrompt.expiresAbsWeek <= now) {
+        await this.db.delete('gameState', 'rivalry-prompt');
+        activePrompt = null;
+      }
+      if (!activePrompt) {
+        const rivalries = await this.rivalryService.getRivalries(fighter.id);
+        const topRivalry = rivalries.sort((a, b) => b.intensity - a.intensity)[0];
+        if (topRivalry && topRivalry.intensity >= 3) {
+          const rivalId = topRivalry.fighterAId === fighter.id ? topRivalry.fighterBId : topRivalry.fighterAId;
+          const rival = await this.fighterCtrl.getFighter(rivalId);
+          if (rival) {
+            const interaction = this.rivalryService.rollInteraction(fighter, rival);
+            if (interaction) {
+              interaction.rivalryId = topRivalry.id;
+              interaction.rivalFighterId = rivalId;
+              interaction.createdAbsWeek = now;
+              interaction.expiresAbsWeek = now + RIVALRY_CONFIG.INTERACTION_PROMPT_EXPIRY_WEEKS;
+              await this.db.put('gameState', { id: 'rivalry-prompt', ...interaction });
+              await this.notifService.add('warning', '⚔️ Rivalidade', `${rival.name} está provocando você. Como reagir?`);
+            }
           }
         }
       }
@@ -521,12 +537,15 @@ export class GameController {
         // estritamente "melhor" sem ler o contexto de rivalidade).
         await this.resolveSocialPrompt('stay_quiet');
         await this.resolveRivalryInteraction('ignore').catch(() => {});
+        await this.resolveWeighIn(WEIGH_IN_CONFIG.AUTO_STRATEGY, summary.now, { auto: true }).catch(() => {});
 
         const simFighter = await this.getPlayerFighter();
         try {
           const doc = await this.db.get('gameState', `contract-offer-${simFighter.id}`);
           if (doc && doc.offers && doc.offers.length > 0) {
-            doc.offers.sort((a, b) => b.tier - a.tier || b.basePurse - a.basePurse);
+            // Tier 1 é melhor que tier 2/3; a ordenação inversa fazia o
+            // fast-forward renovar na liga inferior mesmo com promoção na mesa.
+            doc.offers.sort((a, b) => a.tier - b.tier || b.basePurse - a.basePurse);
             await this.contractService.accept(simFighter.id, doc.offers[0].promotionId, summary.now);
           }
         } catch { /* sem propostas */ }
@@ -713,7 +732,9 @@ export class GameController {
 
     const plausibleTitleContender = SocialMedia.isPlausibleTitleContender(fighter);
     const streakActive = (fighter.winStreak || 0) >= 2;
-    const lostRecent = fighter.lastFightAbsWeek && (now - fighter.lastFightAbsWeek) <= 4 && (fighter.record?.losses || 0) > 0;
+    const lostRecent = fighter.latestFightResult?.won === false
+      && fighter.lastFightAbsWeek
+      && (now - fighter.lastFightAbsWeek) <= 4;
     const result = SocialMedia.applyChoice(fighter, choice, { plausibleTitleContender, streakActive, lostRecent });
 
     if (result.provoked) {
@@ -746,6 +767,86 @@ export class GameController {
     return { ok: true, choice, effects: result.effects };
   }
 
+  // ===== Pesagem pré-luta =====
+  // A pesagem pertence à reserva (FightOffer), não ao fighter: cada luta
+  // pode ter uma estratégia diferente e o histórico da oferta permanece
+  // explicável depois do evento.
+  async _autoResolveDueWeighIn(absWeekNow, fighter) {
+    if (!fighter) return null;
+    const bookings = await this.offerService.getAccepted();
+    const booking = bookings.find(b => b.fighterId === fighter.id);
+    if (!booking || booking.weighIn?.completed || absWeekNow < booking.eventAbsWeek) return null;
+    return this.resolveWeighIn(WEIGH_IN_CONFIG.AUTO_STRATEGY, absWeekNow, { auto: true });
+  }
+
+  async resolveWeighIn(strategyId, absWeekNow = null, { auto = false } = {}) {
+    const fighter = await this.getPlayerFighter();
+    if (!fighter) return { ok: false, reason: 'Nenhum lutador ativo.' };
+
+    const strategy = WEIGH_IN_CONFIG.STRATEGIES[strategyId];
+    if (!strategy) return { ok: false, reason: 'Estratégia de pesagem inválida.' };
+
+    const bookings = await this.offerService.getAccepted();
+    const booking = bookings.find(b => b.fighterId === fighter.id);
+    if (!booking) return { ok: false, reason: 'Nenhuma luta marcada.' };
+    if (booking.weighIn?.completed) return { ok: false, reason: 'A pesagem desta luta já foi definida.' };
+
+    const state = absWeekNow == null ? await this.seasonService.getState() : null;
+    const now = absWeekNow ?? absWeek(state);
+    const dueWeek = booking.eventAbsWeek - WEIGH_IN_CONFIG.WEEKS_BEFORE_FIGHT;
+    if (now < dueWeek) return { ok: false, reason: 'A pesagem só abre na semana anterior à luta.' };
+    if (now > booking.eventAbsWeek) return { ok: false, reason: 'Esta luta já passou.' };
+
+    let impactMultiplier = strategy.impactMultiplier;
+    let fatigueDelta = strategy.fatigueDelta;
+    let moraleDelta = strategy.moraleDelta;
+    let outcome = 'steady';
+
+    if (strategyId === 'aggressive') {
+      const successChance = clamp(
+        WEIGH_IN_CONFIG.AGGRESSIVE_SUCCESS_BASE
+          + ((fighter.weightCut?.ease || 0) / 100) * WEIGH_IN_CONFIG.AGGRESSIVE_SUCCESS_EASE_FACTOR,
+        0,
+        1
+      );
+      const succeeded = Math.random() < successChance;
+      impactMultiplier = succeeded ? strategy.successImpactMultiplier : strategy.failureImpactMultiplier;
+      fatigueDelta = succeeded ? strategy.successFatigueDelta : strategy.failureFatigueDelta;
+      moraleDelta = succeeded ? strategy.successMoraleDelta : strategy.failureMoraleDelta;
+      outcome = succeeded ? 'success' : 'rough';
+    }
+
+    fighter.applyFatigue(fatigueDelta || 0);
+    fighter.applyMoraleChange(moraleDelta || 0);
+    booking.weighIn = {
+      completed: true,
+      strategyId,
+      strategyLabel: strategy.label,
+      impactMultiplier,
+      fatigueDelta: fatigueDelta || 0,
+      moraleDelta: moraleDelta || 0,
+      outcome,
+      resolvedAbsWeek: now,
+      auto,
+    };
+
+    await this.fighterCtrl.updateFighter(fighter);
+    await this.db.put('offers', booking);
+
+    const outcomeText = outcome === 'success'
+      ? 'O corte agressivo encaixou e a reidratação foi excelente.'
+      : outcome === 'rough'
+        ? 'O corte agressivo cobrou seu preço; você chega mais desgastado para a luta.'
+        : `${strategy.label} concluído.`;
+    await this.notifService.add(
+      auto ? 'info' : 'success',
+      auto ? 'Pesagem resolvida pela equipe' : '⚖️ Pesagem concluída',
+      outcomeText
+    );
+
+    return { ok: true, booking, weighIn: booking.weighIn };
+  }
+
   // ===== Rivalidade: resolve a escolha do jogador no prompt semanal =====
   async resolveRivalryInteraction(choice) {
     const fighter = await this.getPlayerFighter();
@@ -754,10 +855,15 @@ export class GameController {
     let state;
     try { state = await this.db.get('gameState', 'rivalry-prompt'); } catch { /* ok */ }
     if (!state || !state.choices) return { ok: false, reason: 'Nenhum prompt pendente.' };
-    await this.db.delete('gameState', 'rivalry-prompt').catch(() => {});
 
     const seasonState = await this.seasonService.getState();
     const now = absWeek(seasonState);
+    if (state.expiresAbsWeek != null && state.expiresAbsWeek <= now) {
+      await this.db.delete('gameState', 'rivalry-prompt').catch(() => {});
+      return { ok: false, reason: 'Esse momento de rivalidade já passou.' };
+    }
+    if (!state.choices.some(c => c.key === choice)) return { ok: false, reason: 'Escolha de rivalidade inválida.' };
+    await this.db.delete('gameState', 'rivalry-prompt').catch(() => {});
 
     const rival = await this.fighterCtrl.getFighter(state.rivalFighterId);
     const rivalryData = await this.db.get('rivalries', state.rivalryId);
@@ -766,8 +872,10 @@ export class GameController {
 
     const fighterPop = fighter.popularity || 0;
     const rivalPop = rival?.popularity || 0;
-    const lostLastFight = fighter.lastFightAbsWeek && (now - fighter.lastFightAbsWeek) <= 8 && (fighter.record?.losses || 0) > 0;
-    const wonLastFight = fighter.lastFightAbsWeek && (now - fighter.lastFightAbsWeek) <= 8 && (fighter.record?.wins || 0) > 0;
+    const recentResult = fighter.latestFightResult;
+    const resultIsRecent = fighter.lastFightAbsWeek && (now - fighter.lastFightAbsWeek) <= 8;
+    const lostLastFight = resultIsRecent && recentResult?.won === false;
+    const wonLastFight = resultIsRecent && recentResult?.won === true;
 
     const personality = state.rivalPersonality || 'cautious';
     const isUnderdog = fighterPop < rivalPop - 10;
@@ -1149,9 +1257,13 @@ export class GameController {
         icon = '🥊';
         details = `Luta vs ${booking.opponentName}`;
         if (booking.isTitleFight) { weekType = 'title_fight'; icon = '🏆'; }
-      }
-
-      if (booking && w >= booking.eventAbsWeek - 4 && w < booking.eventAbsWeek && w > now) {
+      } else if (booking && w === booking.eventAbsWeek - WEIGH_IN_CONFIG.WEEKS_BEFORE_FIGHT) {
+        weekType = 'weigh_in';
+        icon = '⚖️';
+        details = booking.weighIn?.completed
+          ? `Pesagem: ${booking.weighIn.strategyLabel}`
+          : `Pesagem vs ${booking.opponentName}`;
+      } else if (booking && w >= booking.eventAbsWeek - 4 && w < booking.eventAbsWeek && w > now) {
         weekType = 'camp';
         icon = '🔥';
         details = `Camp — luta em ${booking.eventAbsWeek - w} sem`;
@@ -1201,6 +1313,7 @@ export class GameController {
     const pastEvents = (await this.eventCtrl.getAllEvents()).slice(0, 6);
     const milestones = await this.getMilestones();
     const state = await this.seasonService.getState();
+    const now = absWeek(state);
     const sponsors = await this.sponsorService.getState();
 
     const socialState = await this.socialMediaService.getState();
@@ -1222,6 +1335,21 @@ export class GameController {
     const belts = fighter ? await this.titleService.beltsOf(fighter.id) : [];
     const contenderStatus = fighter ? await this.titleService.contenderStatusOf(fighter) : null;
     const pendingApproach = await this.retentionService.getPending();
+    const playerBooking = fighter ? bookings.find(b => b.fighterId === fighter.id) : null;
+    const weighInPrompt = playerBooking
+      && !playerBooking.weighIn?.completed
+      && now >= playerBooking.eventAbsWeek - WEIGH_IN_CONFIG.WEEKS_BEFORE_FIGHT
+      && now <= playerBooking.eventAbsWeek
+      ? {
+          offerId: playerBooking.id,
+          opponentName: playerBooking.opponentName,
+          strategies: Object.entries(WEIGH_IN_CONFIG.STRATEGIES).map(([key, strategy]) => ({
+            key,
+            label: strategy.label,
+            description: strategy.description,
+          })),
+        }
+      : null;
 
     let rivalryPrompt = null;
     try { const rp = await this.db.get('gameState', 'rivalry-prompt'); if (rp?.choices) rivalryPrompt = rp; } catch { /* ok */ }
@@ -1243,8 +1371,9 @@ export class GameController {
       socialPrompt,
       rivalryPrompt,
       pendingApproach,
+      weighInPrompt,
       state,
-      now: absWeek(state),
+      now,
     };
   }
 

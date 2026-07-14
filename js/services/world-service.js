@@ -190,7 +190,9 @@ export class WorldService {
     for (const fight of fights) {
       const { fighterA, fighterB } = fight;
 
-      fighterA.applyWeightCutImpact();
+      // A reserva do jogador pode carregar uma estratégia de pesagem. A IA
+      // continua usando o impacto normal do próprio corte de peso.
+      fighterA.applyWeightCutImpact(fight.booking?.weighIn?.impactMultiplier ?? 1);
       fighterB.applyWeightCutImpact();
 
       // Instruções de córner ao vivo só existem para a luta do jogador,

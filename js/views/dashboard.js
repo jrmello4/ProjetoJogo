@@ -130,7 +130,7 @@ export class DashboardView {
   }
 
   static render(data, weekLabel) {
-    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, rivalryPrompt, pendingApproach, now } = data;
+    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, rivalryPrompt, pendingApproach, weighInPrompt, now } = data;
 
     const tierBadge = (tier) => `<span class="badge ${tierBadgeCls(tier)}">${TIER_LABELS[tier]}</span>`;
 
@@ -158,6 +158,28 @@ export class DashboardView {
                   <span class="text-sm font-bold" style="color:var(--success)">${formatCurrency(o.purse)}</span>
                 </div>
               </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // ===== Pesagem — a decisão que fecha a preparação =====
+    let weighInHtml = '';
+    if (weighInPrompt) {
+      weighInHtml = `
+        ${pendingOffers.length === 0 ? '<div class="section-label" data-reveal>Decisões Pendentes</div>' : ''}
+        <div class="card mb-4" data-reveal style="border-top-color:var(--gold)">
+          <div class="card-header">
+            <span class="card-title">⚖️ Semana da Pesagem</span>
+          </div>
+          <p class="text-sm text-muted mb-2">Você enfrenta ${weighInPrompt.opponentName} em breve. Defina como vai administrar o corte de peso.</p>
+          <div class="flex flex-col gap-2">
+            ${weighInPrompt.strategies.map(s => `
+              <button class="btn btn-secondary" data-weigh-in-choice="${s.key}" style="text-align:left">
+                <strong>${s.label}</strong>
+                <span class="text-xs text-muted ml-2">${s.description}</span>
+              </button>
             `).join('')}
           </div>
         </div>
@@ -458,7 +480,9 @@ export class DashboardView {
       </div>
 
       ${offersHtml}
+      ${weighInHtml}
       ${socialHtml}
+      ${rivalryHtml}
       ${approachHtml}
       ${sponsorsHtml}
       ${bookingsHtml}

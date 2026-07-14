@@ -149,6 +149,13 @@ export class Fighter {
     return streak;
   }
 
+  // `fights` é persistido em ordem decrescente (a mais nova entra no índice
+  // 0). Centralizar essa leitura impede que sistemas de narrativa confundam
+  // "tem alguma derrota no cartel" com "perdeu a última luta".
+  get latestFightResult() {
+    return this.fights[0] || null;
+  }
+
   recordIn(promotionId) {
     return this.promoRecord[promotionId] || { wins: 0, losses: 0 };
   }
@@ -404,10 +411,10 @@ export class Fighter {
     }
   }
 
-  applyWeightCutImpact() {
+  applyWeightCutImpact(impactMultiplier = 1) {
     const diff = this.weightCut.naturalWeight;
     const ease = this.weightCut.ease / 100;
-    const impact = diff * (1 - ease);
+    const impact = diff * (1 - ease) * impactMultiplier;
     this.attributes.cardio = clamp(this.attributes.cardio - Math.round(impact * 0.5), 0, 99);
     this.weightCut.lastCutImpact = impact;
   }

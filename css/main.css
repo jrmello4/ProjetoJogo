@@ -1034,6 +1034,10 @@ tbody tr:hover td { background: var(--bg-hover); }
 .calendar-entry--camp {
   border-color: var(--warning, #f39c12);
 }
+.calendar-entry--weigh_in {
+  border-color: var(--gold, #d4a843);
+  background: color-mix(in srgb, var(--gold, #d4a843) 10%, var(--bg-card, #1a1a2e));
+}
 .calendar-entry--event {
   border-color: var(--info, #3498db);
 }

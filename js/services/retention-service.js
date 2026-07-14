@@ -1,5 +1,5 @@
 import { clamp, generateId, formatCurrency } from '../utils/helpers.js';
-import { ACADEMIES, MANAGERS, EXPECTATION_CONFIG } from '../config/game-config.js';
+import { ACADEMIES, MANAGERS, EXPECTATION_CONFIG, RETENTION_CONFIG } from '../config/game-config.js';
 
 // §A.4/§C.1 — sondagem/lealdade contra troca de academia OU de empresário.
 // Mesmo motor do antigo "assédio de academias rivais" (Épico A), com o
@@ -9,8 +9,6 @@ import { ACADEMIES, MANAGERS, EXPECTATION_CONFIG } from '../config/game-config.j
 // Dados persistidos em gameState doc { id: 'retention', approaches: [...] }
 // approach: { id, targetType: 'academy'|'manager', rivalId, rivalName,
 //   rivalScore, deadlineAbsWeek, createdAt, resolved, response }
-const APPROACH_DEADLINE_WEEKS = 2;
-
 export class RetentionService {
   constructor(db, fighterCtrl, notifService, titleService, managerService = null, careerLogService = null, rivalryService = null) {
     this.db = db;
@@ -44,7 +42,8 @@ export class RetentionService {
     if (candidates.length === 0) return [];
 
     const chosen = candidates[Math.floor(Math.random() * candidates.length)];
-    let chance = 0.03 + ((100 - chosen.trust) / 100) * 0.12;
+    let chance = RETENTION_CONFIG.BASE_APPROACH_CHANCE
+      + ((100 - chosen.trust) / 100) * RETENTION_CONFIG.LOW_TRUST_CHANCE_SCALE;
     if (fighter.expectation?.urgency >= 3) chance += EXPECTATION_CONFIG.RIVAL_APPROACH_BONUS;
     if (Math.random() >= chance) return [];
 
@@ -55,7 +54,7 @@ export class RetentionService {
       rivalId: rival.id,
       rivalName: rival.name,
       rivalScore: chosen.targetType === 'academy' ? rival.reputation : rival.connections,
-      deadlineAbsWeek: absWeekNow + APPROACH_DEADLINE_WEEKS,
+      deadlineAbsWeek: absWeekNow + RETENTION_CONFIG.APPROACH_DEADLINE_WEEKS,
       createdAt: absWeekNow,
       resolved: false,
       response: null,
@@ -67,8 +66,8 @@ export class RetentionService {
       'warning',
       '🔍 Sondagem Recebida',
       chosen.targetType === 'academy'
-        ? `${rival.name} demonstrou interesse em te treinar! Você tem ${APPROACH_DEADLINE_WEEKS} semanas para reagir.`
-        : `${rival.name} quer ser seu empresário! Você tem ${APPROACH_DEADLINE_WEEKS} semanas para reagir.`
+        ? `${rival.name} demonstrou interesse em te treinar! Você tem ${RETENTION_CONFIG.APPROACH_DEADLINE_WEEKS} semanas para reagir.`
+        : `${rival.name} quer ser seu empresário! Você tem ${RETENTION_CONFIG.APPROACH_DEADLINE_WEEKS} semanas para reagir.`
     );
 
     return approaches.filter(a => !a.resolved);
@@ -340,39 +339,54 @@ export class RetentionService {
     if (approaches.some(a => !a.resolved)) return [];
 
     const triggers = [];
+    const recentFight = fighter.latestFightResult;
+    const weeksSinceFight = now - (fighter.lastFightAbsWeek || 0);
+    const recentWin = recentFight?.won === true && weeksSinceFight <= RETENTION_CONFIG.RECENT_RESULT_WINDOW_WEEKS;
+    const recentLoss = recentFight?.won === false && weeksSinceFight <= RETENTION_CONFIG.RECENT_RESULT_WINDOW_WEEKS;
+    const recentKnockout = recentWin
+      && weeksSinceFight <= RETENTION_CONFIG.RECENT_FINISH_WINDOW_WEEKS
+      && /^(KO|TKO)/.test(recentFight.method || '');
+    const canApproachManager = (managerId) => fighter.managerId !== managerId;
 
     // Empresário — streak de 3+ (vitórias consecutivas sem derrota)
     const streak = fighter.winStreak || 0;
-    if (streak >= 3 && !fighter.managerId) {
+    if (streak >= RETENTION_CONFIG.MANAGER_STREAK_MIN && canApproachManager('manager-aggressive')) {
       triggers.push({ type: 'manager', reason: 'win_streak', targetId: 'manager-aggressive', targetName: 'Marcelo Duarte' });
     }
 
     // Empresário — cinturão conquistado
     const belts = this.titleService ? await this.titleService.beltsOf(fighter.id) : [];
-    if (belts.length > 0 && !fighter.managerId) {
+    if (belts.length > 0 && canApproachManager('manager-loyal')) {
       triggers.push({ type: 'manager', reason: 'belt_won', targetId: 'manager-loyal', targetName: 'Renata Alves' });
     }
 
-    // Empresário — nocaute recente (sempre pode tentar)
-    if (!fighter.managerId) {
-      triggers.push({ type: 'manager', reason: 'rising', targetId: 'manager-conservative', targetName: 'João Bittencourt' });
+    // Empresário — um nocaute recente e uma ascensão de fama são fatos de
+    // carreira. A antiga condição "sem empresário" disparava uma abordagem
+    // artificial toda semana e deixava o sistema invisível no onboarding.
+    if (recentKnockout && canApproachManager('manager-conservative')) {
+      triggers.push({ type: 'manager', reason: 'recent_knockout', targetId: 'manager-conservative', targetName: 'João Bittencourt' });
+    }
+    if ((fighter.popularity || 0) >= RETENTION_CONFIG.MANAGER_POPULARITY_THRESHOLD && canApproachManager('manager-aggressive')) {
+      triggers.push({ type: 'manager', reason: 'popularity_rise', targetId: 'manager-aggressive', targetName: 'Marcelo Duarte' });
+    }
+    if (fighter.promotionContract?.status === 'active' && fighter.promotionContract.tier <= 2 && canApproachManager('manager-aggressive')) {
+      triggers.push({ type: 'manager', reason: 'new_league', targetId: 'manager-aggressive', targetName: 'Marcelo Duarte' });
     }
 
     // Academia — derrota recente (últimas 8 semanas)
-    const lostRecently = fighter.lastFightAbsWeek && (now - fighter.lastFightAbsWeek) <= 8
-      && (fighter.record?.losses || 0) > 0;
-    if (lostRecently && fighter.academyId !== 'academy-blacktiger') {
+    if (recentLoss && fighter.academyId !== 'academy-blacktiger') {
       triggers.push({ type: 'academy', reason: 'recent_loss', targetId: 'academy-blacktiger', targetName: 'Black Tiger Team' });
     }
 
     // Academia — 2+ vitórias consecutivas (tenta subir de nível)
-    if (streak >= 2) {
-      const currentLevel = ACADEMIES.find(a => a.id === fighter.academyId)?.facilityLevel || 1;
-      const betterAcademy = ACADEMIES.filter(a => a.id !== fighter.academyId && a.facilityLevel > currentLevel)
-        .sort((a, b) => a.facilityLevel - b.facilityLevel)[0];
-      if (betterAcademy) {
-        triggers.push({ type: 'academy', reason: 'rising', targetId: betterAcademy.id, targetName: betterAcademy.name });
-      }
+    const currentLevel = ACADEMIES.find(a => a.id === fighter.academyId)?.facilityLevel || 1;
+    const betterAcademy = ACADEMIES.filter(a => a.id !== fighter.academyId && a.facilityLevel > currentLevel)
+      .sort((a, b) => a.facilityLevel - b.facilityLevel)[0];
+    if (streak >= RETENTION_CONFIG.ACADEMY_STREAK_MIN && betterAcademy) {
+      triggers.push({ type: 'academy', reason: 'rising', targetId: betterAcademy.id, targetName: betterAcademy.name });
+    }
+    if (fighter.coachSynergy < RETENTION_CONFIG.LOW_SYNERGY_THRESHOLD && betterAcademy) {
+      triggers.push({ type: 'academy', reason: 'coach_strain', targetId: betterAcademy.id, targetName: betterAcademy.name });
     }
 
     // Academia — rival mudou para uma academia diferente
@@ -386,6 +400,19 @@ export class RetentionService {
       }
     }
 
+    // Empresário — uma rivalidade que chamou atenção e um post viral tornam
+    // a abordagem uma consequência do mundo, não uma rolagem isolada.
+    const famousRivalry = rivalries.some(r => r.intensity >= RETENTION_CONFIG.FAMOUS_RIVALRY_INTENSITY);
+    if (famousRivalry && canApproachManager('manager-aggressive')) {
+      triggers.push({ type: 'manager', reason: 'famous_rivalry', targetId: 'manager-aggressive', targetName: 'Marcelo Duarte' });
+    }
+    const recentLog = this.careerLogService
+      ? await this.careerLogService.recentSince(now, RETENTION_CONFIG.RECENT_FINISH_WINDOW_WEEKS)
+      : [];
+    if (recentLog.some(e => e.fighterId === fighter.id && e.type === 'viral') && canApproachManager('manager-conservative')) {
+      triggers.push({ type: 'manager', reason: 'viral', targetId: 'manager-conservative', targetName: 'João Bittencourt' });
+    }
+
     const reasonLabels = {
       win_streak: (t) => `${t.targetName} notou sua sequência de vitórias e quer conversar.`,
       belt_won: (t) => `${t.targetName} viu sua conquista do cinturão. Quer representar você.`,
@@ -394,41 +421,44 @@ export class RetentionService {
         : `${t.targetName} acompanhou sua evolução. Quer te levar para o próximo nível.`,
       recent_loss: (t) => `${t.targetName} acredita que pode reconstruir sua carreira. Quer te treinar.`,
       rival_there: (t) => `${t.targetName} quer te contratar. Seu rival já treina lá.`,
+      recent_knockout: (t) => `${t.targetName} viu seu nocaute recente e quer transformar esse momento em carreira.`,
+      popularity_rise: (t) => `${t.targetName} percebeu que seu nome cresceu. Quer negociar sua próxima fase.`,
+      new_league: (t) => `${t.targetName} quer representar você neste novo nível de competição.`,
+      coach_strain: (t) => `${t.targetName} soube que sua relação com o técnico esfriou e oferece um novo ambiente.`,
+      famous_rivalry: (t) => `${t.targetName} quer capitalizar a rivalidade que colocou você em evidência.`,
+      viral: (t) => `${t.targetName} viu seu alcance explodir nas redes e quer levar sua carreira ao próximo nível.`,
     };
 
-    const created = [];
-    for (const t of triggers) {
-      if (Math.random() > 0.4) continue;
-      if (created.some(c => c.targetId === t.targetId)) continue;
+    // No máximo uma sondagem contextual. A mesma causa/entidade entra em
+    // cooldown, evitando duplicatas e respeitando a decisão anterior.
+    const eligible = triggers.filter(t => !approaches.some(a =>
+      a.targetType === t.type
+      && a.rivalId === t.targetId
+      && a.reason === t.reason
+      && now < (a.createdAt || 0) + RETENTION_CONFIG.CONTEXTUAL_COOLDOWN_WEEKS
+    ));
+    if (eligible.length === 0 || Math.random() > RETENTION_CONFIG.CONTEXTUAL_OFFER_CHANCE) return [];
 
-      const label = reasonLabels[t.reason];
-      const contextMessage = typeof label === 'function' ? label(t) : label;
+    const t = eligible[Math.floor(Math.random() * eligible.length)];
+    const label = reasonLabels[t.reason];
+    const contextMessage = typeof label === 'function' ? label(t) : label;
+    const approach = {
+      id: generateId(),
+      targetType: t.type,
+      rivalId: t.targetId,
+      rivalName: t.targetName,
+      rivalScore: 0,
+      reason: t.reason,
+      contextMessage,
+      deadlineAbsWeek: now + RETENTION_CONFIG.APPROACH_DEADLINE_WEEKS,
+      createdAt: now,
+      resolved: false,
+      response: null,
+    };
 
-      const approach = {
-        id: generateId(),
-        targetType: t.type,
-        rivalId: t.targetId,
-        rivalName: t.targetName,
-        rivalScore: 0,
-        reason: t.reason,
-        contextMessage,
-        deadlineAbsWeek: now + 2,
-        createdAt: now,
-        resolved: false,
-        response: null,
-      };
-      created.push(approach);
-    }
-
-    if (created.length > 0) {
-      const all = await this._loadApproaches();
-      all.push(...created);
-      await this._saveApproaches(all);
-      for (const a of created) {
-        await this.notifService.add('warning', '📩 Proposta', a.contextMessage);
-      }
-    }
-
-    return created;
+    approaches.push(approach);
+    await this._saveApproaches(approaches);
+    await this.notifService.add('warning', '📩 Proposta', approach.contextMessage);
+    return [approach];
   }
 }

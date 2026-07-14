@@ -876,6 +876,7 @@ export class WorldService {
   async _evolveAIFighters(absWeekNow, playerFighterId) {
     if (absWeekNow % 4 !== 0) return;
     const all = await this.fighterCtrl.getAllFighters();
+    const toUpdate = [];
     for (const data of all) {
       if (data.id === playerFighterId) continue;
       if (data.status === 'retired' || data.status === 'injured') continue;
@@ -885,12 +886,15 @@ export class WorldService {
       for (const key of Object.keys(fighter.attributes)) {
         if (Math.random() > (isYoung ? 0.15 : 0.08)) continue;
         const gain = Math.random() * 1.5 + 0.3;
-        fighter.attributes[key] = Math.min(gain + (fighter.attributes[key] || 50), fighter.effectiveCeiling(key));
+        fighter.attributes[key] = Math.min(
+          Math.round(gain + (fighter.attributes[key] || 50)),
+          fighter.effectiveCeiling(key)
+        );
         evolved = true;
       }
-      if (evolved) {
-        await this.fighterCtrl.updateFighter(fighter);
-      }
+      if (evolved) toUpdate.push(fighter);
     }
+    // Batch write em vez de um DB.put por lutador — 130+ writes/4 sem vs 1
+    for (const f of toUpdate) await this.fighterCtrl.updateFighter(f);
   }
 }

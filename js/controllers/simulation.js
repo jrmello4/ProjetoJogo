@@ -603,15 +603,11 @@ export class SimulationEngine {
     } else {
       fighter.record.losses++;
       fighter.applyMoraleChange(-12);
-      // Épico D — derrota por decisão: moral cai o dobro
-      if (method && method.startsWith('Decision')) {
-        fighter.applyMoraleChange(-12);
+      // Épico D — KO/TKO é mais devastador que decisão para a moral
+      if (method && (method.method?.startsWith('KO') || method.method?.startsWith('TKO'))) {
+        fighter.applyMoraleChange(-6); // -18 total (KO abala mais)
       }
-      // KO/TKO: penalidade física temporária
-      if (method && (method.startsWith('KO') || method.startsWith('TKO'))) {
-        fighter.attributes.chin = clamp(fighter.attributes.chin - 2, 1, 99);
-        fighter.attributes.durability = clamp(fighter.attributes.durability - 1, 1, 99);
-      }
+      // Decisão: moral leve (perdeu mas lutou, não foi humilhado)
     }
 
     fighter.applyFatigue(15 + round * 5);

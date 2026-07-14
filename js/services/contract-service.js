@@ -127,6 +127,23 @@ export class ContractService {
     } catch { /* ok se não existir */ }
   }
 
+  // Adia a decisão sobre uma proposta de contrato.
+  // A proposta fica em espera (postponed = true) e o jogador pode aceitá-la
+  // depois quando o conflito (ex: cinturão de outra promoção) for resolvido.
+  // O generateOffers não gera novas propostas enquanto o doc existir,
+  // portanto o lutador não recebe propostas concorrentes enquanto adia.
+  async postpone(fighterId) {
+    const key = `contract-offer-${fighterId}`;
+    try {
+      const doc = await this.db.get('gameState', key);
+      if (doc && !doc.postponed) {
+        doc.postponed = true;
+        doc.expiresAt = (doc.expiresAt || 0) + 52; // +1 ano para não expirar enquanto adia
+        await this.db.put('gameState', doc);
+      }
+    } catch { /* ok */ }
+  }
+
   // Consome uma luta do contrato - chamado após settlePlayerFight
   async consumeFight(fighterId, won, absWeekNow = null, academyReputation = 50) {
     const fighter = await this.fighterCtrl.getFighter(fighterId);

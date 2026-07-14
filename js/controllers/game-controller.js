@@ -130,7 +130,7 @@ export class GameController {
     // carreira anterior. 'careerLog' também filtra por fighterId em
     // topByMagnitude(), mas ainda limpamos aqui para não acumular lixo de
     // mundos antigos.
-    for (const docId of ['careerLog', 'sponsors', 'retention', 'socialMedia']) {
+    for (const docId of ['careerLog', 'sponsors', 'retention', 'socialMedia', 'rivalry-prompt']) {
       await this.db.delete('gameState', docId);
     }
     try { localStorage.removeItem('characterCreationDone'); } catch (e) { /* ambientes sem localStorage */ }
@@ -751,8 +751,9 @@ export class GameController {
     if (!fighter) return { ok: false, reason: 'Nenhum lutador ativo.' };
 
     let state;
-    try { state = await this.db.get('gameState', 'rivalry-prompt'); } catch { return { ok: false, reason: 'Nenhum prompt pendente.' }; }
-    await this.db.delete('gameState', 'rivalry-prompt');
+    try { state = await this.db.get('gameState', 'rivalry-prompt'); } catch { /* ok */ }
+    if (!state || !state.choices) return { ok: false, reason: 'Nenhum prompt pendente.' };
+    await this.db.delete('gameState', 'rivalry-prompt').catch(() => {});
 
     const seasonState = await this.seasonService.getState();
     const now = absWeek(seasonState);

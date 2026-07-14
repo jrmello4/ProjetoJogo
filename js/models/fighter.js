@@ -106,6 +106,11 @@ export class Fighter {
     this.createdAt = data.createdAt;
     // Épico F1: hype acumulado na coletiva de imprensa — vira bônus na bolsa
     this.pcHype = data.pcHype || 0;
+    // Id da luta marcada cuja coletiva já foi feita. A coletiva é única por
+    // luta: sem isto dava pra reentrar na aba e responder as mesmas perguntas
+    // de novo, acumulando pcHype (→ bônus de bolsa) sem limite — dinheiro
+    // infinito. Zera junto com pcHype quando a luta é liquidada.
+    this.pcDoneForOfferId = data.pcDoneForOfferId || null;
   }
 
   _defaultDNA() {

@@ -1439,11 +1439,11 @@ class App {
     const data = await this.game.getCalendarData();
 
     if (!data) {
-      LayoutView.setContent('<div class="card"><div class="card-body"><p class="text-muted">Crie um personagem primeiro.</p></div></div>');
+      await LayoutView.render('<div class="card"><div class="card-body"><p class="text-muted">Crie um personagem primeiro.</p></div></div>');
       return;
     }
 
-    LayoutView.setContent(renderCalendar(data));
+    await LayoutView.render(renderCalendar(data));
   }
 
   async renderPressConference() {
@@ -1474,10 +1474,12 @@ class App {
     }
 
     const scenarios = PressConference.getScenarios();
-    const html = PressConferenceView.render(scenarios, fighterA, fighterB, event, !!booking);
+    // A coletiva é única por luta marcada (ver Fighter.pcDoneForOfferId).
+    const alreadyDone = !!booking && fighterA.pcDoneForOfferId === booking.id;
+    const html = PressConferenceView.render(scenarios, fighterA, fighterB, event, !!booking, alreadyDone);
     await LayoutView.render(html);
 
-    if (!booking) return;
+    if (!booking || alreadyDone) return;
 
     document.querySelectorAll('.pc-answer').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -1494,6 +1496,8 @@ class App {
         } else {
           const totalHype = fighterA.pcHype || 0;
           const hypeBonus = totalHype * HYPE_PURSE_RATIO;
+          // Fecha a coletiva DESTA luta — reentrar na aba não gera mais hype.
+          fighterA.pcDoneForOfferId = booking.id;
           await this.game.fighterCtrl.updateFighter(fighterA);
 
           if (totalHype >= PressConference.RIVALRY_HYPE_THRESHOLD && booking && fighterB?.id) {

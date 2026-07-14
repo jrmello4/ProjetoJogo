@@ -316,6 +316,8 @@ export class WorldService {
     const grossPurse = booking.purse + (won ? booking.winBonus : 0) + hypeBonus;
     // Limpa o hype após usar — não acumular para a próxima luta
     fighter.pcHype = 0;
+    // Libera a coletiva para a PRÓXIMA luta marcada.
+    fighter.pcDoneForOfferId = null;
 
     // §A.2/§C.1: o corte já não é da academia — primeiro o contrato de
     // promoção (purseShare do atleta), depois o empresário (se tiver um).

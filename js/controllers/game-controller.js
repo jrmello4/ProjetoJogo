@@ -1127,8 +1127,12 @@ export class GameController {
 
     const entries = [];
     const lookahead = 26;
+    // Algumas semanas passadas entram no início da timeline — sem elas, o
+    // loop começava em `now` e `isPastWeek` nunca era verdade, deixando o
+    // estilo "passado com opacidade" como código morto.
+    const lookback = 4;
 
-    for (let w = now; w <= now + lookahead; w++) {
+    for (let w = Math.max(1, now - lookback); w <= now + lookahead; w++) {
       const weekNum = ((w - 1) % 52) + 1;
       const yearNum = Math.ceil(w / 52);
       const label = `Sem ${weekNum}, Ano ${yearNum}`;
@@ -1160,7 +1164,7 @@ export class GameController {
         if (promo.nextEventAbsWeek && w === promo.nextEventAbsWeek && !booking) {
           weekType = 'event';
           icon = '📰';
-          details = `Evento ${promo.shortName}`;
+          details = `Evento ${promo.short}`; // Promotion expõe `short`, não `shortName`
         }
       }
 

@@ -1,5 +1,5 @@
 export class PressConferenceView {
-  static render(scenarios, fighterA, fighterB, event, hasFight = true) {
+  static render(scenarios, fighterA, fighterB, event, hasFight = true, alreadyDone = false) {
     if (!hasFight) {
       return `
         <div class="page-header">
@@ -9,6 +9,25 @@ export class PressConferenceView {
         <div class="card">
           <div class="empty-state">
             <p>Nenhuma luta marcada — sem coletiva de imprensa por enquanto. Aceite uma oferta na aba Ofertas para gerar hype antes do evento.</p>
+          </div>
+        </div>
+      `;
+    }
+
+    // A coletiva é única por luta. Sem esta tela, dava pra reentrar na aba e
+    // responder as mesmas perguntas de novo, acumulando pcHype (e o bônus de
+    // bolsa que ele vira) sem limite nenhum — dinheiro infinito.
+    if (alreadyDone) {
+      const hype = fighterA.pcHype || 0;
+      return `
+        <div class="page-header">
+          <h2>Conferência de Imprensa</h2>
+          <p>${event.name} — Face-off</p>
+        </div>
+        <div class="card">
+          <div class="empty-state">
+            <p>Você já encarou a imprensa por esta luta. O hype está feito — agora é no octógono.</p>
+            <p class="text-sm text-muted mt-2">Hype acumulado: <strong>+${hype}</strong></p>
           </div>
         </div>
       `;

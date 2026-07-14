@@ -1,6 +1,7 @@
 import { clamp } from '../utils/helpers.js';
 import { Contract } from './contract.js';
 import { DNA_DISCOVERY_CONFIG } from '../config/game-config.js';
+import { LEVEL_CONFIG, FIGHTING_STYLES, PERKS } from '../config/game-config.js';
 
 const LEDGER_LIMIT = 120;
 
@@ -125,6 +126,14 @@ export class Fighter {
     // de novo, acumulando pcHype (→ bônus de bolsa) sem limite — dinheiro
     // infinito. Zera junto com pcHype quando a luta é liquidada.
     this.pcDoneForOfferId = data.pcDoneForOfferId || null;
+    this.style = data.style || 'freestyle';
+    this.moveset = data.moveset || [];
+    this.moveProficiency = data.moveProficiency || {};
+    this.styleLockedUntilAbsWeek = data.styleLockedUntilAbsWeek || 0;
+    this.level = data.level || 1;
+    this.xp = data.xp || 0;
+    this.perkPoints = data.perkPoints || 0;
+    this.perks = data.perks || [];
   }
 
   _defaultDNA() {
@@ -473,5 +482,89 @@ export class Fighter {
 
   updatePopularity(amount) {
     this.popularity = clamp(this.popularity + amount, 0, 100);
+  }
+
+  getStyle() {
+    return this.style;
+  }
+
+  getMoveProficiency(moveId) {
+    return this.moveProficiency[moveId] || 0;
+  }
+
+  gainProficiency(moveId, amount) {
+    const current = this.getMoveProficiency(moveId);
+    this.moveProficiency[moveId] = Math.min(100, current + amount);
+  }
+
+  addXP(amount) {
+    this.xp += amount;
+    const needed = LEVEL_CONFIG.XP_PER_LEVEL;
+    let gained = 0;
+    while (this.xp >= needed && this.level < LEVEL_CONFIG.MAX_LEVEL) {
+      this.xp -= needed;
+      this.level++;
+      gained++;
+      if (gained % LEVEL_CONFIG.PERK_POINT_EVERY_N_LEVELS === 0) {
+        this.perkPoints++;
+      }
+    }
+    if (this.level >= LEVEL_CONFIG.MAX_LEVEL) this.xp = 0;
+  }
+
+  addPerkPointMilestone(milestoneKey) {
+    const pts = LEVEL_CONFIG.PERK_POINT_MILESTONES[milestoneKey];
+    if (pts) this.perkPoints += pts;
+  }
+
+  hasPerk(perkId) {
+    return this.perks.includes(perkId);
+  }
+
+  canLearnPerk(perkId) {
+    const perk = PERKS[perkId];
+    if (!perk) return false;
+    if (this.hasPerk(perkId)) return false;
+    const req = perk.requirements;
+    if (req.style && req.style !== this.style) return false;
+    if (req.level && this.level < req.level) return false;
+    for (const [attr, min] of Object.entries(req.attrs)) {
+      if ((this.attributes[attr] || 0) < min) return false;
+    }
+    for (const pre of req.perks) {
+      if (!this.hasPerk(pre)) return false;
+    }
+    return true;
+  }
+
+  learnPerk(perkId) {
+    if (!this.canLearnPerk(perkId)) return false;
+    if (this.perkPoints <= 0) return false;
+    this.perks.push(perkId);
+    this.perkPoints--;
+    return true;
+  }
+
+  getMaxMoves() {
+    return 8;
+  }
+
+  canEquipMove(moveId) {
+    const style = FIGHTING_STYLES[this.style];
+    if (!style) return false;
+    return style.poolMoves.includes(moveId);
+  }
+
+  equipMoveset(moveIds) {
+    const valid = moveIds.filter(id => this.canEquipMove(id));
+    this.moveset = valid.slice(0, this.getMaxMoves());
+  }
+
+  get xpProgress() {
+    return this.xp / LEVEL_CONFIG.XP_PER_LEVEL;
+  }
+
+  get xpNeeded() {
+    return LEVEL_CONFIG.XP_PER_LEVEL - this.xp;
   }
 }

@@ -29,6 +29,15 @@ export class ContractService {
   async generateOffers(fighter, absWeekNow, academyReputation = 50) {
     if (fighter.promotionContract?.status === 'active') return; // já tem contrato
 
+    // Já existe um bloco de propostas ativo (não expirado)? Não gera outro.
+    // Sem esta trava, generateOffers rodava TODA semana e ACRESCENTAVA um
+    // novo par de propostas (uma por promoção do tier) ao doc — em 4 semanas
+    // o lutador via 8 propostas, 4 cópias idênticas de cada promoção. Deixa
+    // o bloco atual de pé até ser aceito, recusado ou expirar.
+    const key = `contract-offer-${fighter.id}`;
+    const existingDoc = await this.db.get('gameState', key);
+    if (existingDoc?.offers?.length && absWeekNow < (existingDoc.expiresAt ?? Infinity)) return;
+
     const targetTier = this._currentTier(fighter);
     if (targetTier >= 3) return; // ainda não bate nem o gate de tier 2
 
@@ -40,18 +49,14 @@ export class ContractService {
     const promos = PROMOTIONS.filter(p => p.tier === targetTier);
     if (promos.length === 0) return;
 
-    // Gera uma proposta por promoção
+    // Uma proposta por promoção — SUBSTITUI o bloco anterior (que aqui só
+    // pode estar expirado, pela trava acima), nunca empilha em cima dele.
     const offers = promos.map(promo => this._buildProposal(fighter, promo, absWeekNow));
-
-    // Salva como documento de gameState
-    const key = `contract-offer-${fighter.id}`;
-    const existing = await this._getProposals(fighter.id);
-    const allOffers = [...(existing || []), ...offers];
 
     await this.db.put('gameState', {
       id: key,
       fighterId: fighter.id,
-      offers: allOffers,
+      offers,
       createdAt: absWeekNow,
       expiresAt: absWeekNow + 3,
     });

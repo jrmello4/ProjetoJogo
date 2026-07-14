@@ -260,7 +260,19 @@ export class OfferService {
     if (!this.titleService) return null;
 
     const unlocked = new Set(this._unlockedTiers(fighter, academyReputation));
-    const ordered = [...promotions].sort((a, b) => a.tier - b.tier);
+
+    // Contrato exclusivo ativo trava TODAS as ofertas — inclusive as de
+    // cinturão — na promoção contratante. Sem isto, um lutador que ainda
+    // detém (ou é o desafiante mandatório de) um cinturão numa promoção
+    // ANTIGA recebe ofertas de título dela que atropelam (return early)
+    // as ofertas da promoção com quem ele acabou de assinar — e ele nunca
+    // recebe uma luta da liga nova. Espelha a mesma trava de generateWeekly.
+    let candidatePromos = promotions;
+    if (fighter.promotionContract?.status === 'active') {
+      const contractPromo = promotions.find(p => p.id === fighter.promotionContract.promotionId);
+      candidatePromos = contractPromo ? [contractPromo] : [];
+    }
+    const ordered = [...candidatePromos].sort((a, b) => a.tier - b.tier);
 
     for (const promo of ordered) {
       const isDefending = promo.isChampion(fighter.id, fighter.weightClass);

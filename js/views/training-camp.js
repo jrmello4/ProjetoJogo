@@ -1,5 +1,5 @@
 import { formatCurrency, getWeightClassShort } from '../utils/helpers.js';
-import { CAMP_CONFIG, GAME_PLANS, TAPE_CONFIG } from '../config/game-config.js';
+import { CAMP_CONFIG, GAME_PLANS, MOVES, TAPE_CONFIG } from '../config/game-config.js';
 import { TrainingPartnersService } from '../services/training-partners-service.js';
 
 // Épico D: Acampamento de verdade.
@@ -101,6 +101,20 @@ export class TrainingCampView {
     const cfg = fighter.campConfig || {};
     const weaponHtml = this._renderWeapon(fighter, cfg, weaponOptions);
     const partnersHtml = this._renderPartners(fighter, cfg, team);
+    const profOptsHtml = (fighter.moveset || []).map(moveId => {
+      const move = MOVES[moveId];
+      const prof = fighter.getMoveProficiency(moveId);
+      return `<option value="${moveId}">${move?.name || moveId} (${Math.round(prof)}%)</option>`;
+    }).join('');
+    const profFocusHtml = (fighter.moveset && fighter.moveset.length > 0)
+      ? `<div class="form-group">
+          <label class="text-xs font-bold text-secondary">Foco em golpe específico:</label>
+          <select class="form-select" id="camp-proficiency-focus">
+            <option value="">Nenhum (distribuído)</option>
+            ${profOptsHtml}
+          </select>
+        </div>`
+      : '';
     const weeksUntilFight = booking ? Math.max(0, booking.eventAbsWeek - now) : 0;
     const injured = fighter.status === 'injured';
     const suspended = fighter.availableFromAbsWeek > now;
@@ -166,6 +180,8 @@ export class TrainingCampView {
                 </select>
               </div>
             </div>
+
+            ${profFocusHtml}
 
             ${partnersHtml}
             ${weaponHtml}

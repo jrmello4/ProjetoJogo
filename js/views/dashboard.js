@@ -1,5 +1,5 @@
 import { formatCurrency, getWeightClassShort, getWeightClassName } from '../utils/helpers.js';
-import { TIER_LABELS, TRAINING_FOCUS_META, TITLE_ROLE } from '../config/game-config.js';
+import { FIGHTING_STYLES, TIER_LABELS, TRAINING_FOCUS_META, TITLE_ROLE } from '../config/game-config.js';
 
 const tierBadgeCls = (tier) => (tier === 1 ? 'badge-danger' : tier === 2 ? 'badge-warning' : 'badge-info');
 
@@ -341,6 +341,8 @@ export class DashboardView {
     // ===== Seu lutador =====
     const focusMeta = TRAINING_FOCUS_META[fighter.trainingFocus || 'striking'];
     const injured = fighter.status === 'injured';
+    const styleCfg = FIGHTING_STYLES[fighter.style] || FIGHTING_STYLES.freestyle;
+    const xpPct = Math.round(fighter.xpProgress * 100);
     const fighterHtml = `
       <div class="section-label" data-reveal>Seu Lutador</div>
       <div class="bento-grid mb-4" data-reveal-stagger>
@@ -363,6 +365,16 @@ export class DashboardView {
             : fighter.availableFromAbsWeek > now
               ? `<div class="text-xs" style="color:var(--warning)">⏳ Suspensão médica · ${fighter.availableFromAbsWeek - now} sem</div>`
               : '<div class="text-xs text-muted">Sem luta marcada</div>'}
+
+          <div class="flex items-center gap-2 mt-2">
+            <span class="badge badge-info">Nv.${fighter.level}</span>
+            <span class="badge badge-warning">${styleCfg.label}</span>
+            <div style="flex:1"><div class="progress-bar" style="height:6px">
+              <div class="progress-fill" style="width:${xpPct}%"></div>
+            </div></div>
+            <small class="text-xs text-muted">${xpPct}%</small>
+          </div>
+
           <div class="flex items-center gap-2 mt-2">
             <span class="text-xs text-muted">Fadiga</span>
             <div class="progress-bar" style="width:50px;height:5px">

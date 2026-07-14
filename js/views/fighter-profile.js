@@ -1,4 +1,5 @@
 import { formatCurrency, formatDate, getWeightClassShort, getWeightClassLabel, getNationalityFlag, getAdjacentWeightClasses, clamp } from '../utils/helpers.js';
+import { FIGHTING_STYLES, MOVES, PERKS, STYLE_SWITCH_CONFIG } from '../config/game-config.js';
 
 export class FighterProfileView {
   // G3: gráfico de carreira — OVR do atleta em cada luta (fighterRating é
@@ -354,6 +355,81 @@ export class FighterProfileView {
         </div>
       </div>
 
+      <!-- Estilo de Luta e Moveset -->
+      ${(() => {
+        const styleDef = FIGHTING_STYLES[fighter.style] || FIGHTING_STYLES.freestyle;
+        return `
+        <div class="card mt-4">
+          <div class="card-header">
+            <span class="card-title">Estilo de Luta: ${styleDef.label}</span>
+          </div>
+          <div class="text-sm text-muted mb-2">${styleDef.desc}</div>
+          ${styleDef.bonusAttrs.length > 0 ? `
+            <div class="flex gap-2 flex-wrap mb-3">
+              ${styleDef.bonusAttrs.map(a => `<span class="badge badge-info">${a}</span>`).join(' ')}
+            </div>
+          ` : ''}
+          <div class="mt-3">
+            <div class="card-title mb-2">Moveset (${fighter.moveset.length}/${fighter.getMaxMoves()})</div>
+            <div class="grid grid-col" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0.5rem">
+              ${fighter.moveset.map(moveId => {
+                const move = MOVES[moveId];
+                const prof = fighter.getMoveProficiency(moveId);
+                return `
+                  <div class="flex items-center gap-2" style="padding:0.25rem 0;border-bottom:1px solid var(--border)">
+                    <span class="text-sm" style="flex:1">${move?.name || moveId}</span>
+                    <div class="progress-bar flex-1" style="height:6px;max-width:80px">
+                      <div class="progress-fill ${prof >= 70 ? 'high' : prof >= 40 ? 'medium' : 'low'}" style="width:${prof}%"></div>
+                    </div>
+                    <span class="text-xs text-muted" style="min-width:2.5rem;text-align:right">${Math.round(prof)}%</span>
+                  </div>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>`;
+      })()}
+
+      <!-- Perks Teia -->
+      ${(() => {
+        return `
+        <div class="card mt-4">
+          <div class="card-header">
+            <span class="card-title">Perks (${fighter.perkPoints} ponto${fighter.perkPoints !== 1 ? 's' : ''} restante${fighter.perkPoints !== 1 ? 's' : ''})</span>
+          </div>
+          <div class="grid grid-col" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:0.75rem">
+            ${Object.entries(PERKS).map(([id, perk]) => {
+              const owned = fighter.hasPerk(id);
+              const canLearn = fighter.canLearnPerk(id);
+              const classes = ['perk-node'];
+              if (owned) classes.push('owned');
+              else if (canLearn && fighter.perkPoints > 0) classes.push('available');
+              else classes.push('locked');
+              return `
+                <div class="${classes.join(' ')}" data-perk-id="${id}" style="padding:0.5rem;border:1px solid var(--border);border-radius:6px;background:${owned ? 'var(--bg-highlight)' : 'var(--bg-card)'}">
+                  <div class="flex items-center justify-between">
+                    <strong class="text-sm">${perk.name}</strong>
+                    ${owned ? '<span class="badge badge-success" style="font-size:0.6rem">Ativo</span>' : ''}
+                  </div>
+                  <div class="text-xs text-muted mt-1">${perk.desc}</div>
+                  ${!owned && canLearn && fighter.perkPoints > 0
+                    ? `<button class="btn btn-sm btn-success btn-learn-perk mt-2" style="font-size:0.7rem;padding:2px 8px">Aprender</button>`
+                    : ''}
+                  ${!owned && !canLearn ? `
+                    <div class="text-xs text-muted mt-1" style="opacity:0.6">
+                      Requer: ${[
+                        ...Object.entries(perk.requirements.attrs || {}).map(([k, v]) => `${k} ${v}`),
+                        ...(perk.requirements.style ? [`estilo: ${FIGHTING_STYLES[perk.requirements.style]?.label || perk.requirements.style}`] : []),
+                        ...(perk.requirements.level ? [`nível ${perk.requirements.level}`] : []),
+                        ...(perk.requirements.perks?.length ? [`perks: ${perk.requirements.perks.map(p => PERKS[p]?.name || p).join(', ')}`] : []),
+                      ].join(', ')}
+                    </div>
+                  ` : ''}
+                </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+      })()}
+
       <!-- Épico E1: Corte de Peso e Mudança de Divisão -->
       <div class="card mt-4">
         <div class="card-header">
@@ -432,5 +508,18 @@ export class FighterProfileView {
         <button class="btn btn-secondary fighter-back">Voltar</button>
       </div>
     `;
+  }
+
+  static bindEvents(fighter, { onPerkLearned } = {}) {
+    document.querySelectorAll('.btn-learn-perk').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const node = btn.closest('.perk-node');
+        if (!node) return;
+        const perkId = node.dataset.perkId;
+        if (fighter.learnPerk(perkId)) {
+          if (onPerkLearned) onPerkLearned();
+        }
+      });
+    });
   }
 }

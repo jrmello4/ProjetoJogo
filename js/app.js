@@ -1196,6 +1196,11 @@ class App {
         this.showFighterProfile(fighterId);
       });
     });
+
+    // Task 10: perks teia — aprender perks no perfil
+    FighterProfileView.bindEvents(fighter, {
+      onPerkLearned: () => this.showFighterProfile(fighter.id),
+    });
   }
 
   // ===== Training Camp =====

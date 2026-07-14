@@ -1,5 +1,5 @@
 import { clamp } from '../utils/helpers.js';
-import { SCOUTING_LEVELS, SCOUTING_CONFIG } from '../config/game-config.js';
+import { SCOUTING_LEVELS, SCOUTING_CONFIG, SCOUTING_MISREAD_CHANCE } from '../config/game-config.js';
 
 const DOC_ID = 'scouting';
 
@@ -137,5 +137,63 @@ export class ScoutingService {
 
   static revealsPotential(level) {
     return !!SCOUTING_LEVELS[level]?.revealsPotential;
+  }
+
+  // Retorna tendências que PODEM conter erros factuais quando o nível
+  // de scouting é baixo (§PRD: scouting com erros).
+  static readWithErrors(fighter, level, seed) {
+    const raw = this.readTendencies(fighter, level);
+    if (!raw) return null;
+
+    const misreadChance = SCOUTING_MISREAD_CHANCE[level] ?? 0;
+    if (misreadChance <= 0) return raw;
+
+    // Usa seed estável pra consistência (mesma informação na mesma tela)
+    const fakeRand = ((seed * 9301 + 49297) % 233280) / 233280;
+    if (fakeRand >= misreadChance) return raw;
+
+    // Rescala pra [0, 1)
+    const r = misreadChance > 0 ? fakeRand / misreadChance : 0;
+
+    // Cópia mutável das tendências verdadeiras
+    const wrong = { ...raw };
+
+    // Troca o arquétipo por um errado
+    const archetypes = ['striker', 'grappler', 'mixed'];
+    wrong.archetype = archetypes.filter(a => a !== raw.archetype)[Math.floor(r * (archetypes.length - 1))];
+
+    // Nível 0: também troca cardio e IQ
+    if (level === 0) {
+      const cardioLabels = ['highCardio', 'midCardio', 'lowCardio'];
+      wrong.cardio = cardioLabels.filter(c => c !== raw.cardio)[Math.floor(r * 2)];
+      const iqLabels = ['highIq', 'midIq', 'lowIq'];
+      wrong.iq = iqLabels.filter(i => i !== raw.iq)[Math.floor(r * 2)];
+    }
+
+    return wrong;
+  }
+
+  // Blur que pode DESLOCAR o centro em vez de só espalhar (erro factual)
+  static blurWithOffset(value, level, seed) {
+    const base = this.blur(value, level);
+    const misreadChance = SCOUTING_MISREAD_CHANCE[level] ?? 0;
+    if (misreadChance <= 0 || level >= 2) return base;
+
+    const fakeRand = ((seed * 9301 + 49297 + Math.round(value)) % 233280) / 233280;
+    if (fakeRand >= misreadChance) return base;
+
+    // Rescala fakeRand de [0, misreadChance) para [0, 1) antes do offset
+    const normalizedRand = misreadChance > 0 ? fakeRand / misreadChance : 0;
+
+    // Desloca o centro em -15 a +15, mas mantém dentro de 1-99
+    const offset = Math.floor((normalizedRand * 2 - 1) * 15);
+    const shifted = Math.round(clamp(value + offset, 1, 99));
+
+    return {
+      exact: false,
+      value: shifted,
+      min: Math.round(clamp(value - SCOUTING_LEVELS[level]?.spread + offset, 0, 99)),
+      max: Math.round(clamp(value + SCOUTING_LEVELS[level]?.spread + offset, 0, 99)),
+    };
   }
 }

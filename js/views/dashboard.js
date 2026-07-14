@@ -1,5 +1,5 @@
 import { formatCurrency, getWeightClassShort, getWeightClassName } from '../utils/helpers.js';
-import { FIGHTING_STYLES, LEVEL_CONFIG, TIER_LABELS, TRAINING_FOCUS_META, TITLE_ROLE } from '../config/game-config.js';
+import { FIGHTING_STYLES, LEVEL_CONFIG, TIER_LABELS, TRAINING_FOCUS_META, TITLE_ROLE, WEEKLY_ACTIVITIES } from '../config/game-config.js';
 
 const tierBadgeCls = (tier) => (tier === 1 ? 'badge-danger' : tier === 2 ? 'badge-warning' : 'badge-info');
 
@@ -312,6 +312,27 @@ export class DashboardView {
       `;
     }
 
+    // ===== Atividade de lazer (§PRD: vida fora do octógono) =====
+    const currentActivity = WEEKLY_ACTIVITIES[fighter.weeklyActivity];
+    const activityHtml = `
+      <div class="section-label" data-reveal>Vida Pessoal</div>
+      <div class="card mb-4" data-reveal>
+        <div class="card-header">
+          <span class="card-title">🧘 Atividade da Semana</span>
+        </div>
+        <div class="text-xs text-muted mb-2">Escolha como passar seu tempo livre esta semana. A atividade é consumida no avanço da semana.</div>
+        <div class="text-sm mb-2">${currentActivity ? `<strong>Atual:</strong> ${currentActivity.label} — ${currentActivity.desc}` : '<span class="text-muted">Nenhuma atividade definida (padrão: Descansar)</span>'}</div>
+        <div class="flex gap-2 flex-wrap" data-reveal-stagger>
+          ${Object.entries(WEEKLY_ACTIVITIES).map(([key, act]) => `
+            <button class="btn btn-sm ${key === fighter.weeklyActivity ? 'btn-primary' : 'btn-secondary'} weekly-activity-set" data-activity="${key}">
+              ${act.label}
+            </button>
+          `).join('')}
+          ${fighter.weeklyActivity ? '<button class="btn btn-sm btn-secondary weekly-activity-set" data-activity="">Limpar</button>' : ''}
+        </div>
+      </div>
+    `;
+
     // ===== Luta agendada =====
     let bookingsHtml = '';
     if (bookings.length > 0) {
@@ -497,6 +518,7 @@ export class DashboardView {
       ${rivalryHtml}
       ${approachHtml}
       ${sponsorsHtml}
+      ${activityHtml}
       ${bookingsHtml}
       ${fighterHtml}
 

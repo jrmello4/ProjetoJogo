@@ -964,6 +964,40 @@ export const CAMP_CONFIG = {
   CAMP_INJURY_CANCELS_FIGHT: true,
 };
 
+// Especialidades de camp expandidas (§PRD: recuperação, estratégia, estudo)
+export const CAMP_SPECS = {
+  striking:  { label: 'Striking',    attrs: ['boxing','kickboxing','muayThai','power','footwork'],         desc: 'Golpes em pé' },
+  grappling: { label: 'Grappling',   attrs: ['wrestling','bjj','takedowns','groundControl'],                  desc: 'Luta agarrada' },
+  cardio:    { label: 'Condicionamento', attrs: ['cardio','recovery','durability'],                           desc: 'Resistência física' },
+  chin:      { label: 'Resistência', attrs: ['chin','composure'],                                              desc: 'Queixo e compostura' },
+  recovery:  { label: 'Recuperação', attrs: [], recoverFatigue: 10, injuryHeal: 2,                             desc: 'Reduz fadiga e acelera recuperação de lesões' },
+  strategy:  { label: 'Estratégia',  attrs: ['fightIQ'], planStudyBonus: 1,                                    desc: 'Estuda padrões do oponente — bônus na leitura do plano de luta' },
+  study:     { label: 'Estudo do Adversário', attrs: ['fightIQ','adaptability'], scoutingBoost: 1,              desc: 'Escuta o oponente — ganha 1 nível de scouting temporário' },
+};
+
+// Serviços opcionais pagos por semana (§PRD: economia detalhada)
+export const OPTIONAL_SERVICES = {
+  physio:     { label: 'Fisioterapia',  weeklyCost: 400,  desc: 'Recupera 2 de fadiga extra por semana. Acelera cura de lesões.' },
+  nutritionist: { label: 'Nutricionista', weeklyCost: 350,  desc: 'Bônus de +3 no teto efetivo de atributos (recuperação mais eficiente).' },
+  psychologist: { label: 'Psicólogo',    weeklyCost: 300,  desc: '+1 de moral por semana. Reduz penalidade de derrota em 20%.' },
+};
+
+// Atividades de lazer semanais (§PRD: vida fora do octógono)
+export const WEEKLY_ACTIVITIES = {
+  rest:         { label: 'Descansar',          desc: 'Recupera 5 de fadiga. Pequena chance de recuperar lesão mais rápido.', fatigueRecovery: 5, injuryHealChance: 0.10 },
+  family:       { label: 'Tempo com Família',  desc: '+8 de moral. Nenhum efeito físico.', moraleGain: 8 },
+  shortTrip:    { label: 'Viagem Curta',       desc: '+5 de moral. +1 de popularidade. Custa $300.', moraleGain: 5, popularityGain: 1, cost: 300 },
+  promoEvent:   { label: 'Evento Promocional', desc: '+3 de popularidade. -2 de fadiga (desgaste social). Custa $200.', popularityGain: 3, fatigueCost: 2, cost: 200 },
+  extraTraining:{ label: 'Treino Extra',       desc: 'Ganho pequeno em atributo aleatório. +3 de fadiga.', attrGainChance: 0.5, fatigueCost: 3 },
+};
+
+// Chance de erro factual no scouting nível 0-1 (§PRD: scouting com erros)
+export const SCOUTING_MISREAD_CHANCE = {
+  0: 0.40, // 40% de chance de informação errada no nível Desconhecido
+  1: 0.15, // 15% no nível Observado
+  2: 0,    // 0% no nível Estudado+
+};
+
 // Data sintética para exibição: início do jogo + semanas decorridas
 export function absWeekToDate(abs, startedAt) {
   const base = startedAt ? new Date(startedAt) : new Date();

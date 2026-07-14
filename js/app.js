@@ -416,6 +416,13 @@ class App {
       });
     });
 
+    document.querySelectorAll('.weekly-activity-set').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await this.game.setWeeklyActivity(btn.dataset.activity);
+        this.renderDashboard();
+      });
+    });
+
     document.querySelectorAll('[data-weigh-in-choice]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const result = await this.game.resolveWeighIn(btn.dataset.weighInChoice);
@@ -1364,6 +1371,22 @@ class App {
     document.querySelectorAll('.lifestyle-set').forEach(btn => {
       btn.addEventListener('click', async () => {
         await this.game.setLifestyle(btn.dataset.tier);
+        this.renderFinance();
+      });
+    });
+
+    document.querySelectorAll('.toggle-service').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const fighter = await this.game.getPlayerFighter();
+        const key = btn.dataset.service;
+        if (!fighter.hiredServices) fighter.hiredServices = [];
+        const idx = fighter.hiredServices.indexOf(key);
+        if (idx >= 0) {
+          fighter.hiredServices.splice(idx, 1);
+        } else {
+          fighter.hiredServices.push(key);
+        }
+        await this.game.fighterCtrl.updateFighter(fighter);
         this.renderFinance();
       });
     });

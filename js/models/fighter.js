@@ -57,6 +57,10 @@ export class Fighter {
     this.ledger = data.ledger || []; // {absWeek, label, amount}
     this.lifestyleTier = data.lifestyleTier || 'modest'; // §E.1
     this.everReachedLifestyle = data.everReachedLifestyle || { modest: true, comfortable: false, luxurious: false };
+    this.hiredServices = data.hiredServices || []; // serviços opcionais contratados: 'physio' | 'nutritionist' | 'psychologist'
+    this.weeklyActivity = data.weeklyActivity || null; // atividade de lazer da semana
+    this.campStrategyBonus = data.campStrategyBonus || 0; // bônus de estratégia do camp (próxima luta)
+    this.scoutingBoost = data.scoutingBoost || 0; // bônus temporário de scouting
 
     // Empresário (§C.1) e sinergia com o técnico da academia atual (§C.2)
     this.managerId = data.managerId || null;
@@ -362,6 +366,10 @@ export class Fighter {
       if (scar.attributeCeilings && attr in scar.attributeCeilings) {
         ceiling += scar.attributeCeilings[attr];
       }
+    }
+    // Nutricionista: +3 no teto efetivo (recuperação mais eficiente)
+    if (this.hiredServices?.includes('nutritionist')) {
+      ceiling = Math.min(ceiling + 3, 99);
     }
     return clamp(ceiling, 1, 99);
   }

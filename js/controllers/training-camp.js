@@ -41,13 +41,10 @@ export class TrainingCamp {
 
     const { intensity, spec, sparringPartnerId, weaponTarget } = cfg;
 
-    // Fase 3 — instalar arma nova. Os atributos que o camp treina são os da
-    // especialidade da própria arma (instalar um wrestling treina wrestling),
-    // mas mal: você está gastando as semanas aprendendo um movimento em vez de
-    // afiar o que já sabe. Esse é o custo real da reinvenção — você chega pior
-    // nesta luta pra ganhar as próximas três.
+    // Resolve o spec efetivo (install_weapon deriva do weaponTarget)
     const installing = spec === 'install_weapon' && weaponTarget && TapeService.canInstall(academy, weaponTarget);
-    const gains = this._calcGains(intensity, installing ? PLAN_SPECIALTY[weaponTarget] : spec);
+    const resolvedSpec = installing ? PLAN_SPECIALTY[weaponTarget] : spec;
+    const gains = this._calcGains(intensity, resolvedSpec);
 
     // A sala de treino (Fase 3b). Antes daqui, `team` chegava sempre vazio e
     // este bloco inteiro era código morto: existia um sistema de sparring
@@ -97,9 +94,10 @@ export class TrainingCamp {
       fighter.attributes[attr] = clamp(fighter.attributes[attr] + boosted, 0, fighter.effectiveCeiling(attr));
     }
 
-    // Proficiência de golpes
+    // Proficiência de golpes (só para specs de treino físico)
     const profGains = {};
-    if (fighter.moveset && fighter.moveset.length > 0) {
+    const physicalSpecs = ['striking', 'grappling', 'cardio', 'chin'];
+    if (physicalSpecs.includes(resolvedSpec) && fighter.moveset && fighter.moveset.length > 0) {
       const profGain = { light: 1, moderate: 2, intense: 3 }[intensity] || 1;
       const focus = cfg.proficiencyFocus;
       if (focus && fighter.moveset.includes(focus)) {
@@ -166,6 +164,24 @@ export class TrainingCamp {
     const fatigueCost = intensity === 'light' ? 3 : intensity === 'moderate' ? 8 : 15;
     fighter.applyFatigue(fatigueCost);
 
+    // Efeitos especiais das novas specs (§PRD) — `spec` já veio da
+    // desestruturação no topo de processCamp
+    if (spec === 'recovery') {
+      // Recuperação: reduz fadiga extra e acelera lesões
+      fighter.fatigue = clamp(fighter.fatigue - 10, 0, 100);
+      if (fighter.injury) {
+        fighter.injury.untilAbsWeek -= 7; // acelera em 1 semana
+      }
+    }
+    if (spec === 'strategy') {
+      // Estratégia: bônus na leitura do plano do oponente na próxima luta
+      fighter.campStrategyBonus = 1;
+    }
+    if (spec === 'study') {
+      // Estudo: bônus temporário de scouting (1 nível extra no próximo oponente)
+      fighter.scoutingBoost = 1;
+    }
+
     fighter.campProcessedThisWeek = true;
     return result;
   }
@@ -180,6 +196,9 @@ export class TrainingCamp {
       grappling: ['wrestling', 'bjj', 'takedowns', 'groundControl'],
       cardio: ['cardio', 'recovery', 'durability'],
       chin: ['chin', 'composure'],
+      recovery: [],  // sem ganho de atributo — efeito especial em processCamp
+      strategy: ['fightIQ'],
+      study: ['fightIQ', 'adaptability'],
     };
 
     const attrs = attrMap[spec] || attrMap.striking;

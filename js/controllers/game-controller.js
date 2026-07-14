@@ -48,7 +48,7 @@ import {
   absWeek,
 } from '../config/game-config.js';
 import { TapeService } from '../services/tape-service.js';
-import { LEVEL_CONFIG, MOVES } from '../config/game-config.js';
+import { LEVEL_CONFIG, MOVES, OPTIONAL_SERVICES, WEEKLY_ACTIVITIES } from '../config/game-config.js';
 
 const WORLD_MODE = 'career-1-fighter';
 // v4: carreira de 1 lutador — Academy substitui Gym/RivalGym, economia
@@ -433,6 +433,8 @@ export class GameController {
     }
 
     const economy = this._applyWeeklyEconomy(fighter, academy, now);
+    // Serviços opcionais (nutricionista, fisioterapeuta, psicólogo)
+    this._applyWeeklyServices(fighter);
     const sponsorActivity = await this.sponsorService.processWeek(now, fighter);
     await this._applyWeeklyTraining(fighter, academy);
 
@@ -473,6 +475,9 @@ export class GameController {
     // §D.2 — só lê `fighter` (id/status), nunca muta nem salva: os efeitos
     // de popularidade/moral só acontecem quando o jogador responde ao
     // prompt (resolveSocialPrompt), bem depois do save único deste método.
+    // Atividade de lazer semanal (§PRD: vida fora do octógono)
+    this._applyWeeklyActivity(fighter, now);
+
     if (fighter.status !== 'retired') {
       const bookings = await this.offerService.getAccepted();
       const hasBooking = bookings.some(b => b.fighterId === fighter.id);
@@ -626,18 +631,92 @@ export class GameController {
     };
   }
 
-  // Economia pessoal (§A.2/§E.1): mensalidade da academia + custo de vida.
+  // Economia pessoal (§A.2/§E.1/§PRD): despesas quebradas em categorias
+  // individuais + serviços opcionais.
   _applyWeeklyEconomy(fighter, academy, now) {
     const academyFee = academy?.weeklyFee || 0;
     const lifestyle = LIFESTYLE_TIERS[fighter.lifestyleTier] || LIFESTYLE_TIERS.modest;
-    const total = academyFee + lifestyle.weeklyCost;
+
+    // Quebra do custo de vida em componentes
+    const rentPct = 0.45;
+    const foodPct = 0.25;
+    const transportPct = 0.15;
+    const leisurePct = 0.15;
+    const rent = Math.round(lifestyle.weeklyCost * rentPct);
+    const food = Math.round(lifestyle.weeklyCost * foodPct);
+    const transport = Math.round(lifestyle.weeklyCost * transportPct);
+    const leisure = lifestyle.weeklyCost - rent - food - transport;
 
     if (academyFee > 0) fighter.addTransaction(now, `Mensalidade — ${academy.name}`, -academyFee);
-    if (lifestyle.weeklyCost > 0) fighter.addTransaction(now, `Custo de vida (${lifestyle.label})`, -lifestyle.weeklyCost);
+    if (rent > 0) fighter.addTransaction(now, `Aluguel (${lifestyle.label})`, -rent);
+    if (food > 0) fighter.addTransaction(now, `Alimentação (${lifestyle.label})`, -food);
+    if (transport > 0) fighter.addTransaction(now, `Transporte (${lifestyle.label})`, -transport);
+    if (leisure > 0) fighter.addTransaction(now, `Lazer (${lifestyle.label})`, -leisure);
+
+    // Efeitos de moral/popularidade do padrão de vida
     if (lifestyle.moraleBonus) fighter.morale = clamp(fighter.morale + Math.round(lifestyle.moraleBonus / 4), 0, 100);
     if (lifestyle.popularityBonus) fighter.updatePopularity(Math.round(lifestyle.popularityBonus / 4));
 
-    return { expenses: { academyFee, lifestyle: lifestyle.weeklyCost, total }, income: { total: 0 }, net: -total };
+    // Serviços opcionais contratados
+    let serviceTotal = 0;
+    const SERVICES = OPTIONAL_SERVICES;
+    for (const key of fighter.hiredServices || []) {
+      const svc = SERVICES[key];
+      if (!svc) continue;
+      serviceTotal += svc.weeklyCost;
+      fighter.addTransaction(now, svc.label, -svc.weeklyCost);
+      // Efeitos aplicados na _applyWeeklyServices()
+    }
+
+    const total = academyFee + lifestyle.weeklyCost + serviceTotal;
+    return { expenses: { academyFee, rent, food, transport, leisure, services: serviceTotal, total }, income: { total: 0 }, net: -total };
+  }
+
+  // Aplica efeitos dos serviços opcionais contratados
+  _applyWeeklyServices(fighter) {
+    for (const key of fighter.hiredServices || []) {
+      switch (key) {
+        case 'physio':
+          fighter.fatigue = clamp(fighter.fatigue - 2, 0, 100);
+          // Also helps injury recovery (checked elsewhere)
+          break;
+        case 'nutritionist':
+          // Effect is applied in effectiveCeiling via model
+          break;
+        case 'psychologist':
+          fighter.morale = clamp(fighter.morale + 1, 0, 100);
+          break;
+      }
+    }
+  }
+
+  // Atividade de lazer semanal (§PRD: vida fora do octógono)
+  _applyWeeklyActivity(fighter, now) {
+    const activityKey = fighter.weeklyActivity;
+    if (!activityKey) return;
+    const act = WEEKLY_ACTIVITIES[activityKey];
+    if (!act) return;
+
+    fighter.weeklyActivity = null; // consome a atividade
+
+    if (act.fatigueRecovery) fighter.fatigue = clamp(fighter.fatigue - act.fatigueRecovery, 0, 100);
+    if (act.fatigueCost) fighter.fatigue = clamp(fighter.fatigue + act.fatigueCost, 0, 100);
+    if (act.moraleGain) fighter.morale = clamp(fighter.morale + act.moraleGain, 0, 100);
+    if (act.popularityGain) fighter.updatePopularity(act.popularityGain);
+    if (act.cost) {
+      if (fighter.cash >= act.cost) {
+        fighter.addTransaction(now, act.label, -act.cost);
+        // addTransaction já deduz do cash
+      }
+    }
+    if (act.injuryHealChance && fighter.injury && Math.random() < act.injuryHealChance) {
+      fighter.injury.untilAbsWeek -= 7; // acelera recuperação em 1 semana
+    }
+    if (act.attrGainChance && Math.random() < act.attrGainChance) {
+      const keys = Object.keys(fighter.attributes);
+      const attr = keys[Math.floor(Math.random() * keys.length)];
+      fighter.attributes[attr] = Math.min(99, (fighter.attributes[attr] || 50) + Math.floor(Math.random() * 2) + 1);
+    }
   }
 
   // Treino semanal — foco individual, amplificado pela especialidade da
@@ -1223,22 +1302,32 @@ export class GameController {
     const manager = fighter.managerId ? await this.managerService.getManager(fighter.managerId) : null;
     const hasBaseline = this.managerService.givesBaselineScouting(manager);
     const level = await this.scoutingService.knowledgeOf(opponent, fighter.id, hasBaseline);
+    // Bônus temporário de scouting do camp (spec "study")
+    const scoutingBoost = fighter.scoutingBoost || 0;
+    if (scoutingBoost > 0) {
+      fighter.scoutingBoost = 0; // consome o bônus
+      await this.fighterCtrl.updateFighter(fighter);
+    }
+    const effectiveLevel = Math.min(3, level + scoutingBoost);
     const nextCost = level < 3 ? this.scoutingService.studyCost(level + 1) : null;
+
+    // Seed estável pra erros factuais de scouting (mesma oferta = mesmos erros)
+    const seed = [...offer.id].reduce((s, c) => s + c.charCodeAt(0), 0);
 
     return {
       opponent,
-      level,
+      level: effectiveLevel, // nível efetivo (com bônus)
       levelLabel: ScoutingService.levelLabel(level),
       nextCost,
       canAfford: nextCost != null && fighter.cash >= nextCost,
       attrs: {
-        striking: ScoutingService.blur(opponent.strikingScore, level),
-        grappling: ScoutingService.blur(opponent.grapplingScore, level),
-        cardio: ScoutingService.blur(opponent.attributes.cardio, level),
-        fightIQ: ScoutingService.blur(opponent.attributes.fightIQ, level),
-        chin: ScoutingService.blur(opponent.attributes.chin, level),
+        striking: ScoutingService.blurWithOffset(opponent.strikingScore, level, seed),
+        grappling: ScoutingService.blurWithOffset(opponent.grapplingScore, level, seed),
+        cardio: ScoutingService.blurWithOffset(opponent.attributes.cardio, level, seed),
+        fightIQ: ScoutingService.blurWithOffset(opponent.attributes.fightIQ, level, seed),
+        chin: ScoutingService.blurWithOffset(opponent.attributes.chin, level, seed),
       },
-      tendencies: ScoutingService.readTendencies(opponent, level),
+      tendencies: ScoutingService.readWithErrors(opponent, level, seed),
       dna: ScoutingService.revealsDna(level) ? opponent.dnaTraits : null,
       theirRead: await this._theirRead(fighter, opponent, offer, level),
     };
@@ -1273,17 +1362,35 @@ export class GameController {
       weapon: tape.weapon && !tape.weapon.revealed ? { ...tape.weapon } : null,
     };
 
+    // Bônus de estratégia do camp — reduz chance de erro em 1 nível
+    const strategyBonus = fighter.campStrategyBonus || 0;
+    if (strategyBonus > 0) {
+      fighter.campStrategyBonus = 0; // consome o bônus
+      await this.fighterCtrl.updateFighter(fighter);
+    }
+    const effectiveLevel = Math.min(3, level + strategyBonus);
+
     // Sem ter estudado nada, você não faz ideia do que o córner dele preparou.
-    if (level === 0) return { ...base, predictedPlanKey: null, reliable: false };
+    if (effectiveLevel === 0) return { ...base, predictedPlanKey: null, reliable: false };
 
     // Nível 1: a leitura existe, mas sua equipe erra. Um plano errado aqui é
     // pior que nenhum — é nele que você vai basear a isca.
     const seed = [...offer.id].reduce((s, c) => s + c.charCodeAt(0), 0);
-    const misread = level === 1 && seed % 3 === 0;
+    const misread = effectiveLevel === 1 && seed % 3 === 0;
     const alternatives = Object.keys(GAME_PLANS).filter(k => k !== truth.planKey);
     const predicted = misread ? alternatives[seed % alternatives.length] : truth.planKey;
 
-    return { ...base, predictedPlanKey: predicted, reliable: level >= 2 };
+    return { ...base, predictedPlanKey: predicted, reliable: effectiveLevel >= 2 };
+  }
+
+  // Define atividade de lazer da semana (§PRD: vida fora do octógono)
+  async setWeeklyActivity(activityKey) {
+    const fighter = await this.getPlayerFighter();
+    if (!fighter) return { ok: false, reason: 'Nenhum lutador ativo.' };
+    if (activityKey && !WEEKLY_ACTIVITIES[activityKey]) return { ok: false, reason: 'Atividade inválida.' };
+    fighter.weeklyActivity = activityKey || null;
+    await this.fighterCtrl.updateFighter(fighter);
+    return { ok: true };
   }
 
   // ===== Negociação de bolsa (usa modificadores do empresário, §C.1) =====

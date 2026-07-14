@@ -1,6 +1,7 @@
 import { Gaussian } from '../utils/gaussian.js';
 import { CORNER_INSTRUCTIONS, GAME_PLANS, GAME_PLAN_EDGE } from '../config/game-config.js';
 import { clamp } from '../utils/helpers.js';
+import { StyleService } from '../services/style-service.js';
 
 export class SimulationEngine {
   // Styles make fights. O plano de jogo é lido contra o adversário REAL —
@@ -68,6 +69,9 @@ export class SimulationEngine {
   // idêntico ao de antes: a IA luta equilibrada e sem vantagem. A mudança é
   // aditiva de propósito — todo call site antigo continua válido.
   static async simulateFight(fighterA, fighterB, fiveRounds = false, cornerHooks = null, gamePlanKey = 'balanced', dateISO = null, pressureLevel = 0, tactics = null) {
+    const profileA = StyleService.resolveFighter(fighterA);
+    const profileB = StyleService.resolveFighter(fighterB);
+    const matchup = StyleService.resolveMatchup(profileA, profileB);
     const maxRounds = fiveRounds ? 5 : 3;
     const rounds = [];
     let totalScoreA = 0, totalScoreB = 0;
@@ -111,18 +115,20 @@ export class SimulationEngine {
       const cornerModA = cornerInstruction === 'instinct'
         ? this._instinctMod(fighterA)
         : (CORNER_INSTRUCTIONS[cornerInstruction] || CORNER_INSTRUCTIONS.balanced);
-      const staminaFactorA = Math.max(10, staminaA * (1 - (r - 1) * 0.12) - staminaDebtA);
-      const staminaFactorB = Math.max(10, staminaB * (1 - (r - 1) * 0.12) - staminaDebtB);
+      const staminaDecayA = (profileA?.mods.staminaDecayReduction || 1);
+      const staminaDecayB = (profileB?.mods.staminaDecayReduction || 1);
+      const staminaFactorA = Math.max(10, staminaA * (1 - (r - 1) * 0.12 * staminaDecayA) - staminaDebtA);
+      const staminaFactorB = Math.max(10, staminaB * (1 - (r - 1) * 0.12 * staminaDecayB) - staminaDebtB);
 
-      const perfA = this._calcRoundPerformance(fighterA, fighterB, pressureLevel, staminaFactorA, cornerModA, plan, planEdge);
-      const perfB = this._calcRoundPerformance(fighterB, fighterA, pressureLevel, staminaFactorB, null, planB, planEdgeB);
+      const perfA = this._calcRoundPerformance(fighterA, fighterB, pressureLevel, staminaFactorA, cornerModA, plan, planEdge, profileA, matchup.bonusA);
+      const perfB = this._calcRoundPerformance(fighterB, fighterA, pressureLevel, staminaFactorB, null, planB, planEdgeB, profileB, matchup.bonusB);
 
       // Track total scores for decision
       totalScoreA += perfA.score;
       totalScoreB += perfB.score;
 
       // Round stats generation
-      const roundStats = this._genRoundStats(fighterA, fighterB, perfA, perfB, r);
+      const roundStats = this._genRoundStats(fighterA, fighterB, perfA, perfB, r, profileA, profileB);
       const roundLog = this._genRoundBeats(fighterA, fighterB, roundStats);
       stats.sigStrikesA += roundStats.sigStrikesA;
       stats.sigStrikesB += roundStats.sigStrikesB;
@@ -368,9 +374,11 @@ export class SimulationEngine {
     };
   }
 
-  static _calcRoundPerformance(fighter, opponent, pressureLevel, staminaFactor, cornerMod = null, plan = null, planEdge = 0) {
+  static _calcRoundPerformance(fighter, opponent, pressureLevel, staminaFactor, cornerMod = null, plan = null, planEdge = 0, profile = null, matchupBonus = 0) {
     const corner = cornerMod || CORNER_INSTRUCTIONS.balanced;
     const game = plan || GAME_PLANS.balanced;
+    const prof = profile || StyleService.resolveFighter(fighter);
+    const mods = prof.mods;
     const fatiguePenalty = 1 - (fighter.fatigue / 200);
     const moraleFactor = 0.7 + (fighter.morale / 100) * 0.3;
     const determinationFactor = 0.8 + (fighter.hidden.determination / 100) * 0.2;
@@ -422,7 +430,7 @@ export class SimulationEngine {
     // Composure: ajuda em big events e decisões apertadas
     const composureFactor = 1 + ((a.composure ?? 50) - 50) / 200;
 
-    const styleAdvantage = this._styleMatchup(fighter, opponent);
+    const styleAdvantage = matchupBonus;
 
     const baseScore =
       technique * 0.2 +
@@ -474,7 +482,7 @@ export class SimulationEngine {
     };
   }
 
-  static _genRoundStats(fighterA, fighterB, perfA, perfB, round) {
+  static _genRoundStats(fighterA, fighterB, perfA, perfB, round, profileA = null, profileB = null) {
     // Generate realistic-looking MMA stats per round
     // Épico C: agressão aumenta volume, footwork/headMovement reduzem acertos sofridos
     const aggressionModA = 0.8 + (perfA.aggression / 100) * 0.4;
@@ -491,8 +499,10 @@ export class SimulationEngine {
     // Knockdowns: power + striking differential
     const powerFactorA = perfA.power / 100;
     const powerFactorB = perfB.power / 100;
-    const kdChanceA = Math.max(0, (perfA.striking - perfB.striking) * 0.02 * powerFactorA - 0.1 + Math.random() * 0.08);
-    const kdChanceB = Math.max(0, (perfB.striking - perfA.striking) * 0.02 * powerFactorB - 0.1 + Math.random() * 0.08);
+    const kdBonusA = (profileA?.mods.kdChanceBonus || 0);
+    const kdBonusB = (profileB?.mods.kdChanceBonus || 0);
+    const kdChanceA = Math.max(0, (perfA.striking - perfB.striking) * 0.02 * powerFactorA - 0.1 + Math.random() * 0.08 + kdBonusA);
+    const kdChanceB = Math.max(0, (perfB.striking - perfA.striking) * 0.02 * powerFactorB - 0.1 + Math.random() * 0.08 + kdBonusB);
 
     // Takedowns: takedowns skill + strength + grappling differential
     const tdSkillA = perfA.takedowns / 100;

@@ -40,7 +40,7 @@ export const ACADEMIES = [
   },
   {
     id: 'academy-elite', name: 'Elite Combat Team', reputation: 55,
-    facilityLevel: 3, weeklyFee: 800, philosophy: 'Alto rendimento',
+    facilityLevel: 3, weeklyFee: 1200, philosophy: 'Alto rendimento',
     specialties: { striking: 0.30, grappling: 0.25, cardio: 0.30 },
     headCoach: { name: 'Coach Marcus', personality: 'aggressive' },
   },
@@ -84,7 +84,7 @@ export const MANAGER_CONFIG = {
 export const LIFESTYLE_TIERS = {
   modest: { label: 'Modesto', weeklyCost: 200, moraleBonus: 0, popularityBonus: 0 },
   comfortable: { label: 'Confortável', weeklyCost: 600, moraleBonus: 3, popularityBonus: 1 },
-  luxurious: { label: 'Luxuoso', weeklyCost: 1500, moraleBonus: 6, popularityBonus: 3 },
+  luxurious: { label: 'Luxuoso', weeklyCost: 2500, moraleBonus: 6, popularityBonus: 3 },
 };
 export const LIFESTYLE_DOWNGRADE_MORALE_PENALTY = 15;
 
@@ -181,7 +181,7 @@ export const OFFER_CONFIG = {
   // Bolsas por tier: base + popularidade * fator
   PURSE: {
     1: { base: 15000, perPop: 400 },
-    2: { base: 3500, perPop: 90 },
+    2: { base: 2800, perPop: 90 },
     3: { base: 800, perPop: 25 },
   },
   WIN_BONUS_RATIO: 0.5,

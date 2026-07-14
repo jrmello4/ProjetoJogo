@@ -1208,7 +1208,7 @@ class App {
     // leitura pura (getFighter), sem nenhum updateFighter() depois — não
     // corre o risco do bug de fetch-mutate-save duplo já visto nesta sessão.
     const fighter = await this.game.fighterCtrl.getFighter(fighterId);
-    const topMoments = this.game.careerLogService ? await this.game.careerLogService.topByMagnitude(8) : [];
+    const topMoments = this.game.careerLogService ? await this.game.careerLogService.topByMagnitude(fighterId, 8) : [];
 
     let rivalryInfo = null;
     if (fighter && this.rivalryService) {

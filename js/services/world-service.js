@@ -323,7 +323,7 @@ export class WorldService {
       const isFinish = result.method && !result.method.startsWith('Decision');
       await this.notifService.add('success', '🏆 Vitória!', `Você venceu ${result.winnerId === result.fighterAId ? result.fighterBName : result.fighterAName} por ${result.method} no ${promo.nextEventName()}. Bolsa líquida: $${netPurse.toLocaleString()}.${hypeBonus > 0 ? ` ($${hypeBonus.toLocaleString()} de bônus de hype)` : ''}`);
       if (this.careerLogService && isFinish) {
-        await this.careerLogService.publish('finish', absWeekNow, promo.tier === 1 ? 70 : 45, { opponentName: result.fighterBName === fighter.name ? result.fighterAName : result.fighterBName, method: result.method, promo: promo.short });
+        await this.careerLogService.publish(fighter.id, 'finish', absWeekNow, promo.tier === 1 ? 70 : 45, { opponentName: result.fighterBName === fighter.name ? result.fighterAName : result.fighterBName, method: result.method, promo: promo.short });
       }
     } else {
       await this.notifService.add('warning', 'Derrota', `Você foi derrotado por ${result.winnerName} (${result.method}). Bolsa líquida: $${netPurse.toLocaleString()}.`);
@@ -361,7 +361,7 @@ export class WorldService {
             : `Você é o novo campeão ${division} do ${promo.name}!`
         );
         if (this.careerLogService) {
-          await this.careerLogService.publish('title_won', absWeekNow, titleOutcome.retained ? 60 : 95, { division, promo: promo.short, defense: titleOutcome.retained });
+          await this.careerLogService.publish(fighter.id, 'title_won', absWeekNow, titleOutcome.retained ? 60 : 95, { division, promo: promo.short, defense: titleOutcome.retained });
         }
       } else {
         await this.notifService.add(

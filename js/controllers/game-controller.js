@@ -122,6 +122,13 @@ export class GameController {
     for (const store of ['fighters', 'organization', 'events', 'fights', 'rivalries', 'hallOfFame', 'notifications', 'offers']) {
       await this.db.clear(store);
     }
+    // O doc 'careerLog' vive dentro do store 'gameState' (não coberto pelo
+    // clear() acima) e nunca carregava fighterId nas entradas — sem isso,
+    // um mundo novo herdava os "momentos marcantes" da carreira anterior e
+    // o documentário de aposentadoria (§B.3) podia exibi-los como se fossem
+    // do lutador atual. topByMagnitude() agora filtra por fighterId, mas
+    // ainda limpamos aqui para não carregar lixo de mundos antigos.
+    await this.db.delete('gameState', 'careerLog');
     try { localStorage.removeItem('characterCreationDone'); } catch (e) { /* ambientes sem localStorage */ }
 
     await this.db.put('gameState', {
@@ -647,7 +654,7 @@ export class GameController {
     const now = absWeek(seasonState);
 
     if (result.provoked) {
-      await this.careerLogService.publish('provocation', now, SOCIAL_CONFIG.PROVOCATION_MAGNITUDE, {
+      await this.careerLogService.publish(fighter.id, 'provocation', now, SOCIAL_CONFIG.PROVOCATION_MAGNITUDE, {
         targetFighterId: pending.rivalFighterId || null,
         targetName: pending.rivalName || null,
       });

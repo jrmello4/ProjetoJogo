@@ -6,10 +6,16 @@ const MAX_ENTRIES = 300;
 // (§D.2), rivalidades (§D.3) e o documentário de carreira (§B.3) CONSOMEM
 // daqui em vez de cada um inventar sua própria noção de "isso importou".
 //
-// entry: { type, atAbsWeek, magnitude (0-100), data }
+// entry: { fighterId, type, atAbsWeek, magnitude (0-100), data }
 // types: 'title_won' | 'upset' | 'streak' | 'rematch' | 'dna_discovered' |
 //        'permanent_scar' | 'academy_switch' | 'manager_switch' |
 //        'rivalry_born'
+//
+// fighterId identifica de QUEM é o momento (o lutador do jogador vivendo
+// aquele evento) — obrigatório desde a correção do bug de "Momentos
+// marcantes" vazando entre carreiras: o doc 'careerLog' é único e global
+// (sobrevive a _bootstrapNewWorld/troca de lutador), então sem esse campo
+// topByMagnitude() não tinha como saber a quem cada entrada pertencia.
 export class CareerLogService {
   constructor(db) {
     this.db = db;
@@ -20,9 +26,9 @@ export class CareerLogService {
     return raw || { id: DOC_ID, entries: [] };
   }
 
-  async publish(type, atAbsWeek, magnitude, data = {}) {
+  async publish(fighterId, type, atAbsWeek, magnitude, data = {}) {
     const doc = await this._doc();
-    doc.entries.push({ type, atAbsWeek, magnitude: Math.round(magnitude), data });
+    doc.entries.push({ fighterId, type, atAbsWeek, magnitude: Math.round(magnitude), data });
     if (doc.entries.length > MAX_ENTRIES) {
       // Mantém as de maior magnitude quando precisa cortar, não só as recentes —
       // um título conquistado há 3 anos importa mais pro documentário do que
@@ -43,8 +49,12 @@ export class CareerLogService {
     return (await this._doc()).entries.filter(e => e.type === type);
   }
 
-  async topByMagnitude(limit = 10) {
-    return [...(await this.all())].sort((a, b) => b.magnitude - a.magnitude).slice(0, limit);
+  // Escopado por fighterId: o doc é global, então sem esse filtro o
+  // documentário de aposentadoria (§B.3) podia exibir momentos marcantes de
+  // OUTRA carreira (ver comentário no topo do arquivo).
+  async topByMagnitude(fighterId, limit = 10) {
+    const mine = (await this.all()).filter(e => e.fighterId === fighterId);
+    return mine.sort((a, b) => b.magnitude - a.magnitude).slice(0, limit);
   }
 
   async recentSince(absWeekNow, windowWeeks) {

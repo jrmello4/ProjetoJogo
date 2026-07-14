@@ -13,7 +13,7 @@ import { absWeekToDate } from '../config/game-config.js';
 //   { fighter: Fighter|null,      // instância viva — o hallOfFame entry é só
 //                                 // um snapshot na hora da indução (não tem
 //                                 // fights[] completo, permanentScars, etc.)
-//     topMoments: CareerLogEntry[], // careerLogService.topByMagnitude(8)
+//     topMoments: CareerLogEntry[], // careerLogService.topByMagnitude(fighterId, 8)
 //     rivalryInfo: { rivalry, opponentName } | null,
 //     startedAt: string|null }     // p/ converter atAbsWeek em data real
 

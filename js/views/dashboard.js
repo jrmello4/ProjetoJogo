@@ -130,7 +130,7 @@ export class DashboardView {
   }
 
   static render(data, weekLabel) {
-    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, pendingApproach, now } = data;
+    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, rivalryPrompt, pendingApproach, now } = data;
 
     const tierBadge = (tier) => `<span class="badge ${tierBadgeCls(tier)}">${TIER_LABELS[tier]}</span>`;
 
@@ -184,6 +184,24 @@ export class DashboardView {
           </div>
         </div>
       `;
+    }
+
+    // ===== Rivalidade — prompt semanal =====
+    let rivalryHtml = '';
+    if (rivalryPrompt) {
+      rivalryHtml = `
+        ${pendingOffers.length === 0 && !socialPrompt ? '<div class="section-label" data-reveal>Decisões Pendentes</div>' : ''}
+        <div class="card mb-4" data-reveal style="border-top-color:var(--danger)">
+          <div class="card-header">
+            <span class="card-title">⚔️ Rivalidade</span>
+          </div>
+          <p class="text-sm text-muted mb-2">${rivalryPrompt.rivalName} está provocando você. Como reagir?</p>
+          <div class="flex flex-col gap-2">
+            ${rivalryPrompt.choices.map(c => `
+              <button class="btn btn-secondary rivalry-choice" data-choice="${c.key}" style="text-align:left">${c.text}</button>
+            `).join('')}
+          </div>
+        </div>`;
     }
 
     // ===== Sondagem de retenção (§A.4/§C.1) =====

@@ -429,6 +429,25 @@ export class GameController {
       await this._rollSocialMediaPrompt(now, fighter, hasBooking);
     }
 
+    // §D.3 — prompt semanal de rivalidade
+    if (fighter.status !== 'retired') {
+      const rivalries = await this.rivalryService.getRivalries(fighter.id);
+      const topRivalry = rivalries.sort((a, b) => b.intensity - a.intensity)[0];
+      if (topRivalry && topRivalry.intensity >= 3) {
+        const rivalId = topRivalry.fighterAId === fighter.id ? topRivalry.fighterBId : topRivalry.fighterAId;
+        const rival = await this.fighterCtrl.getFighter(rivalId);
+        if (rival) {
+          const interaction = this.rivalryService.rollInteraction(fighter, rival);
+          if (interaction) {
+            interaction.rivalryId = topRivalry.id;
+            interaction.rivalFighterId = rivalId;
+            await this.db.put('gameState', { id: 'rivalry-prompt', ...interaction });
+            await this.notifService.add('warning', '⚔️ Rivalidade', `${rival.name} está provocando você. Como reagir?`);
+          }
+        }
+      }
+    }
+
     fighter.checkNumericDiscovery(); // §B.1 — idempotente, roda toda semana
 
     if (this.careerLogService) {
@@ -722,6 +741,96 @@ export class GameController {
     await this.socialMediaService.clearPending();
 
     return { ok: true, choice, effects: result.effects };
+  }
+
+  // ===== Rivalidade: resolve a escolha do jogador no prompt semanal =====
+  async resolveRivalryInteraction(choice) {
+    const fighter = await this.getPlayerFighter();
+    if (!fighter) return { ok: false, reason: 'Nenhum lutador ativo.' };
+
+    let state;
+    try { state = await this.db.get('gameState', 'rivalry-prompt'); } catch { return { ok: false, reason: 'Nenhum prompt pendente.' }; }
+    await this.db.delete('gameState', 'rivalry-prompt');
+
+    const seasonState = await this.seasonService.getState();
+    const now = absWeek(seasonState);
+
+    const rival = await this.fighterCtrl.getFighter(state.rivalFighterId);
+    const rivalryData = await this.db.get('rivalries', state.rivalryId);
+    if (!rivalryData) return { ok: false, reason: 'Rivalidade não encontrada.' };
+    const rivalry = new Rivalry(rivalryData);
+
+    const fighterPop = fighter.popularity || 0;
+    const rivalPop = rival?.popularity || 0;
+    const lostLastFight = fighter.lastFightAbsWeek && (now - fighter.lastFightAbsWeek) <= 8 && (fighter.record?.losses || 0) > 0;
+    const wonLastFight = fighter.lastFightAbsWeek && (now - fighter.lastFightAbsWeek) <= 8 && (fighter.record?.wins || 0) > 0;
+
+    const personality = state.rivalPersonality || 'cautious';
+    const isUnderdog = fighterPop < rivalPop - 10;
+    const intensityGain = 1 + Math.floor(Math.random() * 3);
+    let popChange = 0;
+    let moraleChange = 0;
+    let finalIntensityGain = 0;
+
+    switch (choice) {
+      case 'provoke':
+        if (personality === 'aggressive') {
+          finalIntensityGain = intensityGain + 1;
+          popChange = isUnderdog ? 3 : 0;
+        } else if (personality === 'cautious') {
+          finalIntensityGain = 0;
+          popChange = 0;
+        } else {
+          finalIntensityGain = 1;
+          popChange = 1;
+        }
+        if (wonLastFight) finalIntensityGain += 1;
+        if (lostLastFight) { popChange -= 2; moraleChange = -3; }
+        break;
+
+      case 'respect':
+        if (personality === 'aggressive') {
+          finalIntensityGain = -1;
+        } else if (personality === 'cautious') {
+          finalIntensityGain = 0;
+          popChange = 2;
+        } else {
+          finalIntensityGain = 0;
+          popChange = 1;
+        }
+        moraleChange = 2;
+        break;
+
+      case 'ignore':
+      default:
+        popChange = 0;
+        moraleChange = 1;
+        break;
+    }
+
+    fighter.updatePopularity(popChange);
+    fighter.applyMoraleChange(moraleChange);
+
+    if (finalIntensityGain > 0) {
+      rivalry.increaseIntensity(finalIntensityGain);
+    } else if (finalIntensityGain < 0) {
+      rivalry.intensity = Math.max(1, rivalry.intensity + finalIntensityGain);
+    }
+
+    const actionLabel = { provoke: 'provocou', respect: 'respeitou', ignore: 'ignorou' }[choice] || choice;
+    rivalry.addEvent('interaction', `${fighter.name} ${actionLabel} ${state.rivalName} publicamente`);
+
+    await this.db.put('rivalries', rivalry);
+    await this.fighterCtrl.updateFighter(fighter);
+
+    const messages = {
+      provoke: `Você provocou ${state.rivalName}.${finalIntensityGain > 0 ? ' A rivalidade esquentou!' : ' O rival ignorou.'}`,
+      respect: `Você respeitou ${state.rivalName}. Postura de campeão.`,
+      ignore: 'Você ignorou a provocação. Postura profissional.',
+    };
+    await this.notifService.add('info', 'Rivalidade', messages[choice] || '');
+
+    return { ok: true, choice, effects: { popChange, moraleChange, intensityGain: finalIntensityGain } };
   }
 
   async _checkExpectations(now, fighter) {
@@ -1033,6 +1142,9 @@ export class GameController {
     const contenderStatus = fighter ? await this.titleService.contenderStatusOf(fighter) : null;
     const pendingApproach = await this.retentionService.getPending();
 
+    let rivalryPrompt = null;
+    try { const rp = await this.db.get('gameState', 'rivalry-prompt'); if (rp?.choices) rivalryPrompt = rp; } catch { /* ok */ }
+
     return {
       fighter,
       academy,
@@ -1048,6 +1160,7 @@ export class GameController {
       rankings,
       sponsors,
       socialPrompt,
+      rivalryPrompt,
       pendingApproach,
       state,
       now: absWeek(state),

@@ -411,6 +411,14 @@ class App {
       });
     });
 
+    // Rivalidade — escolha do prompt semanal
+    document.querySelectorAll('.rivalry-choice').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const result = await this.game.resolveRivalryInteraction(btn.dataset.choice);
+        this.renderDashboard();
+      });
+    });
+
     document.querySelectorAll('[data-approach-respond]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const result = await this.game.respondToApproach(btn.dataset.approachId, btn.dataset.approachRespond);
@@ -792,11 +800,20 @@ class App {
       btn.addEventListener('click', async () => {
         const fighterId = btn.dataset.fighter;
         const promoId = btn.dataset.promo;
-        const result = await this.game.contractService.accept(fighterId, promoId, now);
-        if (result) {
-          this.notificationService.add('success', 'Contrato Assinado!', `Você agora é exclusivo dessa promoção.`);
+        const promoName = btn.dataset.promoName;
+
+        // Verificar conflito com cinturão de outra promoção
+        const conflict = await this.game.getSigningConflict(fighterId, promoName);
+
+        if (conflict) {
+          this._showContractConflictModal(fighterId, promoId, promoName, conflict, now);
+        } else {
+          const result = await this.game.contractService.accept(fighterId, promoId, now);
+          if (result) {
+            this.notificationService.add('success', 'Contrato Assinado!', `Você agora é exclusivo dessa promoção.`);
+          }
+          this.renderOffers();
         }
-        this.renderOffers();
       });
     });
 
@@ -807,6 +824,65 @@ class App {
         this.notificationService.add('info', 'Proposta Recusada', 'Ofertas futuras de outras promoções ainda podem aparecer.');
         this.renderOffers();
       });
+    });
+  }
+
+  // Modal de conflito ao assinar contrato segurando cinturão em outra promoção.
+  // Oferece duas saídas: vagar o título e subir, ou adiar a decisão.
+  _showContractConflictModal(fighterId, promoId, promoName, belts, now) {
+    const existing = document.getElementById('conflictModalOverlay');
+    if (existing) existing.remove();
+
+    const beltsHtml = belts.map(b =>
+      `<li><strong>${b.weightClass}</strong> · ${b.promotionName}</li>`
+    ).join('');
+
+    const isPlural = belts.length > 1;
+
+    const modal = document.createElement('div');
+    modal.id = 'conflictModalOverlay';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div class="card" style="max-width:520px;width:90%;padding:2rem">
+        <h3 style="margin-top:0">Voc\u00EA \u00E9 campe\u00E3o!</h3>
+        <p>Seu atleta segura o seguinte cintur\u00E3o${isPlural ? '\u00F5es' : ''}:</p>
+        <ul>${beltsHtml}</ul>
+        <p class="text-sm text-muted">Ao assinar com <strong>${promoName}</strong>, seu contrato exige exclusividade — voc\u00EA n\u00E3o pode lutar por outras promo\u00E7\u00F5es enquanto estiver sob contrato.</p>
+        <div style="display:flex;flex-direction:column;gap:0.75rem;margin-top:1.5rem">
+          <button id="conflictSignNow" class="btn btn-success">
+            Subir agora — vagar cintur\u00E3o${isPlural ? '\u00F5es' : ''}
+          </button>
+          <button id="conflictPostpone" class="btn btn-secondary">
+            Adiar — defender o cintur\u00E3o primeiro
+          </button>
+          <button id="conflictCancel" class="btn btn-ghost" style="color:var(--text-muted);font-size:0.85rem">
+            Voltar
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    modal.querySelector('#conflictSignNow').addEventListener('click', async () => {
+      modal.remove();
+      const result = await this.game.signContractWithVacate(fighterId, promoId, now);
+      if (result.fighter) {
+        this.notificationService.add('success', 'Contrato Assinado!',
+          `${result.fighter.name} abdicou do${isPlural ? 's' : ''} cintur\u00E3o${isPlural ? '\u00F5es' : ''} e agora \u00E9 exclusivo do ${promoName}.`);
+      }
+      this.renderOffers();
+    });
+
+    modal.querySelector('#conflictPostpone').addEventListener('click', async () => {
+      modal.remove();
+      await this.game.contractService.postpone(fighterId);
+      this.notificationService.add('info', 'Decis\u00E3o Adiada',
+        `A proposta do ${promoName} foi mantida. Voc\u00EA pode aceit\u00E1-la quando estiver pronto.`);
+      this.renderOffers();
+    });
+
+    modal.querySelector('#conflictCancel').addEventListener('click', () => {
+      modal.remove();
     });
   }
 

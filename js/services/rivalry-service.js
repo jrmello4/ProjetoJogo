@@ -1,5 +1,5 @@
 import { Rivalry } from '../models/rivalry.js';
-import { RIVALRY_CONFIG } from '../config/game-config.js';
+import { ACADEMIES, RIVALRY_CONFIG } from '../config/game-config.js';
 
 export class RivalryService {
   // careerLogService (opcional/nullable, mesmo padrão de SponsorService) —
@@ -162,5 +162,29 @@ export class RivalryService {
 
     await this.db.put('rivalries', rivalry);
     return rivalry;
+  }
+
+  // Gera prompt semanal de interação com rival. Retorna null se não houver
+  // prompt esta semana, ou um objeto { rivalryId, rivalName, rivalPersonality,
+  //   rivalPop, choices: [{ key, text }] }.
+  // Gatilho: rivalidade ativa intensidade >= 3, chance 30%.
+  rollInteraction(fighter, rivalFighter) {
+    if (Math.random() > 0.3) return null;
+
+    const personality = rivalFighter?.academyId
+      ? (ACADEMIES.find(a => a.id === rivalFighter.academyId)?.headCoach?.personality || 'cautious')
+      : 'cautious';
+
+    return {
+      rivalryId: null, // preenchido pelo caller
+      rivalName: rivalFighter?.name || 'Rival',
+      rivalPersonality: personality,
+      rivalPop: rivalFighter?.popularity || 0,
+      choices: [
+        { key: 'provoke', text: `Provocar ${rivalFighter?.name || 'o rival'} publicamente` },
+        { key: 'respect', text: `Respeitar ${rivalFighter?.name || 'o rival'} — "é um guerreiro, mas vou vencer"` },
+        { key: 'ignore', text: 'Ignorar — sem comentários' },
+      ],
+    };
   }
 }

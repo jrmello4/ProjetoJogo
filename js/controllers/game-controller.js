@@ -1110,6 +1110,76 @@ export class GameController {
     return { fighter: result, vacated, cancelledOffers };
   }
 
+  // ===== Calendário visual (§F.7) =====
+  async getCalendarData() {
+    const fighter = await this.getPlayerFighter();
+    if (!fighter) return null;
+
+    const season = await this.seasonService.getState();
+    const now = absWeek(season);
+
+    const bookings = await this.offerService.getAccepted();
+    const booking = bookings.find(b => b.fighterId === fighter.id);
+    const promotions = await this.worldService.getPromotions();
+
+    const entries = [];
+    const lookahead = 26;
+
+    for (let w = now; w <= now + lookahead; w++) {
+      const weekNum = ((w - 1) % 52) + 1;
+      const yearNum = Math.ceil(w / 52);
+      const label = `Sem ${weekNum}, Ano ${yearNum}`;
+
+      let weekType = 'training';
+      let details = null;
+      let icon = '💪';
+
+      if (booking && w === booking.eventAbsWeek) {
+        weekType = 'fight';
+        icon = '🥊';
+        details = `Luta vs ${booking.opponentName}`;
+        if (booking.isTitleFight) { weekType = 'title_fight'; icon = '🏆'; }
+      }
+
+      if (booking && w >= booking.eventAbsWeek - 4 && w < booking.eventAbsWeek && w > now) {
+        weekType = 'camp';
+        icon = '🔥';
+        details = `Camp — luta em ${booking.eventAbsWeek - w} sem`;
+      }
+
+      if (fighter.availableFromAbsWeek && w < fighter.availableFromAbsWeek && w > now) {
+        weekType = 'suspended';
+        icon = '❌';
+        details = 'Suspensão médica';
+      }
+
+      for (const promo of promotions) {
+        if (promo.nextEventAbsWeek && w === promo.nextEventAbsWeek && !booking) {
+          weekType = 'event';
+          icon = '📰';
+          details = `Evento ${promo.shortName}`;
+        }
+      }
+
+      entries.push({
+        absWeek: w, weekType, label, icon, details,
+        isFightWeek: weekType === 'fight' || weekType === 'title_fight',
+        isCurrentWeek: w === now, isPastWeek: w < now,
+      });
+    }
+
+    return {
+      currentWeek: now,
+      entries,
+      upcomingFight: booking ? {
+        opponentName: booking.opponentName,
+        promotionName: booking.promotionName,
+        absWeek: booking.eventAbsWeek,
+        isTitleFight: !!booking.isTitleFight,
+      } : null,
+    };
+  }
+
   // ===== Dashboard =====
   async getDashboard() {
     const fighter = await this.getPlayerFighter();

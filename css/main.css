@@ -997,3 +997,59 @@ tbody tr:hover td { background: var(--bg-hover); }
 .icon-alert::before { content: "\26A0"; color: #f1c40f; }
 .icon-arrow::before { content: "\2192"; }
 .icon-medal::before { content: "\25CF"; color: var(--belt-ink); }
+
+/* ===== Calendário Visual ===== */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.5rem;
+}
+.calendar-entry {
+  padding: 0.5rem;
+  border-radius: 6px;
+  background: var(--bg-card, #1a1a2e);
+  border: 1px solid var(--border, #2a2a4e);
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.calendar-entry--current {
+  border-color: var(--primary, #e74c3c);
+  background: color-mix(in srgb, var(--primary, #e74c3c) 10%, var(--bg-card, #1a1a2e));
+}
+.calendar-entry--past {
+  opacity: 0.4;
+}
+.calendar-entry--fight {
+  border-color: var(--danger, #e74c3c);
+}
+.calendar-entry--title_fight {
+  border-color: var(--warning, #f39c12);
+  background: color-mix(in srgb, var(--warning, #f39c12) 15%, var(--bg-card, #1a1a2e));
+}
+.calendar-entry--suspended {
+  border-color: var(--text-muted, #666);
+}
+.calendar-entry--camp {
+  border-color: var(--warning, #f39c12);
+}
+.calendar-entry--event {
+  border-color: var(--info, #3498db);
+}
+.calendar-entry-week {
+  font-weight: 600;
+  color: var(--text, #eee);
+}
+.calendar-entry-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+.calendar-entry-detail {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #999);
+  min-height: 1em;
+}
+.calendar-legend {
+  color: var(--text-muted, #666);
+}

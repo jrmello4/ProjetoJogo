@@ -10,6 +10,7 @@ import { RivalriesView } from './views/rivalries.js';
 import { PressConferenceView } from './views/press-conference.js';
 import { HallOfFameView } from './views/hall-of-fame.js';
 import { RetirementCeremonyView } from './views/retirement-ceremony.js';
+import { renderCalendar } from './views/calendar.js';
 import { RankingsView } from './views/rankings.js';
 import { FinanceView } from './views/finance.js';
 import { RankingService } from './services/ranking.js';
@@ -363,6 +364,9 @@ class App {
         break;
       case 'notifications':
         await this.renderNotifications();
+        break;
+      case 'calendar':
+        await this.renderCalendarView();
         break;
       case 'press-conference':
         await this.renderPressConference();
@@ -1428,6 +1432,18 @@ class App {
         this.handleSaveLoad();
       });
     });
+  }
+
+  // ===== Calendário visual =====
+  async renderCalendarView() {
+    const data = await this.game.getCalendarData();
+
+    if (!data) {
+      LayoutView.setContent('<div class="card"><div class="card-body"><p class="text-muted">Crie um personagem primeiro.</p></div></div>');
+      return;
+    }
+
+    LayoutView.setContent(renderCalendar(data));
   }
 
   async renderPressConference() {

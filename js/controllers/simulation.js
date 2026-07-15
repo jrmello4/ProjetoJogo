@@ -100,6 +100,7 @@ export class SimulationEngine {
     let finishMethod = null, finishRound = 0;
     let cornerInstruction = 'balanced';
     let staminaDebtA = 0, staminaDebtB = 0;
+    const movesUsedThisFight = [];
 
     for (let r = 1; r <= maxRounds; r++) {
       if (winner) break; // fight already finished
@@ -117,8 +118,38 @@ export class SimulationEngine {
         : (CORNER_INSTRUCTIONS[cornerInstruction] || CORNER_INSTRUCTIONS.balanced);
       const staminaDecayA = (profileA?.mods.staminaDecayReduction || 1);
       const staminaDecayB = (profileB?.mods.staminaDecayReduction || 1);
-      const staminaFactorA = Math.max(10, staminaA * (1 - (r - 1) * 0.12 * staminaDecayA) - staminaDebtA);
-      const staminaFactorB = Math.max(10, staminaB * (1 - (r - 1) * 0.12 * staminaDecayB) - staminaDebtB);
+      // Perk: groundStaminaDrainMult — reduz custo de stamina no chão
+      const groundDrainA = (profileA?.mods.groundStaminaDrainMult || 1);
+      const groundDrainB = (profileB?.mods.groundStaminaDrainMult || 1);
+      // Perk: staminaComboReduction — reduz custo de stamina em combos
+      const comboDrainA = (profileA?.mods.staminaComboReduction || 1);
+      const comboDrainB = (profileB?.mods.staminaComboReduction || 1);
+      const effectiveDrainA = staminaDecayA * groundDrainA * comboDrainA;
+      const effectiveDrainB = staminaDecayB * groundDrainB * comboDrainB;
+      const staminaFactorA = Math.max(10, staminaA * (1 - (r - 1) * 0.12 * effectiveDrainA) - staminaDebtA);
+      const staminaFactorB = Math.max(10, staminaB * (1 - (r - 1) * 0.12 * effectiveDrainB) - staminaDebtB);
+
+      // Proficiência: selecionar golpes usados neste round (weighted by moveData damageMult)
+      const selectMoves = (profile, count) => {
+        if (!profile || Object.keys(profile.moveData).length === 0) return [];
+        const entries = Object.entries(profile.moveData);
+        // damageMult escala com proficiência (1.0 base → 1.5 em 100%), então usado como peso
+        const totalWeight = entries.reduce((sum, [, m]) => sum + m.damageMult, 0);
+        if (totalWeight <= 0) return [];
+        const selected = [];
+        for (let i = 0; i < count; i++) {
+          let roll = Math.random() * totalWeight;
+          for (const [moveId, m] of entries) {
+            roll -= m.damageMult;
+            if (roll <= 0) { selected.push(moveId); break; }
+          }
+        }
+        return selected;
+      };
+      // 2-4 golpes por round por fighter
+      const movesUsedA = selectMoves(profileA, 2 + Math.floor(Math.random() * 3));
+      const movesUsedB = selectMoves(profileB, 2 + Math.floor(Math.random() * 3));
+      movesUsedThisFight.push(...movesUsedA, ...movesUsedB);
 
       const perfA = this._calcRoundPerformance(fighterA, fighterB, pressureLevel, staminaFactorA, cornerModA, plan, planEdge, profileA, matchup.bonusA);
       const perfB = this._calcRoundPerformance(fighterB, fighterA, pressureLevel, staminaFactorB, null, planB, planEdgeB, profileB, matchup.bonusB);
@@ -165,7 +196,7 @@ export class SimulationEngine {
       stats.controlTimeB += roundStats.takedownsB * 30;
 
       // Check for finish this round
-      const finish = this._checkRoundFinish(fighterA, fighterB, perfA, perfB, diff, r, roundStats, cornerModA, plan, planB);
+      const finish = this._checkRoundFinish(fighterA, fighterB, perfA, perfB, diff, r, roundStats, cornerModA, plan, planB, profileA, profileB);
       if (finish) {
         winner = finish.winner;
         loser = finish.loser;
@@ -327,6 +358,15 @@ export class SimulationEngine {
       this._applyAccumulatedDamage(winner, loser, result);
     }
 
+    // Proficiência: cada golpe usado na luta sobe +2 (spec Seção 2)
+    if (movesUsedThisFight.length > 0) {
+      const uniqueMoves = [...new Set(movesUsedThisFight)];
+      for (const moveId of uniqueMoves) {
+        fighterA.gainProficiency(moveId, 2);
+        fighterB.gainProficiency(moveId, 2);
+      }
+    }
+
     return result;
   }
 
@@ -341,9 +381,14 @@ export class SimulationEngine {
       : { score: result.totalScoreB };
 
     if (method === 'KO' || method === 'TKO') {
-      const damage = method === 'KO'
+      let damage = method === 'KO'
         ? Math.floor(Math.random() * 5) + 3  // 3-7 pontos
         : Math.floor(Math.random() * 3) + 1; // 1-3 pontos
+
+      // Perk: damageTakenReduction reduz dano permanente de KO/TKO
+      const loserProfile = StyleService.resolveFighter(loser);
+      const dmgReduction = loserProfile?.mods.damageTakenReduction || 1;
+      damage = Math.max(1, Math.floor(damage * dmgReduction));
 
       loser.attributes.chin = clamp(loser.attributes.chin - damage, 1, 99);
       loser.attributes.durability = clamp(loser.attributes.durability - Math.floor(damage * 0.7), 1, 99);
@@ -396,18 +441,37 @@ export class SimulationEngine {
     // Plano de jogo (a luta inteira) × instrução de córner (este round)
     const technique = fighter.techniqueScore * fatiguePenalty * adjustedStamina;
     const cardio = a.cardio * fatiguePenalty * moraleFactor * adjustedStamina * game.cardioMod;
+
+    // Perk: cardioRegeneration restaura um pouco de stamina
+    const cardioEffective = cardio * (1 + (mods.cardioRegeneration || 0));
+
     const iq = a.fightIQ * determinationFactor;
 
-    // Striking: boxing/kickboxing/muayThai + power, footwork, headMovement, clinch, speed, aggression
+    // Striking: weighted average from moveset proficiency (spec Seção 2)
+    // Cada golpe do moveset contribui com seu damageMult (que já inclui proficiência)
+    // ao invés do strikingScore abstrato.
+    const moveEntries = Object.values(prof.moveData);
+    let effectiveStrikingMult = 1;
+    if (moveEntries.length > 0) {
+      const avgDamageMult = moveEntries.reduce((sum, m) => sum + m.damageMult, 0) / moveEntries.length;
+      effectiveStrikingMult = avgDamageMult;
+    }
+    // Perk: strikingLateRound melhora striking nos rounds finais
+    const strikingLateBonus = mods.strikingLateRound || 1;
+
     const strikingPower = 1 + (a.power ?? 50) / 200;
     const strikingDefense = 1 + ((a.footwork ?? 50) + (a.headMovement ?? 50)) / 400;
     const strikingSpeed = 1 + (a.speed ?? 50) / 200;
     const aggressionMod = 1 + ((a.aggression ?? 50) - 50) / 200;
     const clinchFactor = 1 + (a.clinch ?? 50) / 300;
 
+    // Perk: powerMultiplier amplifica potência
+    const powerMult = mods.powerMultiplier || 1;
+
     const striking = fighter.strikingScore * fatiguePenalty * adjustedStamina
       * corner.strikingMod * game.strikingMod
-      * strikingPower * strikingSpeed * aggressionMod;
+      * strikingPower * strikingSpeed * aggressionMod
+      * effectiveStrikingMult * strikingLateBonus * powerMult;
 
     // Grappling: wrestling/bjj + takedowns, takedownDefense, groundControl, submissionOffense, strength
     const tdPower = 1 + (a.takedowns ?? 50) / 200;
@@ -430,13 +494,16 @@ export class SimulationEngine {
     // Composure: ajuda em big events e decisões apertadas
     const composureFactor = 1 + ((a.composure ?? 50) - 50) / 200;
 
+    // Perk: composureLateRounds protege performance nos rounds finais
+    const composureLateBonus = mods.composureLateRounds || 1;
+
     const styleAdvantage = matchupBonus;
 
     const baseScore =
       technique * 0.2 +
       striking * 0.2 +
       grappling * 0.15 +
-      cardio * 0.1 +
+      cardioEffective * 0.1 +
       iq * 0.1 +
       chin * 0.05 +
       styleAdvantage * 5 +
@@ -447,7 +514,7 @@ export class SimulationEngine {
 
     const noise = Gaussian.random(0, 6);
     // A leitura do adversário: acertar o plano paga, errar cobra.
-    let finalScore = (baseScore + noise) * (1 + planEdge * adaptBonus);
+    let finalScore = (baseScore + noise) * (1 + planEdge * adaptBonus) * composureLateBonus;
 
     // DNA traits + composure escalam com a pressão da luta (§C.3) em vez
     // de tudo-ou-nada — um título pesa mais que uma luta regional de tier 1.
@@ -561,7 +628,10 @@ export class SimulationEngine {
   // `planB` (Fase 3): o adversário agora traz plano, então o chinMod dele
   // também protege o queixo dele. Sem isso, o counter que ele monta contra a
   // sua fita só valeria na ofensiva — e um plano defensivo não defenderia nada.
-  static _checkRoundFinish(fighterA, fighterB, perfA, perfB, diff, round, roundStats, cornerModA = null, plan = null, planB = null) {
+  static _checkRoundFinish(fighterA, fighterB, perfA, perfB, diff, round, roundStats, cornerModA = null, plan = null, planB = null, profileA = null, profileB = null) {
+    const modsA = profileA?.mods || {};
+    const modsB = profileB?.mods || {};
+
     const finishChance = Math.min(0.4, 0.05 + Math.abs(diff) * 0.008);
 
     if (Math.random() > finishChance * (1 + round * 0.1)) return null;
@@ -587,20 +657,33 @@ export class SimulationEngine {
     // Submissão: subOffense do vencedor vs subDefense do perdedor
     const subAdvantage = (winnerPerf.submissionOffense / 100) - (loserPerf.submissionDefense / 100);
 
-    // Power do vencedor aumenta KO chance
+    // Perk: submissionChanceMult amplifica chance de finalização
+    const winnerMods = winner === fighterA ? modsA : modsB;
+    const loserMods = loser === fighterA ? modsA : modsB;
+    const subChanceMult = winnerMods.submissionChanceMult || 1;
+
+    // Perk: neverSubmittedLowStamina — lutar com stamina baixa não facilita submission
+    const loserStaminaFactor = loserMods.neverSubmittedLowStamina ? 1 : 1;
+
+    // Perk: subChanceLateRounds — aumenta chance de sub em rounds finais
+    const subLateBonus = winnerMods.subChanceLateRounds || 0;
+
+    // Power do vencedor aumenta KO chance + perk koChanceBonus
     const powerMod = 1 + (winnerPerf.power - 50) / 200;
+    const koBonus = winnerMods.koChanceBonus || 0;
 
     const methods = [];
 
     // KO: high striking diff and low chin, amplified by power
     if (strikeDiff > 3 * (1 / powerMod) && chinFactor < 0.7) {
-      methods.push({ method: 'KO', weight: Math.round(30 * powerMod) });
-      methods.push({ method: 'TKO', weight: Math.round(40 * powerMod) });
+      methods.push({ method: 'KO', weight: Math.round(30 * powerMod * (1 + koBonus)) });
+      methods.push({ method: 'TKO', weight: Math.round(40 * powerMod * (1 + koBonus)) });
     }
 
-    // Submission: high grappling diff + sub advantage
+    // Submission: high grappling diff + sub advantage + perk mods
     if (grappleDiff > 3 && subAdvantage > 0) {
-      methods.push({ method: 'Submission', weight: Math.round(35 * (1 + subAdvantage)) });
+      const subWeight = Math.round(35 * (1 + subAdvantage + subLateBonus) * subChanceMult);
+      methods.push({ method: 'Submission', weight: subWeight });
     }
 
     // TKO by strikes (sempre possível com strikingDiff alto)
@@ -624,6 +707,9 @@ export class SimulationEngine {
 
   // `outcome`: 'win' | 'loss' | 'draw'
   static _updateFighter(fighter, opponent, outcome, method, round, dateISO = null) {
+    const fighterProfile = StyleService.resolveFighter(fighter);
+    const moraleReduction = fighterProfile?.mods.moraleLossReduction || 1;
+
     if (outcome === 'win') {
       fighter.record.wins++;
       fighter.applyMoraleChange(10);
@@ -632,10 +718,10 @@ export class SimulationEngine {
       fighter.applyMoraleChange(-2); // ninguém comemora um empate, mas não é derrota
     } else {
       fighter.record.losses++;
-      fighter.applyMoraleChange(-12);
+      fighter.applyMoraleChange(Math.round(-12 * moraleReduction));
       // Épico D — KO/TKO é mais devastador que decisão para a moral
       if (method && (method.method?.startsWith('KO') || method.method?.startsWith('TKO'))) {
-        fighter.applyMoraleChange(-6); // -18 total (KO abala mais)
+        fighter.applyMoraleChange(Math.round(-6 * moraleReduction)); // -18 total (KO abala mais)
       }
       // Decisão: moral leve (perdeu mas lutou, não foi humilhado)
     }

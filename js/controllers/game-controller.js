@@ -411,9 +411,11 @@ export class GameController {
       for (const result of evt.playerResults) {
         if (result && result.winnerId) {
           const xpGain = LEVEL_CONFIG.XP_PER_FIGHT + (result.winnerId === fighter.id ? LEVEL_CONFIG.XP_PER_WIN_BONUS : 0);
+          const perkPtsBefore = fighter.perkPoints;
           const levelsUp = fighter.addXP(xpGain);
           if (levelsUp > 0) {
-            const bonusPts = fighter.perkPoints > 0 && levelsUp >= 3 ? ` +${Math.floor(levelsUp / 3)} ponto(s) de perk!` : '';
+            const perkGained = fighter.perkPoints - perkPtsBefore;
+            const bonusPts = perkGained > 0 ? ` +${perkGained} ponto(s) de perk!` : '';
             await this.notifService.add('success', '⬆️ Level Up!', `Você subiu para Nv.${fighter.level}!${bonusPts}`);
           }
         }
@@ -440,9 +442,12 @@ export class GameController {
 
     // XP: treinar dá XP
     if (fighter) {
+      const perkPtsBefore = fighter.perkPoints;
       const levelsUp = fighter.addXP(LEVEL_CONFIG.XP_PER_WEEK_TRAINED);
       if (levelsUp > 0) {
-        await this.notifService.add('success', '⬆️ Level Up!', `Treino semanal te levou ao Nv.${fighter.level}!`);
+        const perkGained = fighter.perkPoints - perkPtsBefore;
+        const bonusPts = perkGained > 0 ? ` +${perkGained} ponto(s) de perk!` : '';
+        await this.notifService.add('success', '⬆️ Level Up!', `Treino semanal te levou ao Nv.${fighter.level}!${bonusPts}`);
       }
     }
 

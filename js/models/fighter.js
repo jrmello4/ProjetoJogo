@@ -513,7 +513,7 @@ export class Fighter {
       this.xp -= needed;
       this.level++;
       gained++;
-      if (gained % LEVEL_CONFIG.PERK_POINT_EVERY_N_LEVELS === 0) {
+      if (this.level % LEVEL_CONFIG.PERK_POINT_EVERY_N_LEVELS === 0) {
         this.perkPoints++;
       }
     }

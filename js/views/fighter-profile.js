@@ -47,7 +47,8 @@ export class FighterProfileView {
   }
 
   static render(fighter, fightHistory = [], isPlayer = false) {
-    const displayHistory = fightHistory.length > 0 ? fightHistory : fighter.fights || [];
+    if (!fighter) return '<div class="empty-state"><p>Lutador não encontrado.</p></div>';
+    const displayHistory = fightHistory.length > 0 ? fightHistory : (fighter.fights || []);
 
     const attrBars = (attrs, label, colorClass) => {
       return `
@@ -126,17 +127,17 @@ export class FighterProfileView {
     return `
       <div class="page-header">
         <h2>
-          ${getNationalityFlag(fighter.nationality.code)} ${fighter.name}
+          ${getNationalityFlag(fighter.nationality?.code || '')} ${fighter.name}
           <button class="btn-icon fighter-rename" data-id="${fighter.id}" title="Renomear lutador" style="font-size:0.8rem;vertical-align:middle;margin-left:0.5rem;cursor:pointer;background:none;border:none;padding:2px;opacity:0.5;transition:opacity 0.2s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.5">✏️</button>
         </h2>
-        <p>${fighter.nationality.name} · ${fighter.age} anos · ${FIGHTING_STYLES[fighter.style]?.label || fighter.fightingStyle}</p>
+        <p>${fighter.nationality?.name || 'Desconhecido'} · ${fighter.age} anos · ${FIGHTING_STYLES[fighter.style]?.label || fighter.fightingStyle || 'Freestyle'}</p>
       </div>
 
       <div class="grid grid-cols-4 mb-4">
         <div class="card">
           <div class="card-title">Recorde</div>
           <div class="stat-value">${fighter.record.wins}-${fighter.record.losses}-${fighter.record.draws}</div>
-          <div class="stat-label">${fighter.totalFights} lutas · ${fighter.winRate.toFixed(1)}% win rate</div>
+          <div class="stat-label">${fighter.totalFights || 0} lutas · ${(fighter.winRate || 0).toFixed(1)}% win rate</div>
         </div>
         <div class="card">
           <div class="card-title">OVR</div>
@@ -193,8 +194,8 @@ export class FighterProfileView {
             <span class="card-title">💪 Físico</span>
           </div>
           <div class="attr-grid">
-            ${attrBars(fighter.attributes.cardio, 'Cardio', fighter.attributes.cardio >= 70 ? 'high' : fighter.attributes.cardio >= 40 ? 'medium' : 'low')}
-            ${attrBars(fighter.attributes.chin, 'Chin', fighter.attributes.chin >= 70 ? 'high' : fighter.attributes.chin >= 40 ? 'medium' : 'low')}
+            ${attrBars(fighter.attributes.cardio ?? 0, 'Cardio', (fighter.attributes.cardio ?? 0) >= 70 ? 'high' : (fighter.attributes.cardio ?? 0) >= 40 ? 'medium' : 'low')}
+            ${attrBars(fighter.attributes.chin ?? 0, 'Chin', (fighter.attributes.chin ?? 0) >= 70 ? 'high' : (fighter.attributes.chin ?? 0) >= 40 ? 'medium' : 'low')}
             ${fighter.attributes.strength !== undefined ? attrBars(fighter.attributes.strength, 'Strength', fighter.attributes.strength >= 70 ? 'high' : fighter.attributes.strength >= 40 ? 'medium' : 'low') : ''}
             ${fighter.attributes.speed !== undefined ? attrBars(fighter.attributes.speed, 'Speed', fighter.attributes.speed >= 70 ? 'high' : fighter.attributes.speed >= 40 ? 'medium' : 'low') : ''}
             ${fighter.attributes.durability !== undefined ? attrBars(fighter.attributes.durability, 'Durability', fighter.attributes.durability >= 70 ? 'high' : fighter.attributes.durability >= 40 ? 'medium' : 'low') : ''}
@@ -207,7 +208,7 @@ export class FighterProfileView {
             <span class="card-title">🧠 Mental</span>
           </div>
           <div class="attr-grid">
-            ${attrBars(fighter.attributes.fightIQ, 'Fight IQ', fighter.attributes.fightIQ >= 70 ? 'high' : fighter.attributes.fightIQ >= 40 ? 'medium' : 'low')}
+            ${attrBars(fighter.attributes.fightIQ ?? 0, 'Fight IQ', (fighter.attributes.fightIQ ?? 0) >= 70 ? 'high' : (fighter.attributes.fightIQ ?? 0) >= 40 ? 'medium' : 'low')}
             ${fighter.attributes.composure !== undefined ? attrBars(fighter.attributes.composure, 'Composure', fighter.attributes.composure >= 70 ? 'high' : fighter.attributes.composure >= 40 ? 'medium' : 'low') : ''}
             ${fighter.attributes.aggression !== undefined ? attrBars(fighter.attributes.aggression, 'Aggression', fighter.attributes.aggression >= 70 ? 'high' : fighter.attributes.aggression >= 40 ? 'medium' : 'low') : ''}
             ${fighter.attributes.adaptability !== undefined ? attrBars(fighter.attributes.adaptability, 'Adaptability', fighter.attributes.adaptability >= 70 ? 'high' : fighter.attributes.adaptability >= 40 ? 'medium' : 'low') : ''}
@@ -221,23 +222,23 @@ export class FighterProfileView {
           <div class="grid grid-cols-2 gap-3">
             <div>
               <div class="text-xs text-muted">Técnica</div>
-              <div class="text-sm font-bold">${Math.round(fighter.techniqueScore)}</div>
+              <div class="text-sm font-bold">${Math.round(fighter.techniqueScore || 0)}</div>
             </div>
             <div>
               <div class="text-xs text-muted">Striking</div>
-              <div class="text-sm font-bold">${Math.round(fighter.strikingScore)}</div>
+              <div class="text-sm font-bold">${Math.round(fighter.strikingScore || 0)}</div>
             </div>
             <div>
               <div class="text-xs text-muted">Grappling</div>
-              <div class="text-sm font-bold">${Math.round(fighter.grapplingScore)}</div>
+              <div class="text-sm font-bold">${Math.round(fighter.grapplingScore || 0)}</div>
             </div>
             <div>
               <div class="text-xs text-muted">Média Atributos</div>
-              <div class="text-sm font-bold">${Math.round(fighter.averageSkill)}</div>
+              <div class="text-sm font-bold">${Math.round(fighter.averageSkill || 0)}</div>
             </div>
             <div>
               <div class="text-xs text-muted">Taxa de Vitória</div>
-              <div class="text-sm font-bold">${fighter.winRate.toFixed(1)}%</div>
+              <div class="text-sm font-bold">${(fighter.winRate || 0).toFixed(1)}%</div>
             </div>
             <div>
               <div class="text-xs text-muted">Estilo</div>
@@ -266,7 +267,7 @@ export class FighterProfileView {
             <div class="progress-bar" style="height:10px">
               <div class="progress-fill ${fighter.loyalty >= 70 ? 'high' : fighter.loyalty >= 40 ? 'medium' : 'low'}" style="width:${fighter.loyalty}%"></div>
             </div>
-            <div class="text-xs text-muted mt-2">${fighter.loyalty}%</div>
+            <div class="text-xs text-muted mt-2">${fighter.loyalty ?? 0}%</div>
           </div>
 
           ${fighter.expectation ? `
@@ -294,8 +295,8 @@ export class FighterProfileView {
           <span class="card-title">DNA Oculto</span>
         </div>
         ${(() => {
-          const allTraits = fighter.dnaTraits;
-          const visible = isPlayer ? allTraits.filter(t => fighter.isDiscovered(t.key)) : allTraits;
+          const allTraits = fighter.dnaTraits || [];
+          const visible = isPlayer ? allTraits.filter(t => t && fighter.isDiscovered(t.key)) : allTraits;
           const hiddenCount = isPlayer ? allTraits.length - visible.length : 0;
           return `
             <div class="flex gap-2 flex-wrap">
@@ -309,15 +310,15 @@ export class FighterProfileView {
               <div class="grid grid-cols-3 gap-3 mt-3" style="border-top:1px solid var(--border);padding-top:0.75rem">
                 <div>
                   <div class="text-xs text-muted">Potencial</div>
-                  <div class="text-sm font-bold">${fighter.isDiscovered('potential') ? fighter.hidden.potential : '???'}</div>
+                  <div class="text-sm font-bold">${fighter.isDiscovered('potential') ? (fighter.hidden?.potential || '???') : '???'}</div>
                 </div>
                 <div>
                   <div class="text-xs text-muted">Disciplina</div>
-                  <div class="text-sm font-bold">${fighter.isDiscovered('discipline') ? fighter.hidden.discipline : '???'}</div>
+                  <div class="text-sm font-bold">${fighter.isDiscovered('discipline') ? (fighter.hidden?.discipline || '???') : '???'}</div>
                 </div>
                 <div>
                   <div class="text-xs text-muted">Determinação</div>
-                  <div class="text-sm font-bold">${fighter.isDiscovered('determination') ? fighter.hidden.determination : '???'}</div>
+                  <div class="text-sm font-bold">${fighter.isDiscovered('determination') ? (fighter.hidden?.determination || '???') : '???'}</div>
                 </div>
               </div>
             ` : ''}
@@ -326,7 +327,7 @@ export class FighterProfileView {
       </div>
 
       <!-- Sequelas permanentes (§B.2) -->
-      ${fighter.permanentScars.length > 0 ? `
+      ${(fighter.permanentScars || []).length > 0 ? `
         <div class="card mt-4">
           <div class="card-header">
             <span class="card-title">Sequelas de Lesão</span>
@@ -360,7 +361,7 @@ export class FighterProfileView {
         const styleDef = FIGHTING_STYLES[fighter.style] || FIGHTING_STYLES.freestyle;
         const poolMoves = styleDef.poolMoves || [];
         const equippedSet = new Set(fighter.moveset);
-        const maxMoves = fighter.getMaxMoves();
+        const maxMoves = typeof fighter.getMaxMoves === 'function' ? fighter.getMaxMoves() : 6;
         return `
         <div class="card mt-4">
           <div class="card-header">
@@ -378,7 +379,7 @@ export class FighterProfileView {
             <div class="grid grid-col" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0.5rem">
               ${fighter.moveset.map(moveId => {
                 const move = MOVES[moveId];
-                const prof = fighter.getMoveProficiency(moveId);
+                const prof = typeof fighter.getMoveProficiency === 'function' ? fighter.getMoveProficiency(moveId) : 0;
                 return `
                   <div class="flex items-center gap-2" style="padding:0.25rem 0;border-bottom:1px solid var(--border)">
                     <span class="text-sm" style="flex:1">${move?.name || moveId}</span>
@@ -414,8 +415,8 @@ export class FighterProfileView {
           </div>
           <div class="grid grid-col" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:0.75rem">
             ${Object.entries(PERKS).map(([id, perk]) => {
-              const owned = fighter.hasPerk(id);
-              const canLearn = fighter.canLearnPerk(id);
+              const owned = typeof fighter.hasPerk === 'function' && fighter.hasPerk(id);
+              const canLearn = typeof fighter.canLearnPerk === 'function' && fighter.canLearnPerk(id);
               const classes = ['perk-node'];
               if (owned) classes.push('owned');
               else if (canLearn && fighter.perkPoints > 0) classes.push('available');
@@ -458,9 +459,9 @@ export class FighterProfileView {
           </div>
           <div>
             <div class="text-xs text-muted">Facilidade de Corte</div>
-            <div class="text-sm font-bold">${fighter.weightCut.ease}%</div>
+            <div class="text-sm font-bold">${fighter.weightCut?.ease ?? 0}%</div>
             <div class="progress-bar mt-1" style="height:6px">
-              <div class="progress-fill ${fighter.weightCut.ease >= 60 ? 'high' : fighter.weightCut.ease >= 40 ? 'medium' : 'low'}" style="width:${fighter.weightCut.ease}%"></div>
+              <div class="progress-fill ${(fighter.weightCut?.ease ?? 0) >= 60 ? 'high' : (fighter.weightCut?.ease ?? 0) >= 40 ? 'medium' : 'low'}" style="width:${fighter.weightCut?.ease ?? 0}%"></div>
             </div>
           </div>
         </div>
@@ -527,12 +528,14 @@ export class FighterProfileView {
   }
 
   static bindEvents(fighter, { onPerkLearned, onMovesetChange, onStyleSwitch } = {}) {
+    if (!fighter) return;
+
     document.querySelectorAll('.btn-learn-perk').forEach(btn => {
       btn.addEventListener('click', () => {
         const node = btn.closest('.perk-node');
         if (!node) return;
         const perkId = node.dataset.perkId;
-        if (fighter.learnPerk(perkId)) {
+        if (typeof fighter.learnPerk === 'function' && fighter.learnPerk(perkId)) {
           if (onPerkLearned) onPerkLearned();
         }
       });
@@ -541,6 +544,7 @@ export class FighterProfileView {
     document.querySelectorAll('.btn-remove-move').forEach(btn => {
       btn.addEventListener('click', async () => {
         const moveId = btn.dataset.moveId;
+        if (!Array.isArray(fighter.moveset)) return;
         const idx = fighter.moveset.indexOf(moveId);
         if (idx === -1) return;
         fighter.moveset.splice(idx, 1);
@@ -551,7 +555,8 @@ export class FighterProfileView {
     document.querySelectorAll('.btn-add-move').forEach(btn => {
       btn.addEventListener('click', async () => {
         const moveId = btn.dataset.moveId;
-        if (fighter.moveset.length >= fighter.getMaxMoves()) return;
+        if (!Array.isArray(fighter.moveset)) return;
+        if (fighter.moveset.length >= (typeof fighter.getMaxMoves === 'function' ? fighter.getMaxMoves() : 6)) return;
         fighter.moveset.push(moveId);
         if (onMovesetChange) onMovesetChange();
       });

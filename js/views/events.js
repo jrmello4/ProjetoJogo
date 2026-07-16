@@ -18,14 +18,14 @@ export class EventsView {
         </div>
         <div data-reveal-stagger>
           ${promotions.map(p => {
-            const weeksOut = p.nextEventAbsWeek - now;
-            const eventBookings = bookings.filter(b => b.promotionId === p.id && b.eventAbsWeek === p.nextEventAbsWeek);
+            const weeksOut = (p.nextEventAbsWeek || 0) - now;
+            const eventBookings = Array.isArray(bookings) ? bookings.filter(b => b.promotionId === p.id && b.eventAbsWeek === p.nextEventAbsWeek) : [];
             return `
               <div style="padding:0.75rem 0;border-bottom:1px solid var(--border)">
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
                     ${tierBadge(p.tier)}
-                    <span class="font-bold">${p.nextEventName()}</span>
+                    <span class="font-bold">${p.nextEventName ? p.nextEventName() : p.name || 'Evento'}</span>
                     <span class="text-xs text-muted">${p.name}</span>
                   </div>
                   <span class="badge ${weeksOut <= 0 ? 'badge-danger' : 'badge-warning'}">${weeksOut <= 0 ? 'esta semana' : `em ${weeksOut} sem`}</span>
@@ -90,7 +90,7 @@ export class EventsView {
   static renderLiveSimulation(event, results, playerFighterIds = new Set()) {
     const isFinish = (m) => m && !m.startsWith('Decision');
 
-    const fightsHtml = results.map((r, i) => {
+    const fightsHtml = (results || []).map((r, i) => {
       const aWon = r.winnerId === r.fighterAId;
       const bWon = r.winnerId === r.fighterBId;
       const finish = isFinish(r.method);
@@ -98,10 +98,10 @@ export class EventsView {
       const bIsPlayer = playerFighterIds.has(r.fighterBId);
 
       const lead = (a, b) => a > b ? ['tot-lead', ''] : b > a ? ['', 'tot-lead'] : ['', ''];
-      const [strA, strB] = lead(r.stats.sigStrikesA, r.stats.sigStrikesB);
-      const [tdA, tdB] = lead(r.stats.takedownsA, r.stats.takedownsB);
-      const [kdA, kdB] = lead(r.stats.knockdownsA, r.stats.knockdownsB);
-      const [subA, subB] = lead(r.stats.subAttemptsA, r.stats.subAttemptsB);
+      const [strA, strB] = r.stats ? lead(r.stats.sigStrikesA, r.stats.sigStrikesB) : ['', ''];
+      const [tdA, tdB] = r.stats ? lead(r.stats.takedownsA, r.stats.takedownsB) : ['', ''];
+      const [kdA, kdB] = r.stats ? lead(r.stats.knockdownsA, r.stats.knockdownsB) : ['', ''];
+      const [subA, subB] = r.stats ? lead(r.stats.subAttemptsA, r.stats.subAttemptsB) : ['', ''];
 
       return `
         <div class="card mb-2 live-fight ${aIsPlayer || bIsPlayer ? 'live-fight--player' : ''} ${r.isTitleFight ? 'live-fight--title' : ''}" data-live-index="${i}">
@@ -134,10 +134,10 @@ export class EventsView {
           </div>
 
           <table class="tale-of-tape">
-            <tr><td class="${strA}">${r.stats.sigStrikesA}</td><td>Golpes significativos</td><td class="${strB}">${r.stats.sigStrikesB}</td></tr>
-            <tr><td class="${tdA}">${r.stats.takedownsA}</td><td>Quedas</td><td class="${tdB}">${r.stats.takedownsB}</td></tr>
-            <tr><td class="${kdA}">${r.stats.knockdownsA}</td><td>Knockdowns</td><td class="${kdB}">${r.stats.knockdownsB}</td></tr>
-            <tr><td class="${subA}">${r.stats.subAttemptsA}</td><td>Tentativas de finalização</td><td class="${subB}">${r.stats.subAttemptsB}</td></tr>
+            <tr><td class="${strA}">${r.stats?.sigStrikesA ?? 0}</td><td>Golpes significativos</td><td class="${strB}">${r.stats?.sigStrikesB ?? 0}</td></tr>
+            <tr><td class="${tdA}">${r.stats?.takedownsA ?? 0}</td><td>Quedas</td><td class="${tdB}">${r.stats?.takedownsB ?? 0}</td></tr>
+            <tr><td class="${kdA}">${r.stats?.knockdownsA ?? 0}</td><td>Knockdowns</td><td class="${kdB}">${r.stats?.knockdownsB ?? 0}</td></tr>
+            <tr><td class="${subA}">${r.stats?.subAttemptsA ?? 0}</td><td>Tentativas de finalização</td><td class="${subB}">${r.stats?.subAttemptsB ?? 0}</td></tr>
           </table>
         </div>
       `;
@@ -175,7 +175,7 @@ export class EventsView {
       </div>
 
       <div class="mb-4">
-        ${results.map((r, i) => {
+        ${(results || []).map((r, i) => {
           const isPlayer = playerFighterIds.has(r.fighterAId) || playerFighterIds.has(r.fighterBId);
           return `
           <div class="card mb-2 fight-result-card" style="cursor:pointer${isPlayer ? ';border-left:3px solid var(--gold,#d4a843)' : ''}" data-expand="fight-${i}">
@@ -372,7 +372,8 @@ export class EventsView {
   // ===== Resumo de período (simular meses/anos de uma vez) =====
 
   static renderPeriodSummary(result) {
-    const { weeksSimulated, offersAccepted, cashDelta, popularityDelta, winsDelta, lossesDelta, fightResults, milestonesUnlocked } = result;
+    if (!result) return '<div class="empty-state"><p>Nenhum resultado disponível.</p></div>';
+    const { weeksSimulated, offersAccepted, cashDelta, popularityDelta, winsDelta, lossesDelta, fightResults = [], milestonesUnlocked = [] } = result;
 
     const fightsHtml = fightResults.length === 0
       ? '<div class="empty-state"><p>Nenhuma luta sua durante o período — só o tempo passou.</p></div>'

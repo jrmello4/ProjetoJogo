@@ -421,13 +421,14 @@ export class DashboardView {
         </div>
         <div data-reveal-stagger>
           ${promotions.map(p => {
-            const weeksOut = p.nextEventAbsWeek - now;
+            const weeksOut = (p.nextEventAbsWeek || 0) - now;
             const hasBooking = bookings.some(b => b.promotionId === p.id && b.eventAbsWeek === p.nextEventAbsWeek);
+            const eventName = p.nextEventName ? p.nextEventName() : p.name || 'Evento';
             return `
               <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
                 <div class="flex items-center gap-2">
                   ${tierBadge(p.tier)}
-                  <span class="text-sm font-bold">${p.nextEventName()}</span>
+                  <span class="text-sm font-bold">${eventName}</span>
                   ${hasBooking ? '<span class="badge badge-success" style="font-size:0.6rem">VOCÊ NO CARD</span>' : ''}
                 </div>
                 <span class="text-xs text-muted">${weeksOut <= 0 ? 'esta semana' : `em ${weeksOut} sem`}</span>

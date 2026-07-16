@@ -72,7 +72,7 @@ export const MANAGERS = [
 export const MANAGER_CONFIG = {
   STARTING_TRUST: 50,
   TERMINATE_FINE_RATIO: 0.5, // igual à multa de rescisão de promoção (NEGOTIATION/ContractService)
-  AGGRESSIVE_LEVERAGE_BONUS: 0.5, // soma na leverage de negociação de bolsa
+  AGGRESSIVE_LEVERAGE_BONUS: 0.3, // soma na leverage de negociação de bolsa
   AGGRESSIVE_RESCIND_BONUS: 0.15, // soma na chance da promoção cancelar a oferta
   CONSERVATIVE_LEVERAGE_PENALTY: -0.2,
   BASELINE_SCOUTING_FROM_CONNECTIONS: 45, // connections acima disto dá SCOUTING_CONFIG.BASELINE_WITH_SCOUT
@@ -452,7 +452,7 @@ export const TAPE_CONFIG = {
   EXPOSURE_ROOKIE_SCALE: 0.35,
   EXPOSURE_IDLE_AFTER_WEEKS: 12, // sumir do mapa te torna um enigma de novo
   EXPOSURE_IDLE_DECAY: 1,
-  EXPOSURE_NEW_WEAPON_DROP: 25,  // revelar arma nova obriga o mundo a te reestudar
+  EXPOSURE_NEW_WEAPON_DROP: 15,  // revelar arma nova obriga o mundo a te reestudar (era 25, reduzido para diminuir o ciclo infinito de surpresa → revelar → nova arma)
 
   // --- assinatura: o plano que você repete ---
   SIGNATURE_WINDOW: 5,
@@ -610,6 +610,7 @@ export const SPONSOR_CONFIG = {
   WEEKLY_OFFER_CHANCE: 0.15, // chance semanal de uma marca te procurar
   MAX_ACTIVE: 2,             // contratos simultâneos
   OFFER_EXPIRY_WEEKS: 4,
+  COOLDOWN_WEEKS: 8,         // semanas sem novas ofertas após um contrato encerrar (anti-chaining)
   POPULARITY_PER_GOAL_MET: 2,
   POPULARITY_PER_GOAL_FAILED: -1,
   CLEAN_CLAUSE_PROVOCATION_LIMIT: 2, // provocações públicas no período tolerado antes de cancelar

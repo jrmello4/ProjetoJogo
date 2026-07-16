@@ -101,6 +101,13 @@ export class SimulationEngine {
     let cornerInstruction = 'balanced';
     let staminaDebtA = 0, staminaDebtB = 0;
 
+    // AI corner instruction — heuristic based on the opponent's style so the
+    // AI fighter does not fight with flat 1.0 every round (was null / missing).
+    const aiStyle = fighterB.style;
+    let cornerInstructionB = 'balanced';
+    if (aiStyle === 'boxer' || aiStyle === 'muayThai') cornerInstructionB = 'aggressive';
+    else if (aiStyle === 'wrestler' || aiStyle === 'bjj') cornerInstructionB = 'balanced';
+
     for (let r = 1; r <= maxRounds; r++) {
       if (winner) break; // fight already finished
 
@@ -115,13 +122,14 @@ export class SimulationEngine {
       const cornerModA = cornerInstruction === 'instinct'
         ? this._instinctMod(fighterA)
         : (CORNER_INSTRUCTIONS[cornerInstruction] || CORNER_INSTRUCTIONS.balanced);
+      const cornerModB = CORNER_INSTRUCTIONS[cornerInstructionB] || CORNER_INSTRUCTIONS.balanced;
       const staminaDecayA = (profileA?.mods.staminaDecayReduction || 1);
       const staminaDecayB = (profileB?.mods.staminaDecayReduction || 1);
       const staminaFactorA = Math.max(10, staminaA * (1 - (r - 1) * 0.12 * staminaDecayA) - staminaDebtA);
       const staminaFactorB = Math.max(10, staminaB * (1 - (r - 1) * 0.12 * staminaDecayB) - staminaDebtB);
 
       const perfA = this._calcRoundPerformance(fighterA, fighterB, pressureLevel, staminaFactorA, cornerModA, plan, planEdge, profileA, matchup.bonusA);
-      const perfB = this._calcRoundPerformance(fighterB, fighterA, pressureLevel, staminaFactorB, null, planB, planEdgeB, profileB, matchup.bonusB);
+      const perfB = this._calcRoundPerformance(fighterB, fighterA, pressureLevel, staminaFactorB, cornerModB, planB, planEdgeB, profileB, matchup.bonusB);
 
       // Track total scores for decision
       totalScoreA += perfA.score;
@@ -342,7 +350,7 @@ export class SimulationEngine {
 
     if (method === 'KO' || method === 'TKO') {
       const damage = method === 'KO'
-        ? Math.floor(Math.random() * 5) + 3  // 3-7 pontos
+        ? Math.floor(Math.random() * 4) + 2  // 2-5 pontos (era 3-7, reduzido para evitar que duas lutas destruam o chin)
         : Math.floor(Math.random() * 3) + 1; // 1-3 pontos
 
       loser.attributes.chin = clamp(loser.attributes.chin - damage, 1, 99);
@@ -355,9 +363,11 @@ export class SimulationEngine {
   // disso, escala em torno de 1.0 conforme composure/fightIQ — quem tem a
   // cabeça no lugar e lê bem o jogo se vira sozinho tão bem quanto (ou
   // melhor) que um bom conselho; quem não tem, sofre um pouco por decidir
-  // tudo sozinho no calor da luta. fatigueMod fica neutro (1.0): instinto
-  // não impõe um ritmo artificial, então não deveria cobrar nem poupar
-  // fôlego como 'aggressive'/'defensive' fazem.
+  // tudo sozinho no calor da luta. fatigueMod tem um custo mínimo (1.05) —
+  // instinto não impõe um ritmo artificial, mas decidir tudo no calor da luta
+  // ainda cobra fôlego. Antes era 1.0 (neutro), o que tornava instinto
+  // estritamente superior a todas as outras opções para fighters com
+  // composure+fightIQ > 110 (fix de balanceamento).
   static _instinctMod(fighter) {
     const composure = fighter.attributes.composure ?? 50;
     const fightIQ = fighter.attributes.fightIQ ?? 50;
@@ -369,7 +379,7 @@ export class SimulationEngine {
       label: 'Instinto', icon: '🧭', desc: 'Sem córner — só a sua própria leitura da luta.',
       strikingMod: factor,
       grapplingMod: factor,
-      fatigueMod: 1.0,
+      fatigueMod: 1.05,
       chinMod: factor,
     };
   }
@@ -567,7 +577,7 @@ export class SimulationEngine {
     if (Math.random() > finishChance * (1 + round * 0.1)) return null;
 
     // Who gets finished? The one with lower performance
-    const loser = perfA.score < perfB.score ? fighterA : fighterB;
+    const loser = perfA.score < perfB.score ? fighterA : (perfB.score < perfA.score ? fighterB : (Math.random() < 0.5 ? fighterA : fighterB));
     const winner = loser === fighterA ? fighterB : fighterA;
     const loserPerf = loser === fighterA ? perfA : perfB;
     const winnerPerf = loser === fighterA ? perfB : perfA;

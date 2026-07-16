@@ -23,7 +23,7 @@ const TYPE_CATEGORY = {
 
 export class NotificationsView {
   static render(notifications, unreadCount, activeCategory = 'all') {
-    if (notifications.length === 0) {
+    if (!notifications || notifications.length === 0) {
       return `
         <div class="page-header">
           <h2>Central</h2>

@@ -556,6 +556,8 @@ export class WorldService {
       const pair = div.shift();
       if (pair) card.push(pair);
       if (div.length === 0) {
+        // Não decrementa idx: após o splice o próximo item já cai neste slot,
+        // e idx negativo quebraria o módulo (JS: -1 % n === -1 → índice -1).
         divisionPairs.splice(idx % divisionPairs.length, 1);
       } else {
         idx++;
@@ -634,6 +636,9 @@ export class WorldService {
     fighter.status = 'injured';
 
     // §B.1 — injuryProne se descobre na 2ª lesão em menos de 52 semanas.
+    // O check roda ANTES do incremento: injuryCount >= 1 significa "já havia
+    // lesão anterior" e lastInjuryAbsWeek é a semana dela. Incrementar antes
+    // faria o trait revelar já na 1ª lesão da carreira.
     if (fighter.hasDNA('injuryProne') && !fighter.isDiscovered('injuryProne')
       && fighter.injuryCount >= 1
       && (absWeekNow - fighter.lastInjuryAbsWeek) < DNA_DISCOVERY_CONFIG.INJURY_PRONE_WINDOW_WEEKS) {
@@ -753,6 +758,13 @@ export class WorldService {
       if (f.status === 'retired') continue;
       f.age = (f.age || 28) + 1;
 
+      // Jogador envelhece mas nunca aposenta por sorteio — a idade dele ainda
+      // precisa ser persistida antes do continue.
+      if (f.id === playerFighterId) {
+        await this.fighterCtrl.updateFighter(f);
+        continue;
+      }
+
       const age = f.age;
       let chance = 0;
       if (age >= 40) chance = 0.35;
@@ -795,6 +807,8 @@ export class WorldService {
         }
       }
 
+      // Persiste SEMPRE, aposentando ou não — o f.age++ acima se perde se o
+      // save ficar só dentro do branch de aposentadoria.
       await this.fighterCtrl.updateFighter(f);
     }
 

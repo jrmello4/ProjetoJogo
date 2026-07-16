@@ -29,11 +29,11 @@ export class OffersView {
     if (!r) return '';
 
     const exposureCls = r.exposure >= 75 ? 'badge-danger' : r.exposure >= 50 ? 'badge-warning' : 'badge-info';
-    const sig = r.signature
+    const sig = r.signature && GAME_PLANS[r.signature]
       ? `<span class="badge badge-warning">Assinatura: ${GAME_PLANS[r.signature].label}</span>`
       : '<span class="badge badge-success">Imprevisível — não há o que counter-ar</span>';
 
-    const prediction = r.predictedPlanKey
+    const prediction = r.predictedPlanKey && GAME_PLANS[r.predictedPlanKey]
       ? `<p class="text-sm mt-2">
            O córner dele deve trazer <strong>${GAME_PLANS[r.predictedPlanKey].label}</strong>.
            ${r.reliable
@@ -42,7 +42,7 @@ export class OffersView {
          </p>`
       : '<p class="text-sm text-muted mt-2">Você não faz ideia do que ele preparou. Estude-o para saber o que ele sabe.</p>';
 
-    const weapon = r.weapon
+    const weapon = r.weapon && GAME_PLANS[r.weapon.planKey]
       ? `<p class="text-xs mt-2" style="color:var(--gold,#d4a843)">
            🧰 Carta na manga: <strong>${GAME_PLANS[r.weapon.planKey].label}</strong> (${Math.round(r.weapon.mastery)}% instalada).
            Ninguém sabe que você tem isso — mas só funciona uma vez.
@@ -94,10 +94,10 @@ export class OffersView {
         </div>
 
         <div class="attr-grid mt-3">
-          ${renderAttrRange('Striking', d.attrs.striking)}
-          ${renderAttrRange('Grappling', d.attrs.grappling)}
-          ${renderAttrRange('Cardio', d.attrs.cardio)}
-          ${renderAttrRange('Queixo', d.attrs.chin)}
+          ${d.attrs ? renderAttrRange('Striking', d.attrs.striking) : ''}
+          ${d.attrs ? renderAttrRange('Grappling', d.attrs.grappling) : ''}
+          ${d.attrs ? renderAttrRange('Cardio', d.attrs.cardio) : ''}
+          ${d.attrs ? renderAttrRange('Queixo', d.attrs.chin) : ''}
         </div>
 
         <div class="mt-3">${tendencies}${dna}</div>
@@ -142,7 +142,7 @@ export class OffersView {
   // A isca. Só aparece quando você TEM uma assinatura pra fingir e escolheu um
   // plano que não é ela — fingir ser quem você já é não engana ninguém.
   static _renderBait(offer, r) {
-    if (!r?.signature) return '';
+    if (!r?.signature || !GAME_PLANS[r.signature]) return '';
 
     if (!r.canBait) {
       return `<div class="text-xs text-muted mt-3">

@@ -344,7 +344,7 @@ export class Fighter {
       const growth = Math.random() < rate
         ? Math.min(potentialGap + 1.5, Math.random() * 4 + 1)
         : Math.random() * 0.8;
-      const multiplier = isYoung ? 1.5 : 1.0;
+      const multiplier = isYoung ? 1 + (30 - age) * 0.05 : 1.0; // escala de 1.5 (aos 20) até 1.0 (aos 30) em vez do 1.5 fixo
       this.attributes[key] = clamp(
         Math.round(this.attributes[key] + growth * multiplier),
         0, this.effectiveCeiling(key)

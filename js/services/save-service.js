@@ -62,6 +62,11 @@ export class SaveService {
       throw new Error('Arquivo de save corrompido — não foi possível ler os dados.');
     }
     for (const store of STORES) {
+      if (!Array.isArray(data[store])) {
+        throw new Error('Arquivo de save inválido — dados do store "' + store + '" ausentes ou mal formatados.');
+      }
+    }
+    for (const store of STORES) {
       await this.db.clear(store);
       const items = data[store] || [];
       if (items.length > 0) await this.db.batchPut(store, items);

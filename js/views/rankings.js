@@ -12,6 +12,7 @@ export class RankingsView {
   static render(rankings, belts = [], playerFighterId = null) {
     const byDivision = {};
     for (const entry of rankings) {
+      if (!entry?.fighter) continue;
       const wc = entry.fighter.weightClass;
       if (!byDivision[wc]) byDivision[wc] = [];
       byDivision[wc].push(entry);
@@ -85,10 +86,10 @@ export class RankingsView {
         <div class="belt-contenders mt-2">
           <div class="text-xs text-muted mb-1">Desafiantes:</div>
           ${b.contenders.slice(0, 5).map((c, i) => `
-            <div class="rank-row rank-row-sm" data-fighter-click="${c.id}">
+            <div class="rank-row rank-row-sm" data-fighter-click="${c?.id || ''}">
               <span class="rank-number" style="font-size:0.55rem">#${i + 1}</span>
-              <span class="text-xs" style="flex:1">${c.name}${isMine(c, playerFighterId) ? ' (você)' : ''}</span>
-              <span class="text-xs text-muted">${c.record.wins}-${c.record.losses} · ${c.overallRating}</span>
+              <span class="text-xs" style="flex:1">${c?.name || '—'}${isMine(c, playerFighterId) ? ' (você)' : ''}</span>
+              <span class="text-xs text-muted">${c?.record?.wins ?? 0}-${c?.record?.losses ?? 0} · ${c?.overallRating ?? '?'}</span>
             </div>
           `).join('')}
         </div>
@@ -112,7 +113,7 @@ export class RankingsView {
         <div class="belt-division">${getWeightClassName(b.weightClass)}</div>
         <div class="belt-champion">${b.champion.name}</div>
         <div class="belt-meta">
-          ${b.champion.record.wins}-${b.champion.record.losses}-${b.champion.record.draws}
+          ${b.champion.record?.wins ?? 0}-${b.champion.record?.losses ?? 0}-${b.champion.record?.draws ?? 0}
           ${b.defenses > 0 ? ` · ${b.defenses} defesa${b.defenses === 1 ? '' : 's'}` : ''}
         </div>
         ${nextInLine}
@@ -137,12 +138,12 @@ export class RankingsView {
             <div class="rank-row ${isMine(c.fighter, playerFighterId) ? 'rank-row--mine' : ''}" data-fighter-click="${c.fighter.id}">
               <span class="rank-number">#${i + 1}</span>
               <span class="text-sm font-bold" style="flex:1">
-                ${c.fighter.nationality?.code ? getNationalityFlag(c.fighter.nationality.code) + ' ' : ''}${c.fighter.name}
+                ${c.fighter?.nationality?.code ? getNationalityFlag(c.fighter.nationality.code) + ' ' : ''}${c.fighter?.name || '—'}
                 ${(c.fighter.titlesWon || 0) > 0 ? '<span class="belt-mark ml-1" title="Já foi campeão"><span class="belt-mark-icon"></span></span>' : ''}
                 ${isMine(c.fighter, playerFighterId) ? '<span class="badge badge-danger ml-2" style="font-size:0.6rem">VOCÊ</span>' : ''}
               </span>
-              <span class="text-xs text-muted">${c.fighter.record.wins}-${c.fighter.record.losses}-${c.fighter.record.draws}</span>
-              <span class="text-xs font-bold" style="width:3.5rem;text-align:right">${c.fighter.overallRating} OVR</span>
+              <span class="text-xs text-muted">${c.fighter.record?.wins ?? 0}-${c.fighter.record?.losses ?? 0}-${c.fighter.record?.draws ?? 0}</span>
+              <span class="text-xs font-bold" style="width:3.5rem;text-align:right">${c.fighter.overallRating ?? '?'} OVR</span>
             </div>
           `).join('')}
         </div>

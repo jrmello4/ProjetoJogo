@@ -562,9 +562,18 @@ export class GameController {
         weeksSimulated++;
 
         const pendingOffers = await this.offerService.getPending();
-        for (const offer of pendingOffers) {
-          await this.offerService.accept(offer.id, summary.now);
-          offersAccepted++;
+        if (pendingOffers.length > 0) {
+          // Estado ATUAL, não o snapshot de antes do loop: lesão ou booking
+          // podem ter surgido durante o próprio fast-forward.
+          const current = await this.getPlayerFighter();
+          const accepted = await this.offerService.getAccepted();
+          const hasBooking = accepted.some(b => b.fighterId === current.id);
+          if (current.status !== 'injured' && !hasBooking) {
+            // Uma luta por vez: aceita só a melhor oferta (getPending ordena
+            // por bolsa); as demais ficam pendentes até expirar ou vagar agenda.
+            await this.offerService.accept(pendingOffers[0].id, summary.now);
+            offersAccepted++;
+          }
         }
 
         const sponsorState = await this.sponsorService.getState();
@@ -645,7 +654,7 @@ export class GameController {
     const rent = Math.round(lifestyle.weeklyCost * rentPct);
     const food = Math.round(lifestyle.weeklyCost * foodPct);
     const transport = Math.round(lifestyle.weeklyCost * transportPct);
-    const leisure = lifestyle.weeklyCost - rent - food - transport;
+    const leisure = Math.max(0, lifestyle.weeklyCost - rent - food - transport);
 
     if (academyFee > 0) fighter.addTransaction(now, `Mensalidade — ${academy.name}`, -academyFee);
     if (rent > 0) fighter.addTransaction(now, `Aluguel (${lifestyle.label})`, -rent);
@@ -715,7 +724,7 @@ export class GameController {
     if (act.attrGainChance && Math.random() < act.attrGainChance) {
       const keys = Object.keys(fighter.attributes);
       const attr = keys[Math.floor(Math.random() * keys.length)];
-      fighter.attributes[attr] = Math.min(99, (fighter.attributes[attr] || 50) + Math.floor(Math.random() * 2) + 1);
+      fighter.attributes[attr] = Math.min(fighter.effectiveCeiling(attr), (fighter.attributes[attr] || 50) + Math.floor(Math.random() * 2) + 1);
     }
   }
 
@@ -1050,14 +1059,15 @@ export class GameController {
     }
 
     const actionLabel = { provoke: 'provocou', respect: 'respeitou', ignore: 'ignorou' }[choice] || choice;
-    rivalry.addEvent('interaction', `${fighter.name} ${actionLabel} ${state.rivalName} publicamente`);
+    const displayRivalName = rival?.name || state.rivalName;
+    rivalry.addEvent('interaction', `${fighter.name} ${actionLabel} ${displayRivalName} publicamente`);
 
     await this.db.put('rivalries', rivalry);
     await this.fighterCtrl.updateFighter(fighter);
 
     const messages = {
-      provoke: `Você provocou ${state.rivalName}.${finalIntensityGain > 0 ? ' A rivalidade esquentou!' : ' O rival ignorou.'}`,
-      respect: `Você respeitou ${state.rivalName}. Postura de campeão.`,
+      provoke: `Você provocou ${displayRivalName}.${finalIntensityGain > 0 ? ' A rivalidade esquentou!' : ' O rival ignorou.'}`,
+      respect: `Você respeitou ${displayRivalName}. Postura de campeão.`,
       ignore: 'Você ignorou a provocação. Postura profissional.',
     };
     await this.notifService.add('info', 'Rivalidade', messages[choice] || '');
@@ -1396,6 +1406,7 @@ export class GameController {
   // ===== Negociação de bolsa (usa modificadores do empresário, §C.1) =====
   async negotiateOffer(offerId, bumpIndex) {
     const fighter = await this.getPlayerFighter();
+    if (!fighter) return { ok: false, reason: 'Nenhum lutador ativo.' };
     const academy = await this.getAcademy(fighter.academyId);
     const manager = fighter.managerId ? await this.managerService.getManager(fighter.managerId) : null;
     const mods = this.managerService.negotiationModifiers(manager);
@@ -1405,6 +1416,7 @@ export class GameController {
   // ===== Patrocínios =====
   async acceptSponsorOffer(offerId) {
     const fighter = await this.getPlayerFighter();
+    if (!fighter) return { ok: false, reason: 'Nenhum lutador ativo.' };
     const state = await this.seasonService.getState();
     return await this.sponsorService.accept(offerId, absWeek(state), fighter.record.wins);
   }

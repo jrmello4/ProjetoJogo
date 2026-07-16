@@ -25,11 +25,11 @@ export class FinanceView {
 
     const fixedOutflow = academyFee + lifestyle.weeklyCost + totalServices;
 
-    const runway = fixedOutflow > 0 ? Math.floor(fighter.cash / fixedOutflow) : Infinity;
+    const runway = fixedOutflow > 0 ? Math.floor((fighter.cash || 0) / fixedOutflow) : Infinity;
     const runwayClass = runway >= 12 ? 'runway-badge--ok' : runway >= 5 ? 'runway-badge--warn' : 'runway-badge--critical';
     const runwayLabel = runway === Infinity ? '∞' : String(Math.max(0, runway));
 
-    const ledgerHtml = fighter.ledger.length === 0
+    const ledgerHtml = !fighter.ledger || fighter.ledger.length === 0
       ? '<div class="text-center text-muted text-sm" style="padding:1rem">Sem movimentações ainda. Avance a semana para o fluxo começar.</div>'
       : fighter.ledger.slice(0, 20).map(t => `
           <div class="cost-row">

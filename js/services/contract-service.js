@@ -150,6 +150,7 @@ export class ContractService {
     if (!fighter || !fighter.promotionContract) return;
 
     const contract = fighter.promotionContract;
+    if (contract.status !== 'active') return;
     contract.fightsRemaining--;
 
     // won === null → empate: não é vitória nem derrota, não mexe na sequência.

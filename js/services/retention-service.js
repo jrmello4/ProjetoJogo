@@ -201,6 +201,10 @@ export class RetentionService {
       return { success: true, outcome: 'switched', message: `Você trocou para ${approach.rivalName}.` };
     }
     if (this.managerService) {
+      if (fighter.managerId) {
+        const termResult = await this.managerService.terminate(fighter, absWeekNow, 0);
+        if (!termResult.ok) return { success: false, outcome: 'insufficient_funds', message: termResult.reason };
+      }
       await this.managerService.hire(fighter, approach.rivalId, absWeekNow);
     } else {
       fighter.managerId = approach.rivalId;

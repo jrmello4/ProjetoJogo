@@ -18,7 +18,7 @@ export class SponsorService {
 
   async getState() {
     const raw = await this.db.get('gameState', 'sponsors');
-    return { id: 'sponsors', active: raw?.active || [], offers: raw?.offers || [] };
+    return { id: 'sponsors', active: raw?.active || [], offers: raw?.offers || [], lastCompletedAbsWeek: raw?.lastCompletedAbsWeek || 0 };
   }
 
   async _saveState(state) {
@@ -67,10 +67,20 @@ export class SponsorService {
     }
     state.active = stillActive;
 
+    // Rastreia quando o último contrato encerrou para o cooldown anti-chaining
+    if (completed.length > 0 || failed.length > 0) {
+      state.lastCompletedAbsWeek = absWeekNow;
+    }
+
     // 3) Nova proposta pode chegar, respeitando o teto de contratos
+    // e o cooldown anti-chaining: após um contrato encerrar (meta batida ou
+    // prazo expirado), novas ofertas só voltam a aparecer depois de
+    // COOLDOWN_WEEKS. Impede o ciclo infinito de aceitar → cumprir → nova oferta.
     let newOffer = null;
     const pipeline = state.active.length + state.offers.length;
-    if (pipeline < SPONSOR_CONFIG.MAX_ACTIVE && Math.random() < SPONSOR_CONFIG.WEEKLY_OFFER_CHANCE) {
+    const cooldownOk = state.lastCompletedAbsWeek === 0
+      || (absWeekNow - state.lastCompletedAbsWeek) >= SPONSOR_CONFIG.COOLDOWN_WEEKS;
+    if (pipeline < SPONSOR_CONFIG.MAX_ACTIVE && cooldownOk && Math.random() < SPONSOR_CONFIG.WEEKLY_OFFER_CHANCE) {
       const takenBrands = new Set([...state.active, ...state.offers].map(c => c.brandId));
       const eligible = SPONSOR_BRANDS.filter(b => (fighter.popularity || 0) >= b.minPopularity && !takenBrands.has(b.id));
       if (eligible.length > 0) {

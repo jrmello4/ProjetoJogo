@@ -101,9 +101,10 @@ export class TrainingCampView {
     const cfg = fighter.campConfig || {};
     const weaponHtml = this._renderWeapon(fighter, cfg, weaponOptions);
     const partnersHtml = this._renderPartners(fighter, cfg, team);
+    const getProf = (moveId) => typeof fighter.getMoveProficiency === 'function' ? fighter.getMoveProficiency(moveId) : 0;
     const profOptsHtml = (fighter.moveset || []).map(moveId => {
       const move = MOVES[moveId];
-      const prof = fighter.getMoveProficiency(moveId);
+      const prof = getProf(moveId);
       return `<option value="${moveId}">${move?.name || moveId} (${Math.round(prof)}%)</option>`;
     }).join('');
     const profFocusHtml = (fighter.moveset && fighter.moveset.length > 0)
@@ -117,7 +118,7 @@ export class TrainingCampView {
       : '';
     const weeksUntilFight = booking ? Math.max(0, booking.eventAbsWeek - now) : 0;
     const injured = fighter.status === 'injured';
-    const suspended = fighter.availableFromAbsWeek > now;
+    const suspended = (fighter.availableFromAbsWeek || 0) > now;
 
     return `
       <div class="page-header">
@@ -145,7 +146,7 @@ export class TrainingCampView {
           </div>
         ` : suspended ? `
           <div class="card-body" style="padding:1rem">
-            <p class="text-sm" style="color:var(--warning)">⏳ Suspensão médica · disponível em ${fighter.availableFromAbsWeek - now} semanas</p>
+            <p class="text-sm" style="color:var(--warning)">⏳ Suspensão médica · disponível em ${Math.max(0, (fighter.availableFromAbsWeek || now) - now)} semanas</p>
           </div>
         ` : `
           <div class="card-body" style="padding:1rem">
@@ -206,7 +207,7 @@ export class TrainingCampView {
             <div class="flex items-center gap-3">
               <span class="text-xs text-muted">Camp ativo:</span>
               <span class="text-xs">${cfg.intensity === 'light' ? '🔵 Leve' : cfg.intensity === 'moderate' ? '🟡 Moderado' : '🔴 Intenso'}</span>
-              <span class="text-xs text-muted">· Custo semanal: ${formatCurrency(CAMP_CONFIG.WEEKLY_COST[cfg.intensity])}</span>
+              <span class="text-xs text-muted">· Custo semanal: ${formatCurrency(CAMP_CONFIG.WEEKLY_COST[cfg.intensity] || 0)}</span>
             </div>
           </div>
         ` : ''}

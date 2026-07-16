@@ -15,6 +15,7 @@ import { RankingsView } from './views/rankings.js';
 import { FinanceView } from './views/finance.js';
 import { RankingService } from './services/ranking.js';
 import { TapeService } from './services/tape-service.js';
+import { ReadinessService } from './services/readiness-service.js';
 import { NotificationsView } from './views/notifications.js';
 import { GameController } from './controllers/game-controller.js';
 import { TrainingCamp } from './controllers/training-camp.js';
@@ -441,18 +442,6 @@ class App {
       });
     });
 
-    document.querySelectorAll('[data-approach-respond]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const result = await this.game.respondToApproach(btn.dataset.approachId, btn.dataset.approachRespond);
-        if (result.success) {
-          this.notificationService.add('success', 'Sondagem Respondida', result.message);
-        } else if (result.outcome !== 'no_fighter') {
-          this.notificationService.add('warning', 'Sondagem', result.message || 'Não foi possível responder agora.');
-        }
-        this.renderDashboard();
-      });
-    });
-
     this._bindFighterClicks();
     this._bindEventClicks();
   }
@@ -756,6 +745,23 @@ class App {
       if (d) dossiers[o.id] = d;
     }
 
+    // Prontidão (item 4): a MESMA conta que a simulação usa na noite da
+    // luta, mostrada antes — cada tela ignorada vira pontos faltando aqui.
+    // A prontidão do adversário só aparece com scouting nível 1+.
+    const readiness = {};
+    for (const o of accepted) {
+      const level = dossiers[o.id]?.level ?? 0;
+      const player = ReadinessService.playerReadiness(fighter, o, level);
+      const opponent = ReadinessService.aiReadiness(o.tier, !!o.isTitleFight, `${o.id}-${o.opponentId}`);
+      readiness[o.id] = {
+        player: player.total,
+        parts: player.parts,
+        opponentKnown: level >= 1,
+        opponent: level >= 1 ? opponent : null,
+        opponentLabel: level >= 1 ? ReadinessService.label(opponent) : null,
+      };
+    }
+
     // §Fase 3b — o dilema. Uma oferta contra um companheiro de treino não é uma
     // oferta como as outras, e o jogador precisa saber ANTES de aceitar.
     const teammates = {};
@@ -764,9 +770,18 @@ class App {
       if (t) teammates[o.id] = t;
     }
 
+    // Rivalidade ativa contra este adversário — o efeito na leitura/bolsa já
+    // existe por baixo dos panos (RivalryService/WorldService); isto só o
+    // torna visível ANTES de aceitar a luta.
+    const rivalries = {};
+    for (const o of [...pending, ...accepted]) {
+      const r = await this.game.rivalryService.getRivalryBetween(fighter.id, o.opponentId);
+      if (r) rivalries[o.id] = { intensity: r.intensity, label: r.intensityLabel };
+    }
+
     const contractProposals = await this._loadContractProposals(fighter);
 
-    const html = OffersView.render(pending, accepted, history, fighter, now, dossiers, contractProposals, teammates);
+    const html = OffersView.render(pending, accepted, history, fighter, now, dossiers, contractProposals, teammates, rivalries, readiness);
     await LayoutView.render(html);
 
     document.querySelectorAll('.study-opponent').forEach(btn => {
@@ -1208,7 +1223,10 @@ class App {
     // Gap #1: equipar/remover golpes
     // Gap #2: troca de estilo
     FighterProfileView.bindEvents(fighter, {
-      onPerkLearned: () => this.showFighterProfile(fighter.id),
+      onPerkLearned: async () => {
+        await this.game.fighterCtrl.updateFighter(fighter);
+        this.showFighterProfile(fighter.id);
+      },
       onMovesetChange: async () => {
         await this.game.fighterCtrl.updateFighter(fighter);
         this.showFighterProfile(fighter.id);

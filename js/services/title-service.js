@@ -1,5 +1,6 @@
 import { Promotion } from '../models/promotion.js';
 import { Fighter } from '../models/fighter.js';
+import { Academy } from '../models/academy.js';
 import { RankingService } from './ranking.js';
 import { getWeightClassName } from '../utils/helpers.js';
 import { TITLE_CONFIG, TITLE_ROLE, CORE_WEIGHT_CLASSES } from '../config/game-config.js';
@@ -292,6 +293,7 @@ export class TitleService {
   // Troca (ou mantém) o cinturão. Devolve o que aconteceu para quem chamar
   // aplicar reputação/popularidade e disparar conquistas.
   async resolveTitleFight(promo, weightClass, winnerId, loserId, absWeekNow, playerFighterId = null) {
+    const previousChampId = promo.championOf(weightClass);
     const { retained, defenses } = promo.crown(winnerId, weightClass);
     promo.titleFightsHosted++;
     await this.db.put('organization', promo);
@@ -304,6 +306,7 @@ export class TitleService {
       if (!retained) winner.titlesWon = (winner.titlesWon || 0) + 1;
       winner.updatePopularity(retained ? TITLE_CONFIG.POPULARITY_ON_DEFENSE : TITLE_CONFIG.POPULARITY_ON_TITLE_WIN);
       await this.fighterCtrl.updateFighter(winner);
+      await this._bumpAcademyReputation(winner.academyId, retained ? TITLE_CONFIG.REP_ON_DEFENSE : TITLE_CONFIG.REP_ON_TITLE_WIN);
     }
 
     if (loser) {
@@ -311,6 +314,12 @@ export class TitleService {
       // destronado — precisa reconstruir antes de pedir outra chance.
       loser.titleShotCooldownUntil = absWeekNow + TITLE_CONFIG.SHOT_COOLDOWN_WEEKS;
       await this.fighterCtrl.updateFighter(loser);
+
+      // Só pesa a reputação da academia se o perdedor estava DEFENDENDO —
+      // um desafiante que fracassa nunca teve o cinturão pra perder.
+      if (previousChampId === loserId) {
+        await this._bumpAcademyReputation(loser.academyId, TITLE_CONFIG.REP_ON_TITLE_LOSS);
+      }
     }
 
     const playerInvolved = !!playerFighterId && (winner?.id === playerFighterId || loser?.id === playerFighterId);
@@ -328,6 +337,64 @@ export class TitleService {
     }
 
     return { retained, defenses, winner, loser, division, promo };
+  }
+
+  // Cinturão interino nasce quando o campeão de verdade cai fora por muito
+  // tempo entre a oferta de título e a luta (loop "sempre lutando com o
+  // campeão machucado"): em vez da luta virar treino qualquer sem valor,
+  // ela já vale o interino. Não mexe em promo.champions — o titular
+  // continua titular, só ocupado; _checkInterimTitles (semanal) promove o
+  // interino a definitivo se o titular nunca mais voltar (aposentar).
+  async resolveInterimTitleFight(promo, weightClass, winnerId, loserId, absWeekNow) {
+    promo.crownInterim(winnerId, weightClass, absWeekNow);
+    await this.db.put('organization', promo);
+
+    const winner = await this.fighterCtrl.getFighter(winnerId);
+    const loser = await this.fighterCtrl.getFighter(loserId);
+    const division = getWeightClassName(weightClass);
+
+    if (winner) {
+      winner.updatePopularity(TITLE_CONFIG.POPULARITY_ON_DEFENSE);
+      await this.fighterCtrl.updateFighter(winner);
+      await this._bumpAcademyReputation(winner.academyId, TITLE_CONFIG.REP_ON_DEFENSE);
+    }
+    if (loser) {
+      loser.titleShotCooldownUntil = absWeekNow + TITLE_CONFIG.SHOT_COOLDOWN_WEEKS;
+      await this.fighterCtrl.updateFighter(loser);
+    }
+
+    return { retained: false, defenses: 0, winner, loser, division, promo, interim: true };
+  }
+
+  // A academia sente o peso do cinturão que passa por ela: sobe com título
+  // conquistado/defendido, cai quando um dos seus perde o que tinha. É o
+  // único jeito de uma academia destravar o gate de reputação da Elite —
+  // sem isto, `academyReputation` fica travado no valor de bootstrap para
+  // sempre e só a Elite Combat Team (que já nasce com 55) chega lá.
+  async _bumpAcademyReputation(academyId, delta) {
+    if (!academyId || !delta) return;
+    const data = await this.db.get('organization', academyId);
+    if (!data) return;
+    const academy = new Academy(data);
+    academy.updateReputation(delta);
+    await this.db.put('organization', academy);
+  }
+
+  // Empate numa defesa de título: o campeão retém automaticamente (regra
+  // real do MMA — ver comentário em WorldService._settlePlayerFight), mas
+  // isso não passa por resolveTitleFight/crown(), então sem isto a defesa
+  // bem-sucedida nunca contava no placar de defesas do campeão.
+  async recordDrawDefense(promo, weightClass) {
+    const champId = promo.championOf(weightClass);
+    if (!champId) return null;
+
+    promo.titleDefenses[weightClass] = promo.defensesOf(weightClass) + 1;
+    await this.db.put('organization', promo);
+
+    const champ = await this.fighterCtrl.getFighter(champId);
+    if (champ) await this._bumpAcademyReputation(champ.academyId, TITLE_CONFIG.REP_ON_DEFENSE);
+
+    return promo.defensesOf(weightClass);
   }
 
   // Varredura semanal: só a aposentadoria (ou o desaparecimento do lutador)

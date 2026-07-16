@@ -154,6 +154,17 @@ export class SimulationEngine {
       const perfA = this._calcRoundPerformance(fighterA, fighterB, pressureLevel, staminaFactorA, cornerModA, plan, planEdge, profileA, matchup.bonusA);
       const perfB = this._calcRoundPerformance(fighterB, fighterA, pressureLevel, staminaFactorB, null, planB, planEdgeB, profileB, matchup.bonusB);
 
+      // Prontidão (item 4): o gap de preparo escala a performance inteira do
+      // lutador do jogador — score decide o round, striking/grappling decidem
+      // stats e finish. Sem `tactics` (luta IA vs IA), fator não existe e
+      // nada muda.
+      const readinessFactor = tactics?.readinessFactorA ?? 1;
+      if (readinessFactor !== 1) {
+        perfA.score *= readinessFactor;
+        perfA.striking *= readinessFactor;
+        perfA.grappling *= readinessFactor;
+      }
+
       // Track total scores for decision
       totalScoreA += perfA.score;
       totalScoreB += perfB.score;

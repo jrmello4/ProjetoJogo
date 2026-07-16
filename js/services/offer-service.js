@@ -2,17 +2,18 @@ import { FightOffer, OFFER_STATUS } from '../models/fight-offer.js';
 import { Fighter } from '../models/fighter.js';
 import { generateId, clamp } from '../utils/helpers.js';
 import { getWeightClassName } from '../utils/helpers.js';
-import { OFFER_CONFIG, NEGOTIATION_CONFIG, TITLE_CONFIG, TITLE_ROLE } from '../config/game-config.js';
+import { OFFER_CONFIG, NEGOTIATION_CONFIG, TITLE_CONFIG, TITLE_ROLE, RIVALRY_CONFIG } from '../config/game-config.js';
 
 // Ciclo de vida das ofertas de luta: geração semanal pelas promoções,
 // expiração, aceite e recusa.
 export class OfferService {
-  constructor(db, fighterCtrl, notifService, titleService = null, contractService = null) {
+  constructor(db, fighterCtrl, notifService, titleService = null, contractService = null, rivalryService = null) {
     this.db = db;
     this.fighterCtrl = fighterCtrl;
     this.notifService = notifService;
     this.titleService = titleService;
     this.contractService = contractService;
+    this.rivalryService = rivalryService;
   }
 
   async getAll() {
@@ -344,6 +345,14 @@ export class OfferService {
   }
 
   async _pickOpponent(promotionId, fighter, excludeIds, absWeekNow) {
+    // Rivalidade quente vende ingresso: a promoção tenta priorizar a
+    // revanche contra o rival ativo antes de sortear qualquer outro
+    // adversário — senão a rivalidade fica só um número que nunca vira luta.
+    if (Math.random() < RIVALRY_CONFIG.REMATCH_CHANCE) {
+      const rival = await this._pickRivalOpponent(fighter, excludeIds, absWeekNow);
+      if (rival) return rival;
+    }
+
     // Épico F3: de vez em quando a promoção arma o REENCONTRO — um ex-atleta da
     // sua academia (hoje em outra equipe) volta como adversário. Só dispara se
     // existir um candidato elegível na divisão; senão cai na seleção normal.
@@ -364,16 +373,50 @@ export class OfferService {
 
     if (candidates.length === 0) return null;
 
-    // Prefere adversário de nível próximo; se não houver, pega o mais próximo
+    // Prefere adversário de nível próximo. Fora da janela, a promoção NUNCA
+    // desce (item 4): quem está acima do roster inteiro enfrenta os melhores
+    // disponíveis — o topo do tier é um teto de verdade, não uma esteira de
+    // presas fáceis. Só oferece alguém mais fraco se você for o mais fraco.
     const inWindow = candidates.filter(f =>
       Math.abs(f.overallRating - fighter.overallRating) <= OFFER_CONFIG.OPPONENT_OVR_WINDOW
     );
-    const pool = inWindow.length > 0 ? inWindow : candidates.sort((a, b) =>
-      Math.abs(a.overallRating - fighter.overallRating) -
-      Math.abs(b.overallRating - fighter.overallRating)
-    ).slice(0, 3);
+    let pool;
+    if (inWindow.length > 0) {
+      pool = inWindow;
+    } else {
+      const above = candidates.filter(f => f.overallRating >= fighter.overallRating);
+      const source = above.length > 0 ? above : candidates;
+      pool = source.sort((a, b) =>
+        Math.abs(a.overallRating - fighter.overallRating) -
+        Math.abs(b.overallRating - fighter.overallRating)
+      ).slice(0, 3);
+    }
 
     return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  // Rival ativo mais intenso (>= REMATCH_MIN_INTENSITY) que ainda esteja
+  // disponível e na mesma divisão. Retorna null se não houver nenhum —
+  // rivalidade leve não força revanche, só uma de verdade "Intensa"+.
+  async _pickRivalOpponent(fighter, excludeIds, absWeekNow) {
+    if (!this.rivalryService) return null;
+    // Em empate de intensidade, sorteia — sem o `|| Math.random()-0.5`,
+    // Array.sort é estável e a rivalidade mais ANTIGA (chegou primeiro no
+    // array) sempre vence o empate, travando a revanche sempre no mesmo
+    // rival mesmo com outro igualmente intenso disponível.
+    const rivalries = (await this.rivalryService.getRivalries(fighter.id))
+      .filter(r => r.intensity >= RIVALRY_CONFIG.REMATCH_MIN_INTENSITY)
+      .sort((a, b) => (b.intensity - a.intensity) || (Math.random() - 0.5));
+
+    for (const r of rivalries) {
+      const rivalId = r.fighterAId === fighter.id ? r.fighterBId : r.fighterAId;
+      if (excludeIds.has(rivalId)) continue;
+      const rival = await this.fighterCtrl.getFighter(rivalId);
+      if (!rival || rival.status !== 'roster' || rival.weightClass !== fighter.weightClass) continue;
+      if ((rival.availableFromAbsWeek || 0) > absWeekNow) continue;
+      return rival;
+    }
+    return null;
   }
 
   // Épico F3: procura um ex-atleta da sua academia, hoje em outra equipe, na

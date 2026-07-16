@@ -22,6 +22,44 @@ const ARCHETYPE_LABELS = {
 };
 
 export class OffersView {
+  // Prontidão (item 4) — o número que decide a luta equilibrada. Mostrado
+  // com a MESMA conta que a simulação vai usar na noite do evento: cada
+  // tela que o jogador ignorou aparece aqui como pontos deixados na mesa.
+  static _renderReadiness(rd) {
+    if (!rd) return '';
+    const cls = rd.player >= 60 ? 'badge-success' : rd.player >= 45 ? 'badge-warning' : 'badge-danger';
+    const barColor = rd.player >= 60 ? 'var(--success)' : rd.player >= 45 ? 'var(--gold,#d4a843)' : 'var(--danger)';
+
+    const chip = (p) => {
+      const zero = p.value === 0;
+      const sign = p.value > 0 ? '+' : '';
+      const style = p.value < 0
+        ? 'color:var(--danger)'
+        : zero ? 'color:var(--text-muted,#888)' : 'color:var(--success)';
+      return `<span class="text-xs" style="${style}">${p.label}: ${sign}${p.value}${p.key === 'camp' ? `/${p.max}` : ''}</span>`;
+    };
+
+    const oppHtml = rd.opponentKnown
+      ? `Prontidão dele: <strong>~${rd.opponent}%</strong> (${rd.opponentLabel})`
+      : `Prontidão dele: <strong>?</strong> — estude-o para descobrir`;
+
+    return `
+      <div class="dossier mb-3" style="border-left:3px solid ${barColor}">
+        <div class="dossier-header">
+          <span class="dossier-title">🎯 Prontidão para esta luta</span>
+          <span class="badge ${cls}">${rd.player}%</span>
+        </div>
+        <div class="mt-2" style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+          <div style="width:${rd.player}%;height:100%;background:${barColor}"></div>
+        </div>
+        <div class="flex mt-2" style="flex-wrap:wrap;gap:0.35rem 0.85rem">
+          ${rd.parts.map(chip).join('')}
+        </div>
+        <p class="text-xs text-muted mt-2">${oppHtml}. O gap de preparo multiplica sua performance em TODOS os rounds.</p>
+      </div>
+    `;
+  }
+
   // Fase 3 — o espelho do dossiê. Até aqui o scouting era via de mão única:
   // você estudava, o mundo nunca te estudava. Este bloco é o mundo te
   // devolvendo o olhar.
@@ -180,7 +218,7 @@ export class OffersView {
     `;
   }
 
-  static render(pending, accepted, history, fighter, now, dossiers = {}, contractProposals = [], teammates = {}) {
+  static render(pending, accepted, history, fighter, now, dossiers = {}, contractProposals = [], teammates = {}, rivalries = {}, readiness = {}) {
     const fighterOf = () => fighter;
 
     const tierBadge = (tier) => {
@@ -220,10 +258,11 @@ export class OffersView {
                 </div>
                 <span class="live-vs">VS</span>
                 <div class="live-corner live-corner--blue">
-                  <div class="live-corner-name">${o.opponentName}</div>
+                  <div class="live-corner-name">${o.opponentName}${rivalries[o.id] ? ` <span class="badge badge-danger" style="font-size:0.6rem">⚔️ RIVAL · ${rivalries[o.id].label}</span>` : ''}</div>
                   <div class="live-corner-record">${o.opponentRecord ? `${o.opponentRecord.wins}-${o.opponentRecord.losses}-${o.opponentRecord.draws}` : ''} · OVR ${o.opponentOverall ?? '?'} · ${o.opponentStyle || ''}</div>
                 </div>
               </div>
+              ${rivalries[o.id] ? `<div class="text-xs mt-1" style="color:var(--danger)">⚔️ Ele te leu melhor — rivalidade ${rivalries[o.id].label.toLowerCase()} deixa seu jogo mais previsível pra ele, mas a bolsa também sobe.</div>` : ''}
 
               <div class="flex items-center justify-between" style="flex-wrap:wrap;gap:0.5rem">
                 <div class="flex items-center gap-3">
@@ -282,12 +321,13 @@ export class OffersView {
           <div class="card mb-2 ${o.isTitleFight ? 'offer-card--title' : ''}" data-reveal>
             <div class="flex items-center justify-between mb-3">
               <div>
-                <div class="text-sm font-bold">${o.isTitleFight ? '<span class="belt-mark">🏆</span> ' : ''}${fighter ? fighter.name : '—'} vs ${o.opponentName}${o.isReencounter ? ' <span class="badge badge-danger" style="font-size:0.65rem">⚔️ REENCONTRO</span>' : ''}</div>
+                <div class="text-sm font-bold">${o.isTitleFight ? '<span class="belt-mark">🏆</span> ' : ''}${fighter ? fighter.name : '—'} vs ${o.opponentName}${o.isReencounter ? ' <span class="badge badge-danger" style="font-size:0.65rem">⚔️ REENCONTRO</span>' : ''}${rivalries[o.id] ? ` <span class="badge badge-danger" style="font-size:0.65rem">⚔️ RIVAL · ${rivalries[o.id].label}</span>` : ''}</div>
                 <div class="text-xs text-muted">${o.promotionName} · ${formatCurrency(o.purse)} + ${formatCurrency(o.winBonus)} por vitória</div>
               </div>
               <span class="badge ${weeksOut <= 1 ? 'badge-danger' : 'badge-warning'}">${weeksOut <= 0 ? 'Esta semana!' : `em ${weeksOut} sem`}</span>
             </div>
 
+            ${this._renderReadiness(readiness[o.id])}
             ${d ? this._renderDossier(o, d) : ''}
             ${this._renderGamePlan(o, d)}
           </div>

@@ -50,7 +50,6 @@ export class Fighter {
     this.promotionContract = data.promotionContract || null; // contrato exclusivo com promoção (Épico B)
     this.loyalty = data.loyalty ?? 50; // 0-100, Épico A — retenção
     this.purseShare = data.purseShare ?? 0.8; // fração da bolsa que fica com o atleta (1 - managerCut)
-    this.promises = data.promises || []; // { kind, deadlineAbsWeek, madeAtAbsWeek, kept }
 
     // Economia pessoal (não há mais academia-negócio do jogador, §A.2)
     this.cash = data.cash ?? 0;
@@ -99,6 +98,10 @@ export class Fighter {
     // Épico D: configuração do acampamento semanal (persistida, não botão manual)
     this.campConfig = data.campConfig || null; // { intensity, spec, sparringPartnerId } ou null
     this.campProcessedThisWeek = data.campProcessedThisWeek || false; // já foi processado no loop semanal
+    // Prontidão (item 4): pontos de camp acumulados na janela do booking
+    // atual. Incrementa a cada semana de camp COM luta marcada, zera quando
+    // a luta é liquidada. É o maior componente do score de prontidão.
+    this.campReadinessPoints = data.campReadinessPoints || 0;
 
     // Épico F2: expectativas dos atletas
     this.expectation = data.expectation || null; // { kind: 'title_shot'|'move_up_tier'|'more_fights'|'better_pay', sinceAbsWeek, urgency: 1-3 }
@@ -327,6 +330,12 @@ export class Fighter {
     return !!this.dna[trait];
   }
 
+  // Item 4 — lutar não treina o corpo, treina a CABEÇA. A versão anterior
+  // rodava ganho de até +6 em TODOS os ~25 atributos a cada luta — era o
+  // motor da bola de neve que deixava o jogador intocável só clicando
+  // "simular". Agora a experiência de luta rende fightIQ/composure/
+  // adaptability (o que uma luta de verdade ensina); atributo físico e
+  // técnico cresce no treino semanal e no camp — as telas.
   evolve() {
     const age = this.age || 30;
 
@@ -336,25 +345,13 @@ export class Fighter {
       return;
     }
 
-    const rate = Math.min(0.95, (this.hidden.evolution / 100) * (this.hidden.discipline / 100) * 1.3);
-    const potentialGap = (this.hidden.potential - this.averageSkill) * 0.15;
-    const isYoung = age < 30;
-
-    for (const key of Object.keys(this.attributes)) {
-      const growth = Math.random() < rate
-        ? Math.min(potentialGap + 1.5, Math.random() * 4 + 1)
-        : Math.random() * 0.8;
-      const multiplier = isYoung ? 1.5 : 1.0;
+    for (const key of ['fightIQ', 'composure', 'adaptability']) {
+      const gain = Math.random() < 0.6 ? Math.round(Math.random() * 2) : 0; // 0-2
       this.attributes[key] = clamp(
-        Math.round(this.attributes[key] + growth * multiplier),
+        Math.round(this.attributes[key] + gain),
         0, this.effectiveCeiling(key)
       );
     }
-
-    this.attributes.fightIQ = clamp(
-      Math.round(this.attributes.fightIQ + (Math.random() * 2 + 0.5)),
-      0, this.effectiveCeiling('fightIQ')
-    );
   }
 
   // §B.2 — sequelas permanentes de lesão reduzem o TETO de evolução de

@@ -12,18 +12,19 @@ export class RivalryService {
 
   async getRivalries(fighterId) {
     const all = await this.db.getAll('rivalries');
-    return all.filter(r =>
-      r.active && (r.fighterAId === fighterId || r.fighterBId === fighterId)
-    );
+    return all
+      .filter(r => r.active && (r.fighterAId === fighterId || r.fighterBId === fighterId))
+      .map(r => new Rivalry(r));
   }
 
   async getRivalryBetween(fighterAId, fighterBId) {
     const all = await this.db.getAll('rivalries');
-    return all.find(r =>
+    const found = all.find(r =>
       r.active &&
       ((r.fighterAId === fighterAId && r.fighterBId === fighterBId) ||
        (r.fighterAId === fighterBId && r.fighterBId === fighterAId))
-    ) || null;
+    );
+    return found ? new Rivalry(found) : null;
   }
 
   async createRivalry(fighterAId, fighterBId, type = 'competitive') {
@@ -128,7 +129,21 @@ export class RivalryService {
 
   async getAllActive() {
     const all = await this.db.getAll('rivalries');
-    return all.filter(r => r.active);
+    return all.filter(r => r.active).map(r => new Rivalry(r));
+  }
+
+  // Decaimento periódico — sem isso a rivalidade mais intensa de anos atrás
+  // (mesmo que a causa já não exista mais) nunca perde espaço pra uma nova.
+  // Chamado do WorldService a cada RIVALRY_CONFIG.DECAY_INTERVAL_WEEKS.
+  // Desativa (`active = false`) quem chega a 0 — deixa de monopolizar
+  // seleção, mas o histórico continua no banco.
+  async decayAll(amount = RIVALRY_CONFIG.DECAY_AMOUNT) {
+    const active = await this.getAllActive();
+    for (const rivalry of active) {
+      rivalry.intensity = Math.max(0, rivalry.intensity - amount);
+      if (rivalry.intensity <= 0) rivalry.active = false;
+      await this.db.put('rivalries', rivalry);
+    }
   }
 
   // Épico F1: a provocação na coletiva de imprensa esquenta a rivalidade

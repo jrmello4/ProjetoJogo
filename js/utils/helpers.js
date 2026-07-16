@@ -22,6 +22,23 @@ export function formatDateShort(date) {
   }).format(new Date(date));
 }
 
+// Escolhe o item de maior valor em `keyFn`, sorteando entre empatados. Sem
+// isso, `arr.sort((a,b)=>b.x-a.x)[0]` é determinístico em empate — a ordem
+// de chegada do array vence pra sempre (Array.sort é estável), então quem
+// entrou primeiro (ex: sua primeira rivalidade, todas nascendo em
+// intensidade 1) nunca perde o topo. Usado onde "o mais X" deveria variar
+// quando há mais de um "mais X".
+export function pickTopRandom(arr, keyFn) {
+  if (arr.length === 0) return null;
+  let best = keyFn(arr[0]);
+  for (const item of arr) {
+    const v = keyFn(item);
+    if (v > best) best = v;
+  }
+  const tied = arr.filter(item => keyFn(item) === best);
+  return tied[Math.floor(Math.random() * tied.length)];
+}
+
 export function getNationalityFlag(code) {
   if (!code || code.length !== 2) return '';
   const segments = code.toUpperCase().split('');

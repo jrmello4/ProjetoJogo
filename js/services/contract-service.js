@@ -177,27 +177,29 @@ export class ContractService {
     await this.fighterCtrl.updateFighter(fighter);
   }
 
-  // Ao expirar um contrato: se o cartel/popularidade do lutador já bate o
-  // gate do tier acima, gera propostas do tier de cima (+ opção de renovar
-  // no atual) em vez de renovar sozinho para sempre no mesmo tier — sem
-  // isso, um campeão que nunca perde 2 seguidas jamais era reavaliado e
-  // ficava preso no tier em que assinou o primeiro contrato.
+  // Ao expirar um contrato: SEMPRE força uma escolha na aba Ofertas — nunca
+  // renova sozinho em silêncio. Se o cartel/popularidade bate o gate do
+  // tier acima, a proposta de cima entra ao lado da renovação; senão, só a
+  // renovação aparece. A renovação nunca é PIOR que o contrato que acabou
+  // de terminar (_buildRenewalProposal aplica o piso) — sem isso, uma queda
+  // de popularidade entre a assinatura e o fim do contrato (uma derrota já
+  // basta) recalculava lutas/bolsa pra baixo e prendia o lutador numa
+  // espiral de contratos cada vez piores, sem o jogador nunca ver a tela.
   async _handleExpiration(fighter, academyReputation, absWeekNow) {
     const oldContract = fighter.promotionContract;
     const targetTier = oldContract.tier - 1;
     const gate = targetTier >= 1 ? OFFER_CONFIG.TIER_GATES[targetTier] : null;
     const eligible = gate && this._checkGate(fighter, targetTier, gate, academyReputation ?? 50);
 
-    if (!eligible) {
-      await this._autoRenew(fighter);
-      return;
-    }
-
     const currentPromo = PROMOTIONS.find(p => p.id === oldContract.promotionId);
-    const higherPromos = PROMOTIONS.filter(p => p.tier === targetTier);
-    const offers = higherPromos.map(promo => this._buildProposal(fighter, promo, absWeekNow));
+    const offers = [];
+
+    if (eligible) {
+      const higherPromos = PROMOTIONS.filter(p => p.tier === targetTier);
+      offers.push(...higherPromos.map(promo => this._buildProposal(fighter, promo, absWeekNow)));
+    }
     if (currentPromo) {
-      offers.push(this._buildProposal(fighter, currentPromo, absWeekNow));
+      offers.push(this._buildRenewalProposal(fighter, currentPromo, oldContract, absWeekNow));
     }
 
     const key = `contract-offer-${fighter.id}`;
@@ -213,9 +215,26 @@ export class ContractService {
 
     await this.notifService.add(
       'contract',
-      '🎉 Chance de Subir de Tier!',
-      `${fighter.name} encerrou o contrato com ${oldContract.promotionName} credenciado para o próximo nível. Proposta(s) de ${TIER_LABELS[targetTier]} chegaram — escolha na aba Ofertas.`
+      eligible ? '🎉 Chance de Subir de Tier!' : 'Contrato Expirado',
+      eligible
+        ? `${fighter.name} encerrou o contrato com ${oldContract.promotionName} credenciado para o próximo nível. Proposta(s) de ${TIER_LABELS[targetTier]} chegaram — escolha na aba Ofertas.`
+        : `${fighter.name} encerrou o contrato com ${oldContract.promotionName}. Escolha renovar na aba Ofertas.`
     );
+  }
+
+  // Renovação no mesmo tier: nunca pior que o contrato anterior. Sem este
+  // piso, uma popularidade que caiu um pouco entre a assinatura e o fim do
+  // contrato (uma derrota já basta) recalculava lutas/bolsa pra baixo — o
+  // jogador via o cartel dele MELHORAR e o contrato PIORAR.
+  _buildRenewalProposal(fighter, promo, oldContract, absWeekNow) {
+    const base = this._buildProposal(fighter, promo, absWeekNow);
+    const basePurse = Math.max(base.basePurse, Math.round(oldContract.basePurse * 1.05));
+    return {
+      ...base,
+      fightsTotal: Math.max(base.fightsTotal, oldContract.fightsTotal),
+      basePurse,
+      winBonus: Math.max(base.winBonus, Math.round(basePurse * OFFER_CONFIG.WIN_BONUS_RATIO)),
+    };
   }
 
   // Corte por duas derrotas seguidas
@@ -240,38 +259,6 @@ export class ContractService {
       // Cortado = sem contrato
       fighter.promotionContract = null;
     }
-
-    await this.fighterCtrl.updateFighter(fighter);
-  }
-
-  // Renovação automática com termos melhores
-  async _autoRenew(fighter) {
-    if (!fighter.promotionContract) return;
-
-    const oldContract = fighter.promotionContract;
-    const promo = PROMOTIONS.find(p => p.id === oldContract.promotionId);
-    if (!promo) return;
-
-    // Renovação: mais lutas, bolsa maior
-    const newLength = this._contractLength(fighter);
-    const purseBoost = 1 + (fighter.popularity ?? 0) / 200; // até 1.5x
-    const newBase = Math.round(oldContract.basePurse * purseBoost);
-
-    fighter.promotionContract = {
-      ...oldContract,
-      fightsTotal: newLength,
-      fightsRemaining: newLength,
-      basePurse: newBase,
-      winBonus: Math.round(newBase * 0.5),
-      status: 'active',
-      consecutiveLosses: 0,
-    };
-
-    await this.notifService.add(
-      'success',
-      'Contrato Renovado!',
-      `${fighter.name} renovou com ${promo.name} — ${newLength} lutas, bolsa de ${formatCurrency(newBase)}.`
-    );
 
     await this.fighterCtrl.updateFighter(fighter);
   }

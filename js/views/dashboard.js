@@ -60,7 +60,7 @@ export class DashboardView {
     const titleStrap = booking.isTitleFight ? `
       <div class="poster-title-strap">
         <span class="poster-belt">🏆</span>
-        <span>${booking.titleRole === TITLE_ROLE.VACANT ? 'Cinturão vago' : 'Cinturão'} ${getWeightClassName(booking.weightClass)} em jogo</span>
+        <span>${booking.interimTitle ? 'Cinturão INTERINO' : booking.titleRole === TITLE_ROLE.VACANT ? 'Cinturão vago' : 'Cinturão'} ${getWeightClassName(booking.weightClass)} em jogo</span>
         <span class="poster-belt">🏆</span>
       </div>` : '';
 
@@ -130,7 +130,7 @@ export class DashboardView {
   }
 
   static render(data, weekLabel) {
-    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, rivalryPrompt, pendingApproach, weighInPrompt, now } = data;
+    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, rivalryPrompt, weighInPrompt, readiness, now } = data;
 
     const tierBadge = (tier) => `<span class="badge ${tierBadgeCls(tier)}">${TIER_LABELS[tier]}</span>`;
 
@@ -226,46 +226,6 @@ export class DashboardView {
         </div>`;
     }
 
-    // ===== Sondagem de retenção (§A.4/§C.1) =====
-    let approachHtml = '';
-    if (pendingApproach) {
-      const isAcademy = pendingApproach.targetType === 'academy';
-      const deadline = pendingApproach.deadlineAbsWeek - now;
-      approachHtml = `
-        ${pendingOffers.length === 0 && !socialPrompt ? '<div class="section-label" data-reveal>Decisões Pendentes</div>' : ''}
-        <div class="card mb-4" data-reveal style="border-top-color:var(--danger)">
-          <div class="card-header">
-            <span class="card-title">🔍 Sondagem — ${pendingApproach.rivalName}</span>
-            <span class="badge badge-danger">${deadline <= 0 ? 'última semana' : `${deadline} sem restantes`}</span>
-          </div>
-          ${pendingApproach.contextMessage ? `<p class="text-sm text-muted mb-2">${pendingApproach.contextMessage}</p>` : ''}
-          <p class="text-sm text-muted mb-2">
-            ${isAcademy
-              ? `${pendingApproach.rivalName} quer te treinar. Como você reage?`
-              : `${pendingApproach.rivalName} quer ser seu empresário. Como você reage?`}
-          </p>
-          <div class="flex flex-col gap-2">
-            <button class="btn btn-secondary" data-approach-respond="renegotiate" data-approach-id="${pendingApproach.id}" style="text-align:left">
-              Renegociar ${isAcademy ? 'com o técnico' : 'o corte'}
-              <span class="text-xs text-muted ml-2">(sem custo, ${isAcademy ? 'sinergia' : 'corte'} e moral melhoram)</span>
-            </button>
-            <button class="btn btn-secondary" data-approach-respond="stay_bonus" data-approach-id="${pendingApproach.id}" style="text-align:left">
-              Pedir bônus de permanência
-              <span class="text-xs text-muted ml-2">(dinheiro agora, lealdade e moral sobem bastante)</span>
-            </button>
-            <button class="btn btn-secondary" data-approach-respond="promise" data-approach-id="${pendingApproach.id}" style="text-align:left">
-              Fazer uma promessa
-              <span class="text-xs text-muted ml-2">(sem custo agora — quebrar depois custa caro)</span>
-            </button>
-            <button class="btn btn-danger" data-approach-respond="let_go" data-approach-id="${pendingApproach.id}" style="text-align:left">
-              Aceitar e trocar agora
-              <span class="text-xs text-muted ml-2">(troca imediata para ${pendingApproach.rivalName})</span>
-            </button>
-          </div>
-        </div>
-      `;
-    }
-
     // ===== Patrocínios =====
     const sponsors = data.sponsors || { active: [], offers: [] };
     let sponsorsHtml = '';
@@ -334,6 +294,26 @@ export class DashboardView {
     `;
 
     // ===== Luta agendada =====
+    // Prontidão (item 4): o número fica na cara do jogador toda semana —
+    // baixa = você está indo pra guerra sem camp, sem plano, sem estudo.
+    let readinessHtml = '';
+    if (readiness) {
+      const barColor = readiness.player >= 60 ? 'var(--success)' : readiness.player >= 45 ? 'var(--gold,#d4a843)' : 'var(--danger)';
+      const missing = readiness.parts.filter(p => p.value === 0 && ['camp', 'plan', 'scouting'].includes(p.key)).map(p => p.label);
+      readinessHtml = `
+        <div style="padding:0.5rem 0">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs text-muted">🎯 Prontidão para a luta</span>
+            <span class="text-xs font-bold" style="color:${barColor}">${readiness.player}%${readiness.opponentKnown ? ` <span class="text-muted" style="font-weight:normal">· dele ~${readiness.opponent}%</span>` : ''}</span>
+          </div>
+          <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+            <div style="width:${readiness.player}%;height:100%;background:${barColor}"></div>
+          </div>
+          ${missing.length > 0 ? `<div class="text-xs mt-1" style="color:var(--warning)">Faltando: ${missing.join(' · ')}</div>` : ''}
+        </div>
+      `;
+    }
+
     let bookingsHtml = '';
     if (bookings.length > 0) {
       bookingsHtml = `
@@ -355,6 +335,7 @@ export class DashboardView {
               </div>
             `;
           }).join('')}
+          ${readinessHtml}
         </div>
       `;
     }
@@ -517,7 +498,6 @@ export class DashboardView {
       ${weighInHtml}
       ${socialHtml}
       ${rivalryHtml}
-      ${approachHtml}
       ${sponsorsHtml}
       ${activityHtml}
       ${bookingsHtml}

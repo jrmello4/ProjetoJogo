@@ -4,6 +4,7 @@ import { Event } from '../models/event.js';
 import { OFFER_STATUS } from '../models/fight-offer.js';
 import { SimulationEngine } from '../controllers/simulation.js';
 import { TapeService } from './tape-service.js';
+import { ReadinessService } from './readiness-service.js';
 import { DataGenerator } from './data-generator.js';
 import { HallOfFame } from './hall-of-fame.js';
 import { generateId, getWeightClassName } from '../utils/helpers.js';
@@ -66,6 +67,31 @@ export class WorldService {
     });
   }
 
+  // Prontidão (item 4) — reúne os insumos e delega a conta ao
+  // ReadinessService. O nível de scouting entra pela MESMA função do
+  // dossiê (knowledgeOf), então o que a tela mostrou é o que a luta usa.
+  async _resolveReadiness(player, opponent, booking, promo) {
+    let scoutingLevel = 0;
+    if (this.scoutingService) {
+      let hasBaseline = false;
+      if (this.managerService && player.managerId) {
+        const manager = await this.managerService.getManager(player.managerId);
+        hasBaseline = this.managerService.givesBaselineScouting(manager);
+      }
+      scoutingLevel = await this.scoutingService.knowledgeOf(opponent, player.id, hasBaseline);
+    }
+
+    const player_ = ReadinessService.playerReadiness(player, booking, scoutingLevel);
+    const ai = ReadinessService.aiReadiness(promo.tier, !!booking.isTitleFight, `${booking.id}-${opponent.id}`);
+    return {
+      player: player_.total,
+      parts: player_.parts,
+      opponent: ai,
+      gap: player_.total - ai,
+      factor: ReadinessService.gapFactor(player_.total, ai),
+    };
+  }
+
   async getPromotions() {
     const all = await this.db.getAll('organization');
     return all
@@ -117,6 +143,12 @@ export class WorldService {
     await this._checkInterimTitles(absWeekNow, promotions);
     await this._evolveAIFighters(absWeekNow, playerFighterId);
 
+    // Decaimento de rivalidade (item "sempre o mesmo cara") — sem isso a
+    // rivalidade mais quente de anos atrás nunca solta o topo do sorteio.
+    if (this.rivalryService && absWeekNow % RIVALRY_CONFIG.DECAY_INTERVAL_WEEKS === 0) {
+      await this.rivalryService.decayAll();
+    }
+
     return { playerEvents };
   }
 
@@ -142,6 +174,22 @@ export class WorldService {
 
       // Adversário indisponível: a promoção busca substituto na divisão
       if (!opponent || opponent.status !== 'roster' || opponent.availableFromAbsWeek > absWeekNow) {
+        // Título em jogo e o CAMPEÃO caiu (não um desafiante qualquer):
+        // curto o suficiente pra esperar -> adia o evento, título intacto —
+        // sem isso, a luta virava treino sem valor e o próximo ciclo de
+        // ofertas repetia a mesma chance contra o mesmo campeão sempre
+        // machucado, preso nisso por anos.
+        if (booking.isTitleFight && opponent && opponent.status !== 'retired') {
+          const weeksOut = Math.max(0, (opponent.availableFromAbsWeek || 0) - absWeekNow);
+          if (weeksOut > 0 && weeksOut <= TITLE_CONFIG.POSTPONE_MAX_WEEKS) {
+            booking.eventAbsWeek = absWeekNow + weeksOut;
+            await this.db.put('offers', booking);
+            await this.notifService.add('info', 'Defesa de Título Adiada', `${opponent.name} ainda não recuperou. A defesa contra ${fighter.name} foi adiada para daqui ${weeksOut} semana(s) — o cinturão segue em jogo.`);
+            continue;
+          }
+        }
+
+        const fellThroughTitleFight = booking.isTitleFight;
         opponent = await this._findReplacement(promo.id, fighter, bookedIds, absWeekNow);
         if (!opponent) {
           booking.status = OFFER_STATUS.CANCELLED;
@@ -152,12 +200,14 @@ export class WorldService {
         booking.opponentId = opponent.id;
         booking.opponentName = opponent.name;
 
-        // Cinturão não muda de mãos contra um substituto: sem o campeão
-        // (ou o desafiante oficial) no córner oposto, a luta perde o título.
-        if (booking.isTitleFight) {
-          booking.isTitleFight = false;
+        // Campeão fora por muito tempo (ou sumiu de vez): a luta já
+        // marcada vira disputa de cinturão INTERINO em vez de perder o
+        // título por completo — o desafiante mandatório não fica de mãos
+        // vazias só porque o titular desapareceu do mapa.
+        if (fellThroughTitleFight) {
+          booking.interimTitle = true;
           booking.titleRole = null;
-          await this.notifService.add('warning', 'Cinturão Fora de Jogo', `O adversário oficial caiu. ${fighter.name} luta contra ${opponent.name}, mas o cinturão não está mais em disputa.`);
+          await this.notifService.add('warning', '🥈 Vira Disputa de Interino', `O campeão segue fora. ${fighter.name} agora disputa o cinturão INTERINO contra ${opponent.name}.`);
         } else {
           await this.notifService.add('info', 'Troca de Adversário', `${opponent.name} substituiu o oponente original de ${fighter.name}.`);
         }
@@ -172,7 +222,8 @@ export class WorldService {
         fighterB: opponent,
         card: 'main',
         booking,
-        titleWeightClass: booking.isTitleFight ? booking.weightClass : null,
+        titleWeightClass: (booking.isTitleFight || booking.interimTitle) ? booking.weightClass : null,
+        interimTitle: !!booking.interimTitle,
       });
     }
 
@@ -263,6 +314,16 @@ export class WorldService {
         ? await this._resolveTactics(fighterA, fighterB, fight.booking)
         : null;
 
+      // Prontidão (item 4): calculada AQUI, na noite da luta — é o estado
+      // real do lutador que entra no octógono, não uma projeção. Vive
+      // dentro de `tactics` porque só existe pra luta do jogador (mesma
+      // regra do resto do objeto) e porque `result.tactics` já é o canal
+      // que leva contexto tático pra tela pós-luta.
+      if (tactics) {
+        tactics.readiness = await this._resolveReadiness(fighterA, fighterB, fight.booking, promo);
+        tactics.readinessFactorA = tactics.readiness.factor;
+      }
+
       const result = await SimulationEngine.simulateFight(fighterA, fighterB, promo.tier === 1, hooks, gamePlan, fightDateISO, pressureLevel, tactics);
       result.tactics = tactics;
 
@@ -309,14 +370,30 @@ export class WorldService {
 
       // O cinturão troca de mãos (ou não) antes de contarmos as consequências.
       // Empate em luta de título: o campeão retém automaticamente (regra real
-      // do MMA) — não chamamos resolveTitleFight, então o mapa de campeões da
-      // promoção simplesmente não muda.
+      // do MMA) — não chamamos resolveTitleFight (não há vencedor/perdedor
+      // para coroar), mas se havia campeão defendendo, a defesa ainda conta.
       let titleOutcome = null;
-      if (fight.titleWeightClass && this.titleService && !result.isDraw) {
-        titleOutcome = await this.titleService.resolveTitleFight(
-          promo, fight.titleWeightClass, result.winnerId, result.loserId, absWeekNow, playerFighterId
-        );
-        result.titleRetained = titleOutcome.retained;
+      if (fight.titleWeightClass && this.titleService) {
+        if (fight.interimTitle) {
+          // Disputa de interino: sem empate coroando ninguém (não há
+          // interino anterior pra "reter" aqui — a luta nasceu já sem um).
+          if (!result.isDraw) {
+            titleOutcome = await this.titleService.resolveInterimTitleFight(
+              promo, fight.titleWeightClass, result.winnerId, result.loserId, absWeekNow
+            );
+          }
+        } else if (!result.isDraw) {
+          titleOutcome = await this.titleService.resolveTitleFight(
+            promo, fight.titleWeightClass, result.winnerId, result.loserId, absWeekNow, playerFighterId
+          );
+          result.titleRetained = titleOutcome.retained;
+        } else {
+          const champId = promo.championOf(fight.titleWeightClass);
+          if (champId && (champId === fighterA.id || champId === fighterB.id)) {
+            result.titleRetained = true;
+            result.titleDrawDefenses = await this.titleService.recordDrawDefense(promo, fight.titleWeightClass);
+          }
+        }
       }
 
       result.id = generateId();
@@ -427,7 +504,15 @@ export class WorldService {
     const won = !isDraw && result.winnerId === fighter.id;
 
     // Épico F1: hype da coletiva vira bônus na bolsa
-    const hypeBonus = (fighter.pcHype || 0) * HYPE_PURSE_RATIO;
+    // Rivalidade: luta contra o rival ativo vende mais ingresso — a
+    // intensidade vira o mesmo tipo de bônus que o hype de coletiva.
+    let rivalryHypeBonus = 0;
+    let rivalry = null;
+    if (this.rivalryService) {
+      rivalry = await this.rivalryService.getRivalryBetween(fighter.id, fight.fighterB.id);
+      if (rivalry) rivalryHypeBonus = rivalry.intensity * RIVALRY_CONFIG.HYPE_PER_INTENSITY * HYPE_PURSE_RATIO;
+    }
+    const hypeBonus = (fighter.pcHype || 0) * HYPE_PURSE_RATIO + rivalryHypeBonus;
     const grossPurse = booking.purse + (won ? booking.winBonus : 0) + hypeBonus;
     // Limpa o hype após usar — não acumular para a próxima luta
     fighter.pcHype = 0;
@@ -441,7 +526,8 @@ export class WorldService {
       ? await this.managerService.applyCut(fighter, afterPurseShare)
       : { managerCut: 0, netPurse: afterPurseShare, manager: null };
 
-    fighter.addTransaction(absWeekNow, `Bolsa — ${promo.short}${manager ? ` (empresário: -$${managerCut.toLocaleString()})` : ''}${hypeBonus > 0 ? ' (c/ hype)' : ''}`, netPurse);
+    const bonusTags = [hypeBonus > 0 ? 'hype' : null, rivalryHypeBonus > 0 ? `rivalidade ${rivalry.intensityLabel.toLowerCase()}` : null].filter(Boolean);
+    fighter.addTransaction(absWeekNow, `Bolsa — ${promo.short}${manager ? ` (empresário: -$${managerCut.toLocaleString()})` : ''}${bonusTags.length ? ` (c/ ${bonusTags.join(' + ')})` : ''}`, netPurse);
     fighter.careerEarnings = (fighter.careerEarnings || 0) + grossPurse;
 
     if (isDraw) {
@@ -461,14 +547,22 @@ export class WorldService {
 
     // Título em empate: o campeão retém automaticamente (regra real do MMA) —
     // resolveTitleFight nunca foi chamado, então o mapa de campeões não mudou.
-    if (fight.titleWeightClass && isDraw) {
+    // A contagem de defesas (result.titleDrawDefenses) já foi feita em
+    // recordDrawDefense(), chamado antes deste método.
+    if (fight.titleWeightClass && isDraw && !fight.interimTitle) {
       const division = getWeightClassName(fight.titleWeightClass);
       await this.notifService.add(
         'info',
         '🛡️ Cinturão Mantido (Empate)',
         booking.titleRole === TITLE_ROLE.DEFENSE
-          ? `Você empatou e mantém o cinturão ${division} do ${promo.short}.`
+          ? `Você empatou e mantém o cinturão ${division} do ${promo.short}${result.titleDrawDefenses ? ` (${result.titleDrawDefenses}ª defesa)` : ''}.`
           : `Você empatou pelo cinturão ${division} — o campeão atual mantém o título.`
+      );
+    } else if (fight.interimTitle && isDraw) {
+      await this.notifService.add(
+        'info',
+        '🥈 Interino Segue Vago',
+        `Empate na disputa do cinturão interino ${getWeightClassName(fight.titleWeightClass)} — ninguém foi coroado.`
       );
     }
 
@@ -480,7 +574,24 @@ export class WorldService {
     result._won = won;
 
     // O cinturão é a única coisa que pesa mais que a bolsa.
-    if (titleOutcome) {
+    if (titleOutcome && fight.interimTitle) {
+      // Interino: nunca "campeão de verdade" — a mensagem tem que deixar
+      // isso claro, senão o jogador acha que virou o titular de verdade
+      // enquanto o campeão lesionado ainda segura o cinturão oficial.
+      const division = titleOutcome.division;
+      if (won) {
+        await this.notifService.add(
+          'achievement',
+          '🥈 Campeão Interino!',
+          `Você é o novo campeão INTERINO ${division} do ${promo.short}. O cinturão de verdade volta em jogo quando o titular voltar a lutar.`
+        );
+        if (this.careerLogService) {
+          await this.careerLogService.publish(fighter.id, 'title_won', absWeekNow, 55, { division, promo: promo.short, interim: true });
+        }
+      } else {
+        await this.notifService.add('warning', 'Interino Escapou', `Você não conquistou o cinturão interino ${division} — ${result.winnerName} levou.`);
+      }
+    } else if (titleOutcome) {
       const division = titleOutcome.division;
       if (won) {
         await this.notifService.add(
@@ -501,6 +612,21 @@ export class WorldService {
             ? `Você perdeu o cinturão ${division} para ${result.winnerName}.`
             : `Você não conquistou o cinturão ${division}. Vai precisar reconstruir o cartel.`
         );
+      }
+    }
+
+    // Prontidão (item 4): o camp desta luta acabou — pontos zeram; o
+    // próximo booking começa do zero. E se o gap foi decisivo (>=15), o
+    // jogo DIZ isso — efeito escondido foi exatamente a queixa do item 3.
+    fighter.campReadinessPoints = 0;
+    const readiness = result.tactics?.readiness;
+    if (readiness && Math.abs(readiness.gap) >= 15) {
+      if (readiness.gap < 0) {
+        await this.notifService.add('warning', '📉 Despreparado',
+          `Você entrou com prontidão ${readiness.player}% contra ~${readiness.opponent}% de ${fight.fighterB.name}. ${won ? 'Venceu mesmo assim — desta vez.' : 'A diferença de preparo pesou.'}`);
+      } else if (won) {
+        await this.notifService.add('info', '📈 Preparo Venceu',
+          `Sua prontidão (${readiness.player}%) superou a de ${fight.fighterB.name} (~${readiness.opponent}%). O camp pagou.`);
       }
     }
 
@@ -1017,10 +1143,13 @@ export class WorldService {
       const isYoung = (fighter.age || 30) < 30;
       let evolved = false;
 
-      // Atributos
+      // Atributos — item 4: com o evolve() pós-luta reduzido a ganho mental,
+      // este tick é o ÚNICO treino físico da IA. Chances subidas (0.15→0.25 /
+      // 0.08→0.12) pra IA acompanhar um jogador que treina toda semana —
+      // calibrado junto com a nova curva do jogador.
       for (const key of Object.keys(fighter.attributes)) {
-        if (Math.random() > (isYoung ? 0.15 : 0.08)) continue;
-        const gain = Math.random() * 1.5 + 0.3;
+        if (Math.random() > (isYoung ? 0.25 : 0.12)) continue;
+        const gain = Math.random() * 1.5 + 0.5;
         fighter.attributes[key] = Math.min(
           Math.round(gain + (fighter.attributes[key] || 50)),
           fighter.effectiveCeiling(key)

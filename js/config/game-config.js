@@ -197,10 +197,6 @@ export const EXPECTATION_CONFIG = {
   MORALE_DAMAGE_URGENT: 5,   // -5 de morale por semana
   LOYALTY_DAMAGE_URGENT: 2,  // -2 de loyalty por semana
 
-  // Bônus de chance de ser sondado por rival (sobre a base)
-  RIVAL_APPROACH_BONUS: 0.15,   // +15% se tem expectativa urgente
-  RIVAL_RETENTION_PENALTY: 0.15, // -15% na chance de reter
-
   // A cada quantas semanas reavaliar (existente: 4)
   CHECK_INTERVAL: 4,
 };
@@ -324,6 +320,13 @@ export const TITLE_CONFIG = {
 
   // A IA disputa um cinturão a cada N eventos de cada promoção
   AI_TITLE_FIGHT_EVERY: 4,
+
+  // Campeão lesionado entre a oferta de título e a data da luta (item
+  // "fico preso lutando com o campeão machucado por anos"): indisponível
+  // por poucas semanas -> adia o evento, título intacto. Mais que isso ->
+  // a luta já marcada vira disputa de cinturão INTERINO em vez de virar um
+  // treino qualquer sem valor nenhum.
+  POSTPONE_MAX_WEEKS: 6,
 };
 
 export const TITLE_ROLE = {
@@ -617,13 +620,19 @@ export const SPONSOR_CONFIG = {
   VILLAIN_CLAUSE_MIN_PROVOCATIONS: 1, // provocações mínimas no período pra renovar
 };
 
+// goalWeeks recalibrado pro ritmo real de luta: ~6-9 semanas pra marcar +
+// SUSPENSION_CONFIG (8-16 semanas de suspensão médica pós-luta) ≈ 20 semanas
+// por ciclo de luta. Fórmula: (goalWins + 1) × 20 — o "+1" reserva um ciclo
+// inteiro pra uma derrota no meio (que consome o ciclo mas não conta pra
+// meta) sem estourar o prazo. Antes disso, sp-predador/sp-titan/sp-apexmedia
+// pediam mais vitórias do que cabiam no prazo mesmo com 0 derrotas.
 export const SPONSOR_BRANDS = [
-  { id: 'sp-combate',  name: 'Combate Energy',            tier: 3, weekly: 250,  goalWins: 1, goalWeeks: 26, bonus: 4000,  minPopularity: 0,  imageClause: null },
-  { id: 'sp-ferro',    name: 'Ferro & Fibra Suplementos', tier: 3, weekly: 350,  goalWins: 2, goalWeeks: 39, bonus: 6500,  minPopularity: 20, imageClause: null },
-  { id: 'sp-valetudo', name: 'Vale Tudo Wear',            tier: 2, weekly: 600,  goalWins: 2, goalWeeks: 32, bonus: 12000, minPopularity: 35, imageClause: 'villain' },
-  { id: 'sp-predador', name: 'Predador Fightwear',        tier: 2, weekly: 800,  goalWins: 3, goalWeeks: 39, bonus: 18000, minPopularity: 45, imageClause: 'villain' },
-  { id: 'sp-titan',    name: 'Titan Performance',         tier: 1, weekly: 1500, goalWins: 3, goalWeeks: 32, bonus: 35000, minPopularity: 60, imageClause: 'clean' },
-  { id: 'sp-apexmedia',name: 'Apex Global Media',         tier: 1, weekly: 2200, goalWins: 4, goalWeeks: 39, bonus: 60000, minPopularity: 75, imageClause: 'clean' },
+  { id: 'sp-combate',  name: 'Combate Energy',            tier: 3, weekly: 250,  goalWins: 1, goalWeeks: 40,  bonus: 4000,  minPopularity: 0,  imageClause: null },
+  { id: 'sp-ferro',    name: 'Ferro & Fibra Suplementos', tier: 3, weekly: 350,  goalWins: 2, goalWeeks: 60,  bonus: 6500,  minPopularity: 20, imageClause: null },
+  { id: 'sp-valetudo', name: 'Vale Tudo Wear',            tier: 2, weekly: 600,  goalWins: 2, goalWeeks: 60,  bonus: 12000, minPopularity: 35, imageClause: 'villain' },
+  { id: 'sp-predador', name: 'Predador Fightwear',        tier: 2, weekly: 800,  goalWins: 3, goalWeeks: 80,  bonus: 18000, minPopularity: 45, imageClause: 'villain' },
+  { id: 'sp-titan',    name: 'Titan Performance',         tier: 1, weekly: 1500, goalWins: 3, goalWeeks: 80,  bonus: 35000, minPopularity: 60, imageClause: 'clean' },
+  { id: 'sp-apexmedia',name: 'Apex Global Media',         tier: 1, weekly: 2200, goalWins: 4, goalWeeks: 100, bonus: 60000, minPopularity: 75, imageClause: 'clean' },
 ];
 
 // Redes sociais como sistema contínuo — ver spec §D.2. ESTENDE o mesmo
@@ -696,24 +705,19 @@ export const RIVALRY_CONFIG = {
   GRUDGE_PRESSURE_BONUS: 20, // §C.3 — pressão extra numa revanche de rivalidade grudge
   INTERACTION_WEEKLY_CHANCE: 0.30,
   INTERACTION_PROMPT_EXPIRY_WEEKS: 2,
-};
+  HYPE_PER_INTENSITY: 3,      // luta de rival vende mais ingresso — mesmo bônus de bolsa do hype de coletiva
+  REMATCH_MIN_INTENSITY: 6,   // só rivalidade "Intensa"+ tenta forçar a revanche no matchmaking
+  REMATCH_CHANCE: 0.35,       // chance da promoção priorizar o rival como próximo adversário
 
-// Sondagens por mérito. O cooldown evita que o mesmo empresário/academia
-// repita uma abordagem toda semana só porque o gatilho (como uma sequência
-// de vitórias) continua verdadeiro.
-export const RETENTION_CONFIG = {
-  APPROACH_DEADLINE_WEEKS: 2,
-  BASE_APPROACH_CHANCE: 0.03,
-  LOW_TRUST_CHANCE_SCALE: 0.12,
-  CONTEXTUAL_OFFER_CHANCE: 0.40,
-  CONTEXTUAL_COOLDOWN_WEEKS: 26,
-  RECENT_RESULT_WINDOW_WEEKS: 8,
-  RECENT_FINISH_WINDOW_WEEKS: 4,
-  MANAGER_STREAK_MIN: 3,
-  ACADEMY_STREAK_MIN: 2,
-  MANAGER_POPULARITY_THRESHOLD: 50,
-  FAMOUS_RIVALRY_INTENSITY: 6,
-  LOW_SYNERGY_THRESHOLD: 30,
+  // Decaimento (item "sempre o mesmo cara"): intensidade só subia, nunca
+  // caía — uma rivalidade que esquentou (mesmo por um motivo que já não
+  // existe mais, tipo o loop de campeão lesionado) ficava permanentemente
+  // no topo do sorteio pro resto da carreira. A cada DECAY_INTERVAL_WEEKS,
+  // toda rivalidade ativa perde DECAY_AMOUNT — quem você continua
+  // encontrando/provocando compensa com increaseIntensity(); quem ficou
+  // pra trás esfria e libera espaço pra um rival novo aparecer.
+  DECAY_INTERVAL_WEEKS: 8,
+  DECAY_AMOUNT: 1,
 };
 
 // Presets de simulação de período (fast-forward)
@@ -963,6 +967,41 @@ export const CAMP_CONFIG = {
   WEEKLY_COST: { light: 300, moderate: 600, intense: 1200 },
   // Lesão no camp cancela a luta? (se intensity === intense e tem luta marcada)
   CAMP_INJURY_CANCELS_FIGHT: true,
+};
+
+// ===== Prontidão (item 4 — "está tudo muito fácil") =====
+// Score 0-100 por luta, calculado na noite do evento a partir do que o
+// jogador FEZ na janela do booking. O gap contra a prontidão do adversário
+// multiplica a performance por round — é ele que transforma cada tela
+// (camp, plano, scouting, pesagem, fadiga) em consequência real. Quem só
+// clica "simular" entra com ~30 contra IA que sempre faz camp (~55-75) e
+// acumula cartel negativo; quem se prepara inverte a conta.
+export const READINESS_CONFIG = {
+  BASE: 30,                    // você apareceu na luta
+  // Camp: pontos por semana de camp DURANTE a janela do booking, por intensidade
+  CAMP_PER_WEEK: { light: 3, moderate: 4.5, intense: 6 },
+  CAMP_CAP: 35,                // ~6 semanas de camp intense (MIN_WEEKS_NOTICE)
+  PLAN_CONFIRMED: 10,          // plano de jogo definido na tela (mesmo 'balanced' explícito)
+  SCOUTING: { 0: 0, 1: 4, 2: 7, 3: 10 },
+  FATIGUE_MAX_PENALTY: 10,     // fadiga 100 = -10 (a simulação já pune fadiga; aqui é legibilidade)
+  MORALE_SPAN: 5,              // moral 0 = -5, moral 100 = +5
+  WEIGH_IN: { success: 5, rough: -5, steady: 0 },
+
+  // IA: baseline por tier — profissional sempre faz camp. Jitter dá textura
+  // ("ele aceitou em cima da hora") e vira informação de scouting.
+  AI_BASELINE: { 1: 75, 2: 65, 3: 55 },
+  AI_TITLE_BONUS: 5,           // ninguém defende cinturão despreparado
+  AI_JITTER: 8,                // ±8 aleatório (seed estável por luta)
+  AI_MIN: 35,
+  AI_MAX: 90,
+
+  // Efeito: multiplicador por round = 1 + gap * SCALE, clampado em ±CAP.
+  // Calibrado por script (600 lutas/gap, OVR igual): gap -25 (autopilot vs
+  // IA tier 3) → factor 0.925 → 34% de vitória; gap +25 (preparado) →
+  // 1.075 → 67%. Em cima disso ainda empilham plan edge, tape e OVR — o
+  // autopilot real fica abaixo de 34% e espirala.
+  GAP_SCALE: 0.003,
+  GAP_CAP: 0.15,
 };
 
 // Especialidades de camp expandidas (§PRD: recuperação, estratégia, estudo)

@@ -38,6 +38,10 @@ export class FightOffer {
 
     // Plano de jogo escolhido durante o camp. Vale por toda a luta.
     this.gamePlan = data.gamePlan || 'balanced';
+    // Prontidão (item 4): true quando o JOGADOR escolheu o plano na tela
+    // (mesmo que a escolha seja 'balanced'). O default silencioso do
+    // autopilot não conta — pensar na luta é o que pontua.
+    this.planConfirmed = data.planConfirmed || false;
 
     // Épico F4: o reencontro — adversário foi da academia
     this.isReencounter = data.isReencounter || false;

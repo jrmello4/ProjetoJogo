@@ -14,7 +14,6 @@ import { SponsorService } from '../services/sponsor-service.js';
 import { TitleService } from '../services/title-service.js';
 import { ScoutingService } from '../services/scouting-service.js';
 import { ContractService } from '../services/contract-service.js';
-import { RetentionService } from '../services/retention-service.js';
 import { TrainingPartnersService } from '../services/training-partners-service.js';
 import { ManagerService } from '../services/manager-service.js';
 import { CareerLogService } from '../services/career-log-service.js';
@@ -23,7 +22,7 @@ import { SocialMediaService } from '../services/social-media-service.js';
 import { SocialMedia } from './social-media.js';
 import { Rivalry } from '../models/rivalry.js';
 import { FightOffer } from '../models/fight-offer.js';
-import { generateId, clamp } from '../utils/helpers.js';
+import { generateId, clamp, pickTopRandom } from '../utils/helpers.js';
 import { TrainingCamp } from './training-camp.js';
 import {
   ACADEMIES,
@@ -45,9 +44,11 @@ import {
   TAPE_CONFIG,
   PARTNER_CONFIG,
   DNA_DISCOVERY_MAGNITUDE,
+  READINESS_CONFIG,
   absWeek,
 } from '../config/game-config.js';
 import { TapeService } from '../services/tape-service.js';
+import { ReadinessService } from '../services/readiness-service.js';
 import { LEVEL_CONFIG, MOVES, OPTIONAL_SERVICES, WEEKLY_ACTIVITIES } from '../config/game-config.js';
 
 const WORLD_MODE = 'career-1-fighter';
@@ -70,7 +71,6 @@ export class GameController {
     this.titleService = null;
     this.scoutingService = null;
     this.contractService = null;
-    this.retentionService = null;
     this.managerService = null;
     this.careerLogService = null;
     this.rivalryService = null;
@@ -89,15 +89,12 @@ export class GameController {
     this.scoutingService = new ScoutingService(this.db, this.notifService);
     this.contractService = new ContractService(this.db, this.fighterCtrl, this.notifService);
     this.managerService = new ManagerService(this.db, this.notifService, this.careerLogService);
-    // Construído antes de RetentionService de propósito: _checkMilestoneTriggers
-    // precisa de rivalryService para detectar "rival mudou de academia".
     this.rivalryService = new RivalryService(this.db, this.careerLogService);
-    this.retentionService = new RetentionService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.managerService, this.careerLogService, this.rivalryService);
     this.partnersService = new TrainingPartnersService(this.db, this.fighterCtrl, this.notifService, this.careerLogService);
     // Construído depois do RivalryService: _computePressureLevel precisa de
     // rivalryService para pressão extra em revanche 'grudge'.
     this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.scoutingService, this.contractService, this.managerService, this.careerLogService, this.rivalryService);
-    this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.contractService);
+    this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.contractService, this.rivalryService);
     this.sponsorService = new SponsorService(this.db, this.notifService, this.careerLogService);
     this.socialMediaService = new SocialMediaService(this.db, this.notifService);
 
@@ -411,9 +408,11 @@ export class GameController {
       for (const result of evt.playerResults) {
         if (result && result.winnerId) {
           const xpGain = LEVEL_CONFIG.XP_PER_FIGHT + (result.winnerId === fighter.id ? LEVEL_CONFIG.XP_PER_WIN_BONUS : 0);
+          const perkPtsBefore = fighter.perkPoints;
           const levelsUp = fighter.addXP(xpGain);
           if (levelsUp > 0) {
-            const bonusPts = fighter.perkPoints > 0 && levelsUp >= 3 ? ` +${Math.floor(levelsUp / 3)} ponto(s) de perk!` : '';
+            const perkGained = fighter.perkPoints - perkPtsBefore;
+            const bonusPts = perkGained > 0 ? ` +${perkGained} ponto(s) de perk!` : '';
             await this.notifService.add('success', '⬆️ Level Up!', `Você subiu para Nv.${fighter.level}!${bonusPts}`);
           }
         }
@@ -440,9 +439,12 @@ export class GameController {
 
     // XP: treinar dá XP
     if (fighter) {
+      const perkPtsBefore = fighter.perkPoints;
       const levelsUp = fighter.addXP(LEVEL_CONFIG.XP_PER_WEEK_TRAINED);
       if (levelsUp > 0) {
-        await this.notifService.add('success', '⬆️ Level Up!', `Treino semanal te levou ao Nv.${fighter.level}!`);
+        const perkGained = fighter.perkPoints - perkPtsBefore;
+        const bonusPts = perkGained > 0 ? ` +${perkGained} ponto(s) de perk!` : '';
+        await this.notifService.add('success', '⬆️ Level Up!', `Treino semanal te levou ao Nv.${fighter.level}!${bonusPts}`);
       }
     }
 
@@ -450,10 +452,6 @@ export class GameController {
     // gratuita de baixar a exposição, e ela cobra o preço mais alto do jogo:
     // não estar lutando.
     TapeService.decayIdle(fighter, now);
-
-    const retentionResolutions = await this.retentionService.processWeek(now, fighter);
-    await this.retentionService.generateApproaches(now, fighter);
-    await this.retentionService._checkMilestoneTriggers(now, fighter);
 
     await this._checkExpectations(now, fighter);
 
@@ -493,7 +491,7 @@ export class GameController {
       }
       if (!activePrompt) {
         const rivalries = await this.rivalryService.getRivalries(fighter.id);
-        const topRivalry = rivalries.sort((a, b) => b.intensity - a.intensity)[0];
+        const topRivalry = pickTopRandom(rivalries, r => r.intensity);
         if (topRivalry && topRivalry.intensity >= 3) {
           const rivalId = topRivalry.fighterAId === fighter.id ? topRivalry.fighterBId : topRivalry.fighterAId;
           const rival = await this.fighterCtrl.getFighter(rivalId);
@@ -531,7 +529,7 @@ export class GameController {
 
     const state = await this.seasonService.commitWeekAdvance(nextWeekState.week, nextWeekState.year);
 
-    return { state, now, world, offersCreated, economy, milestonesUnlocked, campResults, retentionResolutions, sponsorActivity };
+    return { state, now, world, offersCreated, economy, milestonesUnlocked, campResults, sponsorActivity };
   }
 
   // ===== Simulação de período (fast-forward) =====
@@ -833,7 +831,7 @@ export class GameController {
     const activeRivalries = await this.rivalryService.getRivalries(fighter.id);
     let rivalInfo = null;
     if (activeRivalries.length > 0) {
-      const rivalry = [...activeRivalries].sort((a, b) => b.intensity - a.intensity)[0];
+      const rivalry = pickTopRandom(activeRivalries, r => r.intensity);
       const rivalFighterId = rivalry.fighterAId === fighter.id ? rivalry.fighterBId : rivalry.fighterAId;
       const rivalFighter = await this.fighterCtrl.getFighter(rivalFighterId);
       if (rivalFighter) {
@@ -1100,6 +1098,14 @@ export class GameController {
     const promo = promotions.find(p => p.id === promoId);
     if (!promo) return;
 
+    // Já é campeão desta divisão nesta promoção — não faz sentido "querer
+    // uma chance de título" de um cinturão que já está com ele.
+    if (promo.isChampion(fighter.id, fighter.weightClass)) {
+      fighter.lastExpectationCheck = now;
+      fighter.expectation = null;
+      return;
+    }
+
     const weeksSinceLastFight = now - (fighter.lastFightAbsWeek || 0);
     const tier = promo.tier;
     const fighterTier = fighter.overallRating >= 75 ? 1 : fighter.overallRating >= 60 ? 2 : 3;
@@ -1159,6 +1165,13 @@ export class GameController {
       if (booking) {
         const opponent = await this.fighterCtrl.getFighter(booking.opponentId);
         if (opponent) opponentArchetype = TrainingCamp.opponentArchetype(opponent);
+        // Prontidão (item 4): semana de camp COM luta marcada acumula pontos
+        // de prontidão (por intensidade, teto em READINESS_CONFIG.CAMP_CAP).
+        const perWeek = READINESS_CONFIG.CAMP_PER_WEEK[intensity] || 0;
+        fighter.campReadinessPoints = Math.min(
+          READINESS_CONFIG.CAMP_CAP,
+          (fighter.campReadinessPoints || 0) + perWeek
+        );
       }
     } catch { /* sem luta marcada */ }
 
@@ -1236,6 +1249,9 @@ export class GameController {
 
     const offer = new FightOffer(data);
     offer.gamePlan = plan;
+    // Prontidão (item 4): escolher o plano NA TELA pontua — o 'balanced'
+    // silencioso do autopilot não.
+    offer.planConfirmed = true;
     // Trocar de plano invalida a isca: iscar é trazer o OPOSTO da sua
     // assinatura. Deixar a flag ligada depois de mudar o plano poderia gerar
     // uma "isca" com a própria assinatura — que não engana ninguém.
@@ -1640,7 +1656,6 @@ export class GameController {
 
     const belts = fighter ? await this.titleService.beltsOf(fighter.id) : [];
     const contenderStatus = fighter ? await this.titleService.contenderStatusOf(fighter) : null;
-    const pendingApproach = await this.retentionService.getPending();
     const playerBooking = fighter ? bookings.find(b => b.fighterId === fighter.id) : null;
     const weighInPrompt = playerBooking
       && !playerBooking.weighIn?.completed
@@ -1660,6 +1675,24 @@ export class GameController {
     let rivalryPrompt = null;
     try { const rp = await this.db.get('gameState', 'rivalry-prompt'); if (rp?.choices) rivalryPrompt = rp; } catch { /* ok */ }
 
+    // Prontidão (item 4) — resumo pro dashboard quando há luta marcada.
+    // Mesma conta da simulação; prontidão do adversário exige scouting 1+.
+    let readiness = null;
+    if (playerBooking && fighter) {
+      const hasBaseline = this.managerService.givesBaselineScouting(manager);
+      const opponent = await this.fighterCtrl.getFighter(playerBooking.opponentId);
+      const level = opponent ? await this.scoutingService.knowledgeOf(opponent, fighter.id, hasBaseline) : 0;
+      const p = ReadinessService.playerReadiness(fighter, playerBooking, level);
+      const ai = ReadinessService.aiReadiness(playerBooking.tier, !!playerBooking.isTitleFight, `${playerBooking.id}-${playerBooking.opponentId}`);
+      readiness = {
+        player: p.total,
+        parts: p.parts,
+        opponentKnown: level >= 1,
+        opponent: level >= 1 ? ai : null,
+        opponentLabel: level >= 1 ? ReadinessService.label(ai) : null,
+      };
+    }
+
     return {
       fighter,
       academy,
@@ -1676,23 +1709,10 @@ export class GameController {
       sponsors,
       socialPrompt,
       rivalryPrompt,
-      pendingApproach,
       weighInPrompt,
+      readiness,
       state,
       now,
     };
-  }
-
-  // ===== Sondagem de retenção (§A.4/§C.1) =====
-  // A UI só mostra as 4 opções quando getDashboard().pendingApproach existe;
-  // sem resposta a tempo, _resolveApproach() decide sozinho na próxima
-  // semana (mesmo motor de antes, agora com mais uma via de entrada).
-  async respondToApproach(approachId, responseType) {
-    const fighter = await this.getPlayerFighter();
-    if (!fighter) return { success: false, outcome: 'no_fighter' };
-    const state = await this.seasonService.getState();
-    const result = await this.retentionService.respond(absWeek(state), approachId, responseType, fighter);
-    await this.fighterCtrl.updateFighter(fighter);
-    return result;
   }
 }

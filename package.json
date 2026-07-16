@@ -1,0 +1,15 @@
+{
+  "name": "mma-manager",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "lint": "eslint js/",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.0",
+    "vitest": "^3.0.0"
+  }
+}

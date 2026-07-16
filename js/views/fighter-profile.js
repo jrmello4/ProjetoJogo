@@ -1,5 +1,5 @@
-import { formatCurrency, formatDate, getWeightClassShort, getWeightClassLabel, getNationalityFlag, getAdjacentWeightClasses, clamp } from '../utils/helpers.js';
-import { FIGHTING_STYLES, MOVES, PERKS, STYLE_SWITCH_CONFIG } from '../config/game-config.js';
+import { formatCurrency, formatDate, getWeightClassShort, getWeightClassLabel, getNationalityFlag, getAdjacentWeightClasses } from '../utils/helpers.js';
+import { FIGHTING_STYLES, MOVES, PERKS } from '../config/game-config.js';
 
 export class FighterProfileView {
   // G3: gráfico de carreira — OVR do atleta em cada luta (fighterRating é

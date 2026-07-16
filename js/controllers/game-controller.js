@@ -41,7 +41,6 @@ import {
   SOCIAL_CONFIG,
   WEIGH_IN_CONFIG,
   RIVALRY_CONFIG,
-  TAPE_CONFIG,
   PARTNER_CONFIG,
   DNA_DISCOVERY_MAGNITUDE,
   READINESS_CONFIG,
@@ -138,7 +137,7 @@ export class GameController {
     for (const docId of ['careerLog', 'sponsors', 'retention', 'socialMedia', 'rivalry-prompt']) {
       await this.db.delete('gameState', docId);
     }
-    try { localStorage.removeItem('characterCreationDone'); } catch (e) { /* ambientes sem localStorage */ }
+    try { localStorage.removeItem('characterCreationDone'); } catch { /* ambientes sem localStorage */ }
 
     await this.db.put('gameState', {
       id: 'state',
@@ -421,8 +420,6 @@ export class GameController {
 
     await this.offerService.expireOld(now);
     const promotions = await this.worldService.getPromotions();
-    const manager = fighter.managerId ? await this.managerService.getManager(fighter.managerId) : null;
-    const negotiationMods = this.managerService.negotiationModifiers(manager);
     const offersCreated = fighter.status !== 'retired'
       ? await this.offerService.generateWeekly(now, fighter, academy?.reputation ?? 30, promotions)
       : [];
@@ -648,7 +645,6 @@ export class GameController {
     const rentPct = 0.45;
     const foodPct = 0.25;
     const transportPct = 0.15;
-    const leisurePct = 0.15;
     const rent = Math.round(lifestyle.weeklyCost * rentPct);
     const food = Math.round(lifestyle.weeklyCost * foodPct);
     const transport = Math.round(lifestyle.weeklyCost * transportPct);

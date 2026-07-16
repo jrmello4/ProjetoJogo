@@ -29,7 +29,7 @@ import { ThreeArena } from './three-arena.js';
 import { ThreeBackground } from './three-background.js';
 import { motion } from './motion/motion-engine.js';
 import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, ARCHETYPES, ORIGINS, absWeekToLabel, SYNERGY_CONFIG, FIGHTING_STYLES, PERKS } from './config/game-config.js';
-import { getWeightClassName, formatCurrency, getAdjacentWeightClasses, clamp } from './utils/helpers.js';
+import { formatCurrency, getAdjacentWeightClasses, clamp } from './utils/helpers.js';
 import { CAMP_CONFIG, HYPE_PURSE_RATIO, absWeek } from './config/game-config.js';
 
 // Depois de publicar no itch.io, cole a URL da página do jogo aqui pra ela
@@ -437,7 +437,7 @@ class App {
     // Rivalidade — escolha do prompt semanal
     document.querySelectorAll('.rivalry-choice').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const result = await this.game.resolveRivalryInteraction(btn.dataset.choice);
+        await this.game.resolveRivalryInteraction(btn.dataset.choice);
         this.renderDashboard();
       });
     });

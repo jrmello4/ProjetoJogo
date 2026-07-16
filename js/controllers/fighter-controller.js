@@ -1,6 +1,5 @@
 import { Fighter } from '../models/fighter.js';
 import { Contract } from '../models/contract.js';
-import { DB } from '../services/db.js';
 import { generateId } from '../utils/helpers.js';
 
 export class FighterController {

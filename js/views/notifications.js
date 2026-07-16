@@ -9,7 +9,7 @@ const CATEGORIES = {
   other: { label: 'Outros', types: null },
 };
 
-const TYPE_CATEGORY = {
+const _TYPE_CATEGORY = {
   headline: 'headline',
   achievement: 'headline',
   rivalry: 'rivalry',

@@ -1,5 +1,3 @@
-import { generateId } from '../utils/helpers.js';
-
 export class SeasonService {
   constructor(db) {
     this.db = db;

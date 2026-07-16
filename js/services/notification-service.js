@@ -34,7 +34,7 @@ export class NotificationService {
       timestamp: new Date().toISOString(),
     };
     await this.db.add('notifications', n);
-    try { Toast.show(type, title, message); } catch (e) { /* toast é opcional */ }
+    try { Toast.show(type, title, message); } catch { /* toast é opcional */ }
     return n;
   }
 

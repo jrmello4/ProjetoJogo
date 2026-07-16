@@ -405,8 +405,6 @@ export class ThreeArena {
     if (nowMs - this._lastFrame < 33) return;
     this._lastFrame = nowMs;
 
-    const elapsed = this.clock.getElapsedTime();
-
     // Auto rotation
     if (this.autoRotate) {
       this.targetRotY += 0.003;

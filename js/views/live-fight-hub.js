@@ -1,8 +1,6 @@
 // Live Fight Hub — experiência dramática de luta ao vivo.
 // Usa GSAP para animações (screen shake, fade, scale, stagger)
 // e ThreeFaceOff para o palco 3D entre os rounds.
-import { formatCurrency } from '../utils/helpers.js';
-
 export class LiveFightHubView {
   static render(fighterA, fighterB, result) {
     const rounds = result.rounds || [];
@@ -104,7 +102,6 @@ export class LiveFightHubView {
 
   static _beatHtml(beat, fighterA, fighterB) {
     const isA = beat.fighterId === fighterA.id;
-    const name = isA ? fighterA.name : fighterB.name;
     const icon = beat.type === 'finish' ? '🔥' : beat.type === 'knockdown' ? '💥' : beat.type === 'sub_attempt' ? '🔄' : '👇';
     const isSignificant = beat.type === 'finish' || beat.type === 'knockdown';
     return `

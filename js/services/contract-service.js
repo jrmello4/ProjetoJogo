@@ -1,4 +1,4 @@
-import { generateId, clamp, formatCurrency } from '../utils/helpers.js';
+import { generateId, formatCurrency } from '../utils/helpers.js';
 import { OFFER_CONFIG, PROMOTIONS, TIER_LABELS } from '../config/game-config.js';
 
 // Ciclo de vida dos contratos exclusivos com promoções (Épico B).

@@ -1,5 +1,5 @@
 import { formatCurrency, getWeightClassShort } from '../utils/helpers.js';
-import { CAMP_CONFIG, CAMP_SPECS, GAME_PLANS, MOVES, TAPE_CONFIG } from '../config/game-config.js';
+import { CAMP_CONFIG, GAME_PLANS, MOVES, TAPE_CONFIG } from '../config/game-config.js';
 import { TrainingPartnersService } from '../services/training-partners-service.js';
 
 // Épico D: Acampamento de verdade.

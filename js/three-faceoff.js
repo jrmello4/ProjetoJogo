@@ -233,8 +233,6 @@ export class ThreeFaceOff {
     this.blueSpot.intensity = 8;
     // Camera shake sutil
     if (this.camera) {
-      const origX = this.camera.position.x;
-      const origY = this.camera.position.y;
       let shakeCount = 0;
       const shake = () => {
         if (shakeCount++ > 6 || this.disposed) {

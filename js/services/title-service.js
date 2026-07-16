@@ -32,8 +32,6 @@ export class TitleService {
     const promotions = await this._promotions();
 
     for (const promo of promotions) {
-      let crowned = 0;
-
       for (const wc of CORE_WEIGHT_CLASSES) {
         if (promo.champions[wc] !== undefined) continue; // já semeado
 
@@ -53,7 +51,6 @@ export class TitleService {
 
         promo.champions[wc] = best.id;
         promo.titleDefenses[wc] = 0;
-        crowned++;
 
         const champ = await this.fighterCtrl.getFighter(best.id);
         if (champ) {

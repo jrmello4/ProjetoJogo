@@ -394,11 +394,6 @@ export class SimulationEngine {
     const method = result.method;
     if (!method || method.startsWith('Decision')) return;
 
-    // Quem perdeu por nocaute sofre dano
-    const loserPerf = loser.id === result.fighterAId
-      ? { score: result.totalScoreA }
-      : { score: result.totalScoreB };
-
     if (method === 'KO' || method === 'TKO') {
       let damage = method === 'KO'
         ? Math.floor(Math.random() * 4) + 2  // 2-5 pontos (era 3-7, reduzido para evitar que duas lutas destruam o chin)
@@ -491,7 +486,7 @@ export class SimulationEngine {
 
     const striking = fighter.strikingScore * fatiguePenalty * adjustedStamina
       * corner.strikingMod * game.strikingMod
-      * strikingPower * strikingSpeed * aggressionMod
+      * strikingPower * strikingSpeed * aggressionMod * strikingDefense * clinchFactor
       * effectiveStrikingMult * strikingLateBonus * powerMult;
 
     // Grappling: wrestling/bjj + takedowns, takedownDefense, groundControl, submissionOffense, strength
@@ -499,12 +494,15 @@ export class SimulationEngine {
     const tdDefense = 1 + (a.takedownDefense ?? 50) / 300;
     const groundBonus = 1 + (a.groundControl ?? 50) / 300;
     const strengthMod = 1 + (a.strength ?? 50) / 300;
+    // subOff/subDef entram no baseScore via submissionOffense/submissionDefense
+    // já devolvidos abaixo pro subAdvantage de _checkRoundFinish — aqui só
+    // reforçam o próprio grappling score de quem tem as duas pontas fortes.
     const subOff = (a.submissionOffense ?? 50) / 100;
     const subDef = (a.submissionDefense ?? 50) / 100;
 
     const grappling = fighter.grapplingScore * fatiguePenalty * adjustedStamina
       * corner.grapplingMod * game.grapplingMod
-      * tdPower * groundBonus * strengthMod;
+      * tdPower * tdDefense * groundBonus * strengthMod * (1 + (subOff + subDef) / 4);
 
     // Chin + durability (novo): resistência a nocautes
     const chin = a.chin * (1 + ((a.durability ?? 50) - 50) / 200);
@@ -567,6 +565,7 @@ export class SimulationEngine {
       groundControl: a.groundControl ?? 50,
       strength: a.strength ?? 50,
       composure: a.composure ?? 50,
+      staminaFactor: staminaEffect * 100,
     };
   }
 
@@ -675,16 +674,20 @@ export class SimulationEngine {
       chinFactor *= planB.chinMod;
     }
 
-    // Submissão: subOffense do vencedor vs subDefense do perdedor
-    const subAdvantage = (winnerPerf.submissionOffense / 100) - (loserPerf.submissionDefense / 100);
-
     // Perk: submissionChanceMult amplifica chance de finalização
     const winnerMods = winner === fighterA ? modsA : modsB;
     const loserMods = loser === fighterA ? modsA : modsB;
     const subChanceMult = winnerMods.submissionChanceMult || 1;
 
-    // Perk: neverSubmittedLowStamina — lutar com stamina baixa não facilita submission
-    const loserStaminaFactor = loserMods.neverSubmittedLowStamina ? 1 : 1;
+    // Perk: iceOnGround (never_submitted_low_stamina) — "nunca é finalizado
+    // quando está cansado (stamina < 30)". Sem o perk, cansaço abaixo de 30
+    // facilita a finalização de quem está exausto.
+    const staminaSubPenalty = (loserPerf.staminaFactor < 30 && !loserMods.neverSubmittedLowStamina)
+      ? (30 - loserPerf.staminaFactor) / 100
+      : 0;
+
+    // Submissão: subOffense do vencedor vs subDefense do perdedor
+    const subAdvantage = (winnerPerf.submissionOffense / 100) - (loserPerf.submissionDefense / 100) + staminaSubPenalty;
 
     // Perk: subChanceLateRounds — aumenta chance de sub em rounds finais
     const subLateBonus = winnerMods.subChanceLateRounds || 0;

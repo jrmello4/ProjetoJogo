@@ -119,7 +119,7 @@ function weekLabel(absWeek, startedAt) {
   if (startedAt) {
     try {
       return formatDate(absWeekToDate(absWeek, startedAt).toISOString());
-    } catch (e) { /* startedAt inválido — cai no fallback abaixo */ }
+    } catch { /* startedAt inválido — cai no fallback abaixo */ }
   }
   return `Semana ${absWeek}`;
 }

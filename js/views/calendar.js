@@ -1,11 +1,9 @@
-import { absWeekToLabel } from '../config/game-config.js';
-
 export function renderCalendar(calendarData) {
   if (!calendarData) {
     return `<div class="card"><div class="card-body"><p class="text-center text-muted">Nenhum dado disponível.</p></div></div>`;
   }
 
-  const { currentWeek, entries, upcomingFight } = calendarData;
+  const { entries, upcomingFight } = calendarData;
 
   const entriesHtml = entries.map(e => {
     const classes = [

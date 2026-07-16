@@ -1,5 +1,4 @@
 import { Event } from '../models/event.js';
-import { DB } from '../services/db.js';
 import { generateId } from '../utils/helpers.js';
 
 export class EventController {

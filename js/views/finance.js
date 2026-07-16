@@ -12,7 +12,6 @@ export class FinanceView {
     const rentPct = 0.45;
     const foodPct = 0.25;
     const transportPct = 0.15;
-    const leisurePct = 0.15;
     const rent = Math.round(lifestyle.weeklyCost * rentPct);
     const food = Math.round(lifestyle.weeklyCost * foodPct);
     const transport = Math.round(lifestyle.weeklyCost * transportPct);

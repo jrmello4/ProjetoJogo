@@ -10,6 +10,7 @@ const TYPE_ICONS = {
   info: 'ℹ️',
   warning: '⚠️',
   success: '✅',
+  danger: '⛔',       // mesmo ícone de toast.js — recomendação médica forte
   headline: '📰',     // Épico F3: manchetes estilo FM
   expectation: '💭',  // Épico F2: expectativas de atletas
 };

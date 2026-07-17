@@ -107,6 +107,9 @@ export class Fighter {
     this.injuryCount = data.injuryCount || 0;
     this.sequelae = data.sequelae || []; // [{ attr, reduction, description, date }] — P10.1
     this.lastInjuryAbsWeek = data.lastInjuryAbsWeek || 0;
+    // Nocautes/TKOs seguidos (zera em qualquer vitória ou decisão) — gatilho
+    // de exame neurológico extra e aviso de aposentadoria (CONSECUTIVE_KO_CONFIG).
+    this.consecutiveKoTkoLosses = data.consecutiveKoTkoLosses || 0;
 
     // Épico D: configuração do acampamento semanal (persistida, não botão manual)
     this.campConfig = data.campConfig || null; // { intensity, spec, sparringPartnerId } ou null

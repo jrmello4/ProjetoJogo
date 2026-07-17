@@ -267,13 +267,12 @@ export const WORLD_CONFIG = {
   ACADEMY_AFFILIATION_CHANCE: 0.6,
   AI_FIGHTS_PER_EVENT: 5, // lutas de IA por evento (fora as do jogador)
 
-  // Lesões pós-luta
+  // Lesões pós-luta — duração vem de rollInjurySeverity() (INJURY_SEVERITY,
+  // mais abaixo), não de um range fixo aqui.
   INJURY_CHANCE_LOSER: 0.12,
   INJURY_CHANCE_WINNER: 0.04,
   INJURY_CHANCE_FINISH_BONUS: 0.1, // extra se perdeu por KO/TKO/Sub
   INJURY_CHANCE_PRONE_BONUS: 0.08, // extra com DNA injuryProne
-  INJURY_WEEKS_MIN: 2,
-  INJURY_WEEKS_MAX: 6,
 
   // §B.2 — lesão >= este tanto de semanas rola chance de sequela permanente
   SCAR_SEVERE_WEEKS_THRESHOLD: 5,
@@ -423,19 +422,73 @@ export const TITLE_ROLE = {
 // entre camps. No MMA real um atleta ativo faz no máximo 3-4 lutas por
 // ano; o afastamento cresce com a violência do desfecho (nocaute >
 // finalização > decisão).
+//
+// Nocaute (KO) e TKO eram tratados como a mesma categoria (16 semanas pros
+// dois). Relatório de comissões médicas (ABC/NSAC/CABMMA) trata nocaute à
+// parte — perda de consciência muda a categoria clínica, suspensão mínima
+// real de ~60 dias contra ~30 dias de TKO/finalização por estrangulamento.
+// KO_LOSS_WEEKS mantém o teto anterior (16) — SPONSOR_BRANDS.goalWeeks foi
+// calibrado assumindo no máximo 16 semanas de suspensão por ciclo de luta
+// (ver comentário perto de SPONSOR_BRANDS); TKO_SUBMISSION_LOSS_WEEKS cai
+// pra 12, dentro do mesmo teto — nunca aperta o prazo de patrocínio, só
+// afrouxa pra TKO especificamente.
 export const SUSPENSION_CONFIG = {
   DECISION_WEEKS: 8,
   FINISH_WIN_WEEKS: 10,
-  SUBMISSION_LOSS_WEEKS: 12,
-  KO_TKO_LOSS_WEEKS: 16,
+  TKO_SUBMISSION_LOSS_WEEKS: 12,
+  KO_LOSS_WEEKS: 16,
 };
 
 export function computeSuspensionWeeks(method, won) {
   const isFinish = method && !method.startsWith('Decision');
   if (!isFinish) return SUSPENSION_CONFIG.DECISION_WEEKS;
   if (won) return SUSPENSION_CONFIG.FINISH_WIN_WEEKS;
-  return method === 'Submission' ? SUSPENSION_CONFIG.SUBMISSION_LOSS_WEEKS : SUSPENSION_CONFIG.KO_TKO_LOSS_WEEKS;
+  return method.startsWith('KO') ? SUSPENSION_CONFIG.KO_LOSS_WEEKS : SUSPENSION_CONFIG.TKO_SUBMISSION_LOSS_WEEKS;
 }
+
+// Taxonomia de lesão por severidade — baseada em protocolos médicos reais
+// (ABC/NSAC, CABMMA, SafeMMA/IMMAF): contusão, corte, concussão, lesão
+// articular e fratura de osso longo têm janelas de afastamento bem
+// diferentes na vida real (~1 semana a ~26 semanas). Antes desta mudança,
+// TRÊS pontos do código rolavam "semanas de lesão" com faixas diferentes
+// e desalinhadas entre si (lesão pós-luta: 2-6 semanas; lesão de camp:
+// 3-8 semanas hardcoded; lesão de microdecisão semanal: 1-3 semanas
+// hardcoded) — nenhuma delas nomeava o tipo de lesão pro jogador, só
+// "Lesionado por N semanas" genérico. Consolidado numa fonte única com
+// rótulo e peso por tipo; rollInjurySeverity(pool) filtra o pool pra
+// contextos de menor risco (treino leve não deveria arriscar fratura).
+export const INJURY_SEVERITY = {
+  bruise:     { label: 'Contusão',           weeksMin: 1,  weeksMax: 2,  weight: 40 },
+  cut:        { label: 'Corte profundo',     weeksMin: 3,  weeksMax: 6,  weight: 25 },
+  concussion: { label: 'Concussão',          weeksMin: 4,  weeksMax: 8,  weight: 20 },
+  joint:      { label: 'Lesão articular',    weeksMin: 6,  weeksMax: 12, weight: 10 },
+  fracture:   { label: 'Fratura óssea',      weeksMin: 16, weeksMax: 26, weight: 5 },
+};
+
+export function rollInjurySeverity(allowedTypes = null) {
+  const entries = Object.entries(INJURY_SEVERITY).filter(([key]) => !allowedTypes || allowedTypes.includes(key));
+  const totalWeight = entries.reduce((sum, [, cfg]) => sum + cfg.weight, 0);
+  let roll = Math.random() * totalWeight;
+  for (const [type, cfg] of entries) {
+    if (roll < cfg.weight) {
+      const weeks = cfg.weeksMin + Math.floor(Math.random() * (cfg.weeksMax - cfg.weeksMin + 1));
+      return { type, label: cfg.label, weeks };
+    }
+    roll -= cfg.weight;
+  }
+  const [fallbackType, fallbackCfg] = entries[entries.length - 1];
+  return { type: fallbackType, label: fallbackCfg.label, weeks: fallbackCfg.weeksMin };
+}
+
+// Relatório médico: golpes consecutivos na cabeça levam comissões a exigir
+// exame neurológico extra e, em casos repetidos, a recomendar aposentadoria
+// (ex.: Carolina do Sul exige CT/MRI após 3 nocautes seguidos). Só rastreia
+// o lutador do jogador — o mesmo escopo que sequelae/permanentScars já usam.
+export const CONSECUTIVE_KO_CONFIG = {
+  EXAM_THRESHOLD: 2,               // a partir do 2º KO/TKO seguido, exame extra
+  EXAM_EXTRA_WEEKS: 4,
+  RETIREMENT_WARNING_THRESHOLD: 3, // a partir do 3º, recomendação forte de aposentadoria
+};
 
 // ============================================================
 // FATIA 2 — A PREPARAÇÃO
@@ -1169,8 +1222,6 @@ export const WEEKLY_TRAINING_FREQUENCY = 4;
 
 // Injury recovery stage system — P2.2
 export const INJURY_CONFIG = {
-  REST_WEEKS_MIN: 2,
-  REST_WEEKS_MAX: 4,
   REHAB_FAST_COST: 500,        // cost per week for fast rehab
   REHAB_FAST_WEEKS: 3,         // fast rehab takes this many weeks
   REHAB_FREE_WEEKS: 6,         // free rehab takes this many

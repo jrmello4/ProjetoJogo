@@ -7,7 +7,7 @@ import { TapeService } from './tape-service.js';
 import { ReadinessService } from './readiness-service.js';
 import { DataGenerator } from './data-generator.js';
 import { HallOfFame } from './hall-of-fame.js';
-import { generateId, getWeightClassName } from '../utils/helpers.js';
+import { generateId, getWeightClassName, formatWeeks } from '../utils/helpers.js';
 import {
   ACADEMIES,
   WORLD_CONFIG,
@@ -26,8 +26,10 @@ import {
   TAPE_CONFIG,
   INJURY_CONFIG,
   WEIGHT_BULLY_CONFIG,
+  CONSECUTIVE_KO_CONFIG,
   absWeekToDate,
   computeSuspensionWeeks,
+  rollInjurySeverity,
 } from '../config/game-config.js';
 
 // Motor do mundo vivo: cada promoção de IA agenda e realiza os próprios
@@ -924,17 +926,45 @@ export class WorldService {
     if (!won && isFinish) chance += WORLD_CONFIG.INJURY_CHANCE_FINISH_BONUS;
     if (fighter.hasDNA('injuryProne')) chance += WORLD_CONFIG.INJURY_CHANCE_PRONE_BONUS;
 
+    // Relatório médico (ABC/NSAC/CABMMA): nocautes consecutivos acumulam
+    // risco de verdade — exame neurológico extra a partir do 2º seguido,
+    // recomendação de aposentadoria a partir do 3º. Só o lutador do jogador
+    // (mesmo escopo de sequelae/permanentScars).
+    const isKoTkoLoss = !won && result.method && (result.method.startsWith('KO') || result.method.startsWith('TKO'));
+    if (fighter.id === playerFighterId) {
+      fighter.consecutiveKoTkoLosses = isKoTkoLoss ? (fighter.consecutiveKoTkoLosses || 0) + 1 : 0;
+    }
+
     if (Math.random() >= chance) return;
 
-    const weeks = WORLD_CONFIG.INJURY_WEEKS_MIN +
-      Math.floor(Math.random() * (WORLD_CONFIG.INJURY_WEEKS_MAX - WORLD_CONFIG.INJURY_WEEKS_MIN + 1));
+    const severity = rollInjurySeverity();
+    let weeks = severity.weeks;
+
+    // Exame neurológico extra some junto com o resto da lesão desta luta —
+    // não é uma segunda suspensão separada, é a MESMA lesão levando mais
+    // tempo pra liberar porque a comissão exige exame antes de autorizar.
+    let examNote = '';
+    if (fighter.id === playerFighterId && isKoTkoLoss && fighter.consecutiveKoTkoLosses >= CONSECUTIVE_KO_CONFIG.EXAM_THRESHOLD) {
+      weeks += CONSECUTIVE_KO_CONFIG.EXAM_EXTRA_WEEKS;
+      examNote = ` — exame neurológico obrigatório após ${fighter.consecutiveKoTkoLosses} nocautes seguidos`;
+      if (this.careerLogService) {
+        await this.careerLogService.publish(fighter.id, 'consecutive_ko_exam', absWeekNow, 65, {
+          count: fighter.consecutiveKoTkoLosses,
+        });
+      }
+    }
+    if (fighter.id === playerFighterId && isKoTkoLoss && fighter.consecutiveKoTkoLosses >= CONSECUTIVE_KO_CONFIG.RETIREMENT_WARNING_THRESHOLD) {
+      await this.notifService.add('danger', '🧠 Recomendação Médica',
+        `${fighter.consecutiveKoTkoLosses} nocautes seguidos. Times médicos recomendam fortemente considerar a aposentadoria — o risco acumulado é real.`);
+    }
 
     // P2.2: new injury format with stages
     fighter.injury = {
       stage: 'rest',
       restUntilAbsWeek: absWeekNow + weeks,
       rehabEndAbsWeek: 0,
-      description: `Lesionado por ${weeks} semanas`,
+      type: severity.type,
+      description: `${severity.label} — ${formatWeeks(weeks)}${examNote}`,
       rehabCost: 0,
       rehabChosen: false,
       resumeStatus: fighter.status,

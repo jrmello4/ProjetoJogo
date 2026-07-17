@@ -1,3 +1,7 @@
+export function formatWeeks(weeks) {
+  return `${weeks} semana${weeks === 1 ? '' : 's'}`;
+}
+
 export function formatCurrency(value) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',

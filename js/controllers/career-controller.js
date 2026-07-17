@@ -1,4 +1,4 @@
-import { INJURY_CONFIG, absWeek } from '../config/game-config.js';
+import { INJURY_CONFIG, INJURY_SEVERITY, absWeek } from '../config/game-config.js';
 import { HallOfFame } from '../services/hall-of-fame.js';
 
 // Carreira do lutador: milestones, estágios de lesão, fim de carreira,
@@ -60,17 +60,24 @@ export class CareerController {
   }
 
   // ===== P2.2: Staged injury recovery =====
+  // Fluxo baseado no processo real (ABC/NSAC/CABMMA): repouso -> reavaliação
+  // médica -> retorno gradual -> liberação oficial. Concussão e fratura
+  // pedem uma reavaliação mais explícita (o relatório de comissões médicas
+  // cita CT/MRI/exame neurológico como pré-requisito de liberação nesses
+  // dois casos especificamente).
   async processInjuryStages(fighter, absWeekNow) {
     if (!fighter.injury || !fighter.injury.stage) return;
 
     const injury = fighter.injury;
+    const label = injury.type ? INJURY_SEVERITY[injury.type]?.label : null;
+    const needsExam = injury.type === 'concussion' || injury.type === 'fracture';
 
     if (injury.stage === 'rest' && absWeekNow >= injury.restUntilAbsWeek) {
       // Rest stage complete — move to rehab stage
       injury.stage = 'rehab';
       injury.rehabEndAbsWeek = absWeekNow + INJURY_CONFIG.REHAB_FREE_WEEKS;
       await this.notifService.add('injury', 'Lesão em recuperação',
-        'Sua lesão entrou na fase de reabilitação. Você pode escolher entre fisioterapia rápida (paga) ou gratuita (mais lenta) no painel principal.');
+        `${label ? `Sua ${label.toLowerCase()}` : 'Sua lesão'} entrou na fase de reabilitação.${needsExam ? ' A comissão médica exige reavaliação por imagem/exame neurológico antes da liberação.' : ''} Você pode escolher entre fisioterapia rápida (paga) ou gratuita (mais lenta) no painel principal.`);
     }
 
     if (injury.stage === 'rehab' && injury.rehabChosen && absWeekNow >= injury.rehabEndAbsWeek) {
@@ -87,7 +94,7 @@ export class CareerController {
       fighter.injury = null;
       fighter.status = 'active';
       await this.notifService.add('info', 'Recuperado',
-        'Você está 100% recuperado da lesão.');
+        'Liberação médica oficial — você está 100% recuperado.');
     }
   }
 

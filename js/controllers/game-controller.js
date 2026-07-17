@@ -1018,15 +1018,15 @@ export class GameController {
 
     const academy = await this.getAcademy(fighter.academyId);
     const teammates = await this.partnersService.getTeammates(fighter);
+    const seasonState = await this.seasonService.getState();
+    const now = absWeek(seasonState);
 
-    const result = WeeklyTrainingController.applyChoice(fighter, choiceKey, academy, teammates);
+    const result = WeeklyTrainingController.applyChoice(fighter, choiceKey, academy, teammates, now);
     if (!result) return { ok: false, reason: 'Falha ao aplicar treino semanal.' };
 
     await this.fighterCtrl.updateFighter(fighter);
     await this.db.delete('gameState', 'weeklyTrainingPrompt');
 
-    const seasonState = await this.seasonService.getState();
-    const now = absWeek(seasonState);
     if (this.careerLogService) {
       await this.careerLogService.publish(fighter.id, 'weekly_training', now, 20, {
         choice: choiceKey,

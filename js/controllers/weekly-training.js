@@ -1,5 +1,5 @@
-import { clamp } from '../utils/helpers.js';
-import { WEEKLY_TRAINING_CHOICES, TRAINING_FOCUS_META } from '../config/game-config.js';
+import { clamp, formatWeeks } from '../utils/helpers.js';
+import { WEEKLY_TRAINING_CHOICES, TRAINING_FOCUS_META, rollInjurySeverity } from '../config/game-config.js';
 import { TrainingPartnersService } from '../services/training-partners-service.js';
 
 // Microdecisões de treino semanal — Fase 1.
@@ -24,7 +24,7 @@ export class WeeklyTrainingController {
     }));
   }
 
-  static applyChoice(fighter, choiceKey, academy, teammates) {
+  static applyChoice(fighter, choiceKey, academy, teammates, absWeekNow) {
     const cfg = WEEKLY_TRAINING_CHOICES[choiceKey];
     if (!cfg) return null;
 
@@ -48,12 +48,21 @@ export class WeeklyTrainingController {
 
     let injured = false;
     if (Math.random() < cfg.injuryRisk) {
+      // Bug real: isto somava um offset de 1-3 semanas em cima de
+      // fighter.injury?.restUntilAbsWeek — que é null aqui (não dá pra
+      // escolher treino semanal já lesionado) — então virava "0 + 1..3",
+      // uma semana ABSOLUTA lá no início do jogo. Depois da semana 3 de
+      // carreira (ou seja, quase sempre), a lesão já nascia "vencida":
+      // _recoverInjuries via absWeekNow > restUntilAbsWeek liberava o
+      // lutador no tick seguinte, não importa a intenção de 1-3 semanas.
+      const severity = rollInjurySeverity(['bruise', 'cut']);
       fighter.status = 'injured';
       fighter.injury = {
         stage: 'rest',
-        restUntilAbsWeek: (fighter.injury?.restUntilAbsWeek || 0) + Math.ceil(Math.random() * 3),
+        restUntilAbsWeek: absWeekNow + severity.weeks,
         rehabEndAbsWeek: 0,
-        description: 'Lesão leve durante treino',
+        type: severity.type,
+        description: `${severity.label} durante treino — ${formatWeeks(severity.weeks)}`,
         rehabCost: 0,
         rehabChosen: false,
         resumeStatus: 'active',

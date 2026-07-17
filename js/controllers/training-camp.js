@@ -1,5 +1,5 @@
-import { clamp } from '../utils/helpers.js';
-import { CAMP_CONFIG, TAPE_CONFIG, PLAN_SPECIALTY, INJURY_CONFIG } from '../config/game-config.js';
+import { clamp, formatWeeks } from '../utils/helpers.js';
+import { CAMP_CONFIG, TAPE_CONFIG, PLAN_SPECIALTY, INJURY_CONFIG, rollInjurySeverity } from '../config/game-config.js';
 import { TapeService } from '../services/tape-service.js';
 import { TrainingPartnersService } from '../services/training-partners-service.js';
 
@@ -138,7 +138,13 @@ export class TrainingCamp {
 
     if (Math.random() < risks.injuryChance) {
       result.injured = true;
-      const injuryWeeks = 3 + Math.floor(Math.random() * 6); // 3-8 semanas
+      // Sparring controlado não quebra osso do nada — sem a fratura rara
+      // que a lesão de luta de verdade pode rolar (rollInjurySeverity()
+      // completo). Mesma taxonomia médica (contusão/corte/concussão/
+      // articular), taxa de camp fica um pouco mais dura que a antiga
+      // faixa fixa de 3-8 semanas.
+      const severity = rollInjurySeverity(['bruise', 'cut', 'concussion', 'joint']);
+      const injuryWeeks = severity.weeks;
       result.injuryWeeks = injuryWeeks;
 
       const prevStatus = fighter.status;
@@ -147,7 +153,8 @@ export class TrainingCamp {
         stage: 'rest',
         restUntilAbsWeek: absWeekNow + injuryWeeks,
         rehabEndAbsWeek: 0,
-        description: `Lesionado no treino (${intensity})`,
+        type: severity.type,
+        description: `${severity.label} no treino (${intensity}) — ${formatWeeks(injuryWeeks)}`,
         rehabCost: 0,
         rehabChosen: false,
         resumeStatus: prevStatus,

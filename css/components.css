@@ -424,6 +424,8 @@
   background: var(--mat-high);
 }
 
+.corner-choice:active { transform: translateY(1px); }
+
 .corner-choice-icon { font-size: 1.375rem; margin-bottom: 0.5rem; }
 
 .corner-choice-label {
@@ -763,6 +765,7 @@
 }
 
 .plan-option:hover { border-color: var(--border-light); }
+.plan-option:active { transform: translateY(1px); }
 
 .plan-option--active {
   border-top-color: var(--red);
@@ -847,24 +850,39 @@
 
 .difficulty-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
 
+/* Agora um <button> de verdade (era <div onclick>, invisível pro teclado
+   e leitor de tela) — reset de chrome nativo pra herdar a mesma aparência
+   de antes, igual .plan-option/.corner-choice já fazem. */
 .difficulty-option {
+  width: 100%;
   padding: 0.875rem 0.75rem;
   background: var(--canvas);
   border: 1px solid var(--border);
   border-top: 2px solid var(--border);
   border-radius: var(--radius);
+  font: inherit;
+  color: inherit;
   text-align: center;
   cursor: pointer;
   transition: var(--transition);
 }
 
-.difficulty-option:hover { border-color: var(--border-light); }
+.difficulty-option:hover:not(:disabled) { border-color: var(--border-light); }
+.difficulty-option:active:not(:disabled) { transform: translateY(1px); }
 
 .difficulty-option.selected {
   border-color: var(--border-light);
   border-top-color: var(--red);
   background: var(--accent-subtle);
 }
+
+.difficulty-option:disabled,
+.difficulty-option.challenge-locked {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.difficulty-option:disabled:hover { border-color: var(--border); border-top-color: var(--border); }
 
 .difficulty-name {
   font-family: var(--font-display);

@@ -436,6 +436,10 @@ body {
 
 .btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
+/* Pressed: a real button gives under the thumb. 1px, not a scale tween —
+   fast enough to read as physical, not as a hover exaggerated. */
+.btn:active:not(:disabled) { transform: translateY(1px); }
+
 .btn-primary { background: var(--red); color: #fff; border-color: var(--red); }
 .btn-primary:hover:not(:disabled) { background: var(--red-bright); border-color: var(--red-bright); }
 
@@ -998,7 +1002,14 @@ tbody tr:hover td { background: var(--bg-hover); }
 .icon-arrow::before { content: "\2192"; }
 .icon-medal::before { content: "\25CF"; color: var(--belt-ink); }
 
-/* ===== Calendário Visual ===== */
+/* ===== Calendário Visual =====
+   Herdada de um template genérico antes do sistema Red Corner/Blue Corner
+   existir: `--primary`/`--text`/`--info` nunca foram tokens de verdade
+   aqui, então cada var() abaixo sempre caía no fallback hardcoded — cores
+   fora da paleta (um vermelho-laranja genérico, azul de dashboard) que
+   NUNCA respondiam ao tema claro/escuro. `--text: #eee` era o pior caso:
+   quase branco sobre o card quase-branco do tema claro, ilegível. Reescrito
+   só com tokens reais do sistema. */
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -1006,44 +1017,45 @@ tbody tr:hover td { background: var(--bg-hover); }
 }
 .calendar-entry {
   padding: 0.5rem;
-  border-radius: 6px;
-  background: var(--bg-card, #1a1a2e);
-  border: 1px solid var(--border, #2a2a4e);
+  border-radius: var(--radius);
+  background: var(--mat);
+  border: 1px solid var(--border);
   font-size: 0.85rem;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
 .calendar-entry--current {
-  border-color: var(--primary, #e74c3c);
-  background: color-mix(in srgb, var(--primary, #e74c3c) 10%, var(--bg-card, #1a1a2e));
+  border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 10%, var(--mat));
 }
 .calendar-entry--past {
   opacity: 0.4;
 }
 .calendar-entry--fight {
-  border-color: var(--danger, #e74c3c);
+  border-color: var(--red-ink);
 }
 .calendar-entry--title_fight {
-  border-color: var(--warning, #f39c12);
-  background: color-mix(in srgb, var(--warning, #f39c12) 15%, var(--bg-card, #1a1a2e));
+  border-color: var(--belt);
+  background: color-mix(in srgb, var(--belt) 15%, var(--mat));
 }
 .calendar-entry--suspended {
-  border-color: var(--text-muted, #666);
+  border-color: var(--ash);
 }
 .calendar-entry--camp {
-  border-color: var(--warning, #f39c12);
+  border-color: var(--belt);
 }
 .calendar-entry--weigh_in {
-  border-color: var(--gold, #d4a843);
-  background: color-mix(in srgb, var(--gold, #d4a843) 10%, var(--bg-card, #1a1a2e));
+  border-color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 10%, var(--mat));
 }
 .calendar-entry--event {
-  border-color: var(--info, #3498db);
+  border-color: var(--blue-bright);
 }
 .calendar-entry-week {
+  font-family: var(--font-mono);
   font-weight: 600;
-  color: var(--text, #eee);
+  color: var(--chalk);
 }
 .calendar-entry-icon {
   font-size: 1.5rem;
@@ -1051,9 +1063,9 @@ tbody tr:hover td { background: var(--bg-hover); }
 }
 .calendar-entry-detail {
   font-size: 0.75rem;
-  color: var(--text-secondary, #999);
+  color: var(--text-secondary);
   min-height: 1em;
 }
 .calendar-legend {
-  color: var(--text-muted, #666);
+  color: var(--ash);
 }

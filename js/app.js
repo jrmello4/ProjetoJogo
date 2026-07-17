@@ -146,9 +146,9 @@ class App {
           <label class="form-label">Arquétipo Inicial</label>
           <div class="difficulty-grid">
             ${Object.entries(ARCHETYPES).map(([key, a]) => `
-              <div class="difficulty-option ${key === 'generalist' ? 'selected' : ''}" data-archetype="${key}">
+              <button type="button" class="difficulty-option ${key === 'generalist' ? 'selected' : ''}" data-archetype="${key}">
                 <div class="difficulty-name">${a.label}</div>
-              </div>
+              </button>
             `).join('')}
           </div>
         </div>
@@ -157,9 +157,9 @@ class App {
           <label class="form-label">Origem Esportiva</label>
           <div class="difficulty-grid" style="grid-template-columns:repeat(3,1fr)">
             ${Object.entries(ORIGINS).map(([key, o], i) => `
-              <div class="difficulty-option ${i === 0 ? 'selected' : ''}" data-origin="${key}">
+              <button type="button" class="difficulty-option ${i === 0 ? 'selected' : ''}" data-origin="${key}">
                 <div class="difficulty-name">${o.label}</div>
-              </div>
+              </button>
             `).join('')}
           </div>
         </div>
@@ -168,11 +168,11 @@ class App {
           <label class="form-label">Reserva Financeira</label>
           <div class="difficulty-grid">
             ${DIFFICULTIES.map(d => `
-              <div class="difficulty-option ${d.id === 'normal' ? 'selected' : ''}" data-difficulty="${d.id}">
+              <button type="button" class="difficulty-option ${d.id === 'normal' ? 'selected' : ''}" data-difficulty="${d.id}">
                 <div class="difficulty-name">${d.name}</div>
                 <div class="difficulty-cash">${formatCurrency(d.cash)}</div>
                 <div class="text-xs text-muted mt-2">${d.desc}</div>
-              </div>
+              </button>
             `).join('')}
           </div>
         </div>
@@ -181,10 +181,10 @@ class App {
           <label class="form-label">Primeira Academia</label>
           <div class="difficulty-grid">
             ${academies.map((a, i) => `
-              <div class="difficulty-option ${i === 0 ? 'selected' : ''}" data-academy="${a.id}">
+              <button type="button" class="difficulty-option ${i === 0 ? 'selected' : ''}" data-academy="${a.id}">
                 <div class="difficulty-name">${a.name}</div>
                 <div class="text-xs text-muted mt-2">${a.philosophy} · ${formatCurrency(a.weeklyFee)}/sem</div>
-              </div>
+              </button>
             `).join('')}
           </div>
         </div>
@@ -193,10 +193,10 @@ class App {
           <label class="form-label">Primeiro Empresário</label>
           <div class="difficulty-grid">
             ${managers.map((m, i) => `
-              <div class="difficulty-option ${i === 0 ? 'selected' : ''}" data-manager="${m.id}">
+              <button type="button" class="difficulty-option ${i === 0 ? 'selected' : ''}" data-manager="${m.id}">
                 <div class="difficulty-name">${m.name}</div>
                 <div class="text-xs text-muted mt-2">${MANAGER_STYLE_LABELS[m.style] || m.style} · corte ${Math.round(m.cut * 100)}%</div>
-              </div>
+              </button>
             `).join('')}
           </div>
         </div>
@@ -205,20 +205,19 @@ class App {
           <label class="form-label">Modo Desafio <span class="text-xs text-muted">(opcional)</span></label>
           <div class="difficulty-grid" style="grid-template-columns:repeat(3,1fr)">
             ${Object.entries(CHALLENGE_MODES).map(([key, m]) => {
-              const disabled = !hasCompletedCareer ? 'disabled' : '';
-              const lockedClass = !hasCompletedCareer ? 'challenge-locked' : '';
+              const locked = !hasCompletedCareer;
               return `
-                <div class="difficulty-option challenge-option ${lockedClass}" data-challenge="${key}" data-disabled="${!hasCompletedCareer}">
+                <button type="button" class="difficulty-option challenge-option ${locked ? 'challenge-locked' : ''}" data-challenge="${key}" ${locked ? 'disabled' : ''}>
                   <div class="difficulty-name">${m.icon} ${m.name}</div>
                   <div class="text-xs text-muted mt-2">${m.description}</div>
-                  ${!hasCompletedCareer ? `<div class="text-xs mt-1" style="color:var(--color-warning)">🔒 ${m.requirements}</div>` : ''}
-                </div>
+                  ${locked ? `<div class="text-xs mt-1" style="color:var(--warning)">🔒 ${m.requirements}</div>` : ''}
+                </button>
               `;
             }).join('')}
-            <div class="difficulty-option selected" data-challenge="" data-disabled="false">
+            <button type="button" class="difficulty-option selected" data-challenge="">
               <div class="difficulty-name">🎯 Normal</div>
               <div class="text-xs text-muted mt-2">Sem modificações — experiência padrão.</div>
-            </div>
+            </button>
           </div>
         </div>
 
@@ -260,10 +259,10 @@ class App {
       });
     });
 
-    // P9.2: Challenge mode selection
-    modal.querySelectorAll('[data-challenge]').forEach(opt => {
+    // P9.2: Challenge mode selection — bloqueados usam disabled de verdade
+    // (nunca disparam click, nem por mouse nem por teclado), sem checagem manual.
+    modal.querySelectorAll('[data-challenge]:not(:disabled)').forEach(opt => {
       opt.addEventListener('click', () => {
-        if (opt.dataset.disabled === 'true') return;
         modal.querySelectorAll('[data-challenge]').forEach(o => o.classList.remove('selected'));
         opt.classList.add('selected');
       });
@@ -771,10 +770,10 @@ class App {
           <label class="form-label">Duração</label>
           <div class="difficulty-grid" style="grid-template-columns:repeat(2,1fr)">
             ${SIMULATE_PERIOD_PRESETS.map(p => `
-              <div class="difficulty-option" data-weeks="${p.weeks}">
+              <button type="button" class="difficulty-option" data-weeks="${p.weeks}">
                 <div class="difficulty-name">${p.label}</div>
                 <div class="difficulty-cash">${p.weeks} semanas</div>
-              </div>
+              </button>
             `).join('')}
           </div>
         </div>
@@ -1607,10 +1606,27 @@ class App {
     });
   }
 
+  // Cards clicáveis (stat-card, rank-row, belt-slot...) são <div>, não <a>/
+  // <button> — sem isso, navegação inteira (perfil de lutador, detalhe de
+  // evento) fica invisível pra teclado e leitor de tela. _makeClickable
+  // devolve o mesmo elemento com role="button"/tabindex e Enter/Espaço
+  // disparando o click, igual um botão de verdade dispararia.
+  _makeClickable(el) {
+    el.style.cursor = 'pointer';
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        el.click();
+      }
+    });
+    return el;
+  }
+
   _bindFighterClicks(selector = '[data-fighter-click]', dataAttr = 'fighterClick') {
     document.querySelectorAll(selector).forEach(el => {
-      el.style.cursor = 'pointer';
-      el.addEventListener('click', () => {
+      this._makeClickable(el).addEventListener('click', () => {
         const id = dataAttr === 'id' ? el.dataset.id : el.dataset.fighterClick;
         this.showFighterProfile(id);
       });
@@ -1619,7 +1635,7 @@ class App {
 
   _bindEventClicks() {
     document.querySelectorAll('[data-event-click]').forEach(el => {
-      el.addEventListener('click', () => {
+      this._makeClickable(el).addEventListener('click', () => {
         this.showEventDetails(el.dataset.eventClick);
       });
     });

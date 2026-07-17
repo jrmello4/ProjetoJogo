@@ -132,12 +132,22 @@ export const ORIGINS = {
 
 // Divisões usadas na geração do mundo — concentra lutadores para
 // garantir matchmaking viável dentro de cada promoção.
+// P9.x — antes só tinha as 5 divisões do meio. Peso Mosca e Meio-Pesado
+// eram selecionáveis na criação de personagem mas nunca ganhavam lutador
+// de IA nenhum (roster inicial, agente livre e draft anual só liam esta
+// lista) — escolher qualquer uma das duas travava o jogador numa divisão
+// sem adversário pra sempre. Peso Pesado entra aqui também (o MUNDO sempre
+// teve pesados de IA); o que fica bloqueado até completar uma carreira é só
+// a OPÇÃO do próprio jogador na tela de criação (ver app.js).
 export const CORE_WEIGHT_CLASSES = [
+  'Flyweight',
   'Bantamweight',
   'Featherweight',
   'Lightweight',
   'Welterweight',
   'Middleweight',
+  'Light Heavyweight',
+  'Heavyweight',
 ];
 
 // Promoções de IA. tier 1 = topo mundial; tier 3 = circuito regional.

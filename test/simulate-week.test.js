@@ -41,4 +41,28 @@ describe('GameController.simulateWeeks — invariantes de integração', () => {
     const rankings = RankingService.calculateRankings(allFighters.filter(f => f.status !== 'retired'));
     expect(rankings).toBeTruthy();
   }, 20000);
+
+  // P9.x — regressão: Flyweight e Light Heavyweight eram selecionáveis na
+  // criação de personagem mas ficavam de fora de CORE_WEIGHT_CLASSES, então
+  // nenhum lutador de IA nascia nessas divisões — roster inicial, agente
+  // livre e draft anual liam só a lista antiga. Escolher qualquer uma das
+  // duas travava o jogador numa divisão vazia para sempre (nunca recebia
+  // 1 oferta sequer). Testa as duas divisões que eram órfãs.
+  it.each(['Flyweight', 'Light Heavyweight'])('divisão %s tem adversários de IA e gera pelo menos 1 oferta em 20 semanas', async (weightClass) => {
+    const game = new GameController();
+    await game.init();
+
+    await game.createPlayerFighter({
+      name: 'Division Tester',
+      weightClass,
+      archetype: 'generalist',
+      origin: null,
+      difficultyId: 'normal',
+      academyId: 'academy-blacktiger',
+      managerId: null,
+    });
+
+    const result = await game.simulateWeeks(20);
+    expect(result.offersAccepted).toBeGreaterThanOrEqual(1);
+  }, 20000);
 });

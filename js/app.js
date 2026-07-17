@@ -138,7 +138,7 @@ class App {
             <option value="Welterweight">Peso Meio-Médio</option>
             <option value="Middleweight">Peso Médio</option>
             <option value="Light Heavyweight">Meio-Pesado</option>
-            <option value="Heavyweight">Peso Pesado</option>
+            <option value="Heavyweight" ${hasCompletedCareer ? '' : 'disabled'}>${hasCompletedCareer ? 'Peso Pesado' : '🔒 Peso Pesado (complete uma carreira)'}</option>
           </select>
         </div>
 

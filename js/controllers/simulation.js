@@ -173,6 +173,29 @@ export class SimulationEngine {
       const movesUsedB = selectMoves(profileB, 2 + Math.floor(Math.random() * 3));
       movesUsedThisFight.push(...movesUsedA, ...movesUsedB);
 
+      // P10.2: Lesão durante a luta — chance de 3% por round
+      // Reduz um atributo específico do lutador afetado para os rounds seguintes
+      const INJURY_CHANCE_PER_ROUND = 0.03;
+      const roundInjuries = [];
+      for (const f of [fighterA, fighterB]) {
+        if (Math.random() < INJURY_CHANCE_PER_ROUND) {
+          const physicalAttrs = ['boxing', 'muayThai', 'wrestling', 'bjj', 'chin', 'speed', 'power', 'cardio'];
+          const affectedAttr = physicalAttrs[Math.floor(Math.random() * physicalAttrs.length)];
+          const reduction = 2 + Math.floor(Math.random() * 3); // 2-4
+          const origVal = f.attributes?.[affectedAttr] || 50;
+          f.attributes = f.attributes || {};
+          f.attributes[affectedAttr] = Math.max(1, origVal - reduction);
+
+          roundInjuries.push({
+            fighterId: f.id,
+            fighterName: f.name,
+            attr: affectedAttr,
+            reduction,
+            newVal: f.attributes[affectedAttr],
+          });
+        }
+      }
+
       const perfA = this._calcRoundPerformance(fighterA, fighterB, pressureLevel, staminaFactorA, cornerModA, plan, planEdge, profileA, matchup.bonusA, formA);
       const perfB = this._calcRoundPerformance(fighterB, fighterA, pressureLevel, staminaFactorB, cornerModB, planB, planEdgeB, profileB, matchup.bonusB, formB);
 
@@ -259,6 +282,7 @@ export class SimulationEngine {
           finishMethod: finish.method,
           roundLog,
           moments,
+          injuries: roundInjuries,
         });
         break;
       }
@@ -274,6 +298,7 @@ export class SimulationEngine {
         finished: false,
         roundLog,
         moments,
+        injuries: roundInjuries,
       });
 
       // O ritmo escolhido no córner cobra seu preço (ou ajuda) no fôlego dos rounds seguintes

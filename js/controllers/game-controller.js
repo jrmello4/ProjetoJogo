@@ -48,7 +48,7 @@ import {
 } from '../config/game-config.js';
 import { TapeService } from '../services/tape-service.js';
 import { ReadinessService } from '../services/readiness-service.js';
-import { LEVEL_CONFIG, MOVES, OPTIONAL_SERVICES, WEEKLY_ACTIVITIES } from '../config/game-config.js';
+import { LEVEL_CONFIG, MOVES, NARRATIVE_EVENTS, OPTIONAL_SERVICES, WEEKLY_ACTIVITIES } from '../config/game-config.js';
 
 const WORLD_MODE = 'career-1-fighter';
 // v4: carreira de 1 lutador — Academy substitui Gym/RivalGym, economia
@@ -503,6 +503,28 @@ export class GameController {
               await this.notifService.add('warning', '⚔️ Rivalidade', `${rival.name} está provocando você. Como reagir?`);
             }
           }
+        }
+      }
+    }
+
+    // Fase 1: Evento narrativo semanal (a cada ~5 semanas)
+    if (now % 5 === 0 && fighter.status !== 'retired') {
+      let narrativePrompt;
+      try { narrativePrompt = await this.db.get('gameState', 'narrative-prompt'); } catch { /* ok */ }
+      if (!narrativePrompt) {
+        const narrativeEvent = this.careerLogService.selectNarrativeEvent(fighter);
+        if (narrativeEvent) {
+          const choices = narrativeEvent.choices.map((c, i) => ({
+            ...c,
+            key: `n_${i}`,
+          }));
+          await this.db.put('gameState', {
+            id: 'narrative-prompt',
+            prompt: narrativeEvent.prompt,
+            choices,
+            createdAbsWeek: now,
+          });
+          await this.notifService.add('headline', '📰 Momento da Carreira', narrativeEvent.prompt);
         }
       }
     }
@@ -1067,6 +1089,66 @@ export class GameController {
     await this.notifService.add('info', 'Rivalidade', messages[choice] || '');
 
     return { ok: true, choice, effects: { popChange, moraleChange, intensityGain: finalIntensityGain } };
+  }
+
+  // ===== Evento narrativo: resolve a escolha do jogador =====
+  async resolveNarrativeChoice(choiceKey) {
+    const fighter = await this.getPlayerFighter();
+    if (!fighter) return { ok: false, reason: 'Nenhum lutador ativo.' };
+
+    let promptData;
+    try { promptData = await this.db.get('gameState', 'narrative-prompt'); } catch { /* ok */ }
+    if (!promptData) return { ok: false, reason: 'Nenhum evento narrativo pendente.' };
+
+    const choice = promptData.choices.find(c => c.key === choiceKey);
+    if (!choice) return { ok: false, reason: 'Escolha inválida.' };
+
+    // Aplica os efeitos
+    const effects = choice.effects || {};
+    const logParts = [];
+    for (const [key, value] of Object.entries(effects)) {
+      switch (key) {
+        case 'morale':
+          fighter.applyMoraleChange(value);
+          logParts.push(`moral ${value >= 0 ? '+' : ''}${value}`);
+          break;
+        case 'popularity':
+          fighter.updatePopularity(value);
+          logParts.push(`popularidade ${value >= 0 ? '+' : ''}${value}`);
+          break;
+        case 'hype':
+          fighter.narrativeHype = (fighter.narrativeHype || 0) + value;
+          logParts.push(`hype ${value >= 0 ? '+' : ''}${value}`);
+          break;
+        case 'heat':
+          fighter.narrativeHeat = (fighter.narrativeHeat || 0) + value;
+          logParts.push(`heat ${value >= 0 ? '+' : ''}${value}`);
+          break;
+        default:
+          // Atributo do lutador (ex: composure, power, awareness, discipline)
+          if (key in fighter.attributes) {
+            const newVal = Math.min(fighter.effectiveCeiling(key), Math.max(1, (fighter.attributes[key] || 50) + value));
+            fighter.attributes[key] = newVal;
+            logParts.push(`${key} ${value >= 0 ? '+' : ''}${value}`);
+          }
+          break;
+      }
+    }
+
+    await this.fighterCtrl.updateFighter(fighter);
+    await this.db.delete('gameState', 'narrative-prompt');
+
+    const seasonState = await this.seasonService.getState();
+    const now = absWeek(seasonState);
+    if (this.careerLogService) {
+      await this.careerLogService.publish(fighter.id, 'narrative_choice', now, 35, {
+        prompt: promptData.prompt.slice(0, 80),
+        choice: choice.text,
+        effects: logParts.join(', '),
+      });
+    }
+
+    return { ok: true, choice: choice.text, effects: logParts };
   }
 
   async _checkExpectations(now, fighter) {
@@ -1671,6 +1753,9 @@ export class GameController {
     let rivalryPrompt = null;
     try { const rp = await this.db.get('gameState', 'rivalry-prompt'); if (rp?.choices) rivalryPrompt = rp; } catch { /* ok */ }
 
+    let narrativePrompt = null;
+    try { const np = await this.db.get('gameState', 'narrative-prompt'); if (np?.choices) narrativePrompt = np; } catch { /* ok */ }
+
     // Prontidão (item 4) — resumo pro dashboard quando há luta marcada.
     // Mesma conta da simulação; prontidão do adversário exige scouting 1+.
     let readiness = null;
@@ -1705,6 +1790,7 @@ export class GameController {
       sponsors,
       socialPrompt,
       rivalryPrompt,
+      narrativePrompt,
       weighInPrompt,
       readiness,
       state,

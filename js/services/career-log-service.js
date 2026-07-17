@@ -1,3 +1,5 @@
+import { NARRATIVE_EVENTS } from '../config/game-config.js';
+
 const DOC_ID = 'careerLog';
 const MAX_ENTRIES = 300;
 
@@ -60,5 +62,41 @@ export class CareerLogService {
 
   async recentSince(absWeekNow, windowWeeks) {
     return (await this.all()).filter(e => e.atAbsWeek >= absWeekNow - windowWeeks);
+  }
+
+  // Retorna um evento narrativo aleatório compatível com o contexto
+  // atual do lutador (derrota recente, streak, lesão, rival, título).
+  // Retorna null se nenhum pool de eventos se aplicar.
+  selectNarrativeEvent(fighter) {
+    const events = [];
+
+    // Após derrota recente (últimas 5 lutas)
+    const recentFights = fighter.fights?.slice(0, 5) || [];
+    const lastFightLost = recentFights.length > 0 && recentFights[0].won === false;
+    if (lastFightLost && recentFights[0].won === false) {
+      events.push(...(NARRATIVE_EVENTS.after_loss || []));
+    }
+
+    // Sequência de vitórias de 3+
+    const streak = fighter.winStreak || 0;
+    if (streak >= 3) {
+      events.push(...(NARRATIVE_EVENTS.after_win_streak || []));
+    }
+
+    // Retornou de lesão recentemente
+    if (fighter.injury !== null && typeof fighter.injury === 'object' && fighter.status !== 'injured') {
+      events.push(...(NARRATIVE_EVENTS.injury_return || []));
+    }
+
+    // É campeão ou já conquistou títulos
+    if (fighter.ranking === 1 || (fighter.titlesWon || 0) > 0) {
+      events.push(...(NARRATIVE_EVENTS.title_reign || []));
+    }
+
+    if (events.length === 0) return null;
+
+    // Escolhe um evento aleatório do pool reunido
+    const pool = events[Math.floor(Math.random() * events.length)];
+    return pool;
   }
 }

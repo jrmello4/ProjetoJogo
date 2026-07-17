@@ -130,7 +130,7 @@ export class DashboardView {
   }
 
   static render(data, weekLabel) {
-    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, rivalryPrompt, weighInPrompt, readiness, now } = data;
+    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, rivalryPrompt, narrativePrompt, weighInPrompt, readiness, now } = data;
 
     const tierBadge = (tier) => `<span class="badge ${tierBadgeCls(tier)}">${TIER_LABELS[tier]}</span>`;
 
@@ -221,6 +221,26 @@ export class DashboardView {
           <div class="flex flex-col gap-2">
             ${rivalryPrompt.choices.map(c => `
               <button class="btn btn-secondary rivalry-choice" data-choice="${c.key}" style="text-align:left">${c.text}</button>
+            `).join('')}
+          </div>
+        </div>`;
+    }
+
+    // ===== Evento narrativo (Fase 1) =====
+    let narrativeHtml = '';
+    if (narrativePrompt) {
+      narrativeHtml = `
+        ${pendingOffers.length === 0 && !socialPrompt && !rivalryPrompt ? '<div class="section-label" data-reveal>Decisões Pendentes</div>' : ''}
+        <div class="card mb-4" data-reveal style="border-top-color:var(--gold)">
+          <div class="card-header">
+            <span class="card-title">📰 Momento da Carreira</span>
+          </div>
+          <p class="text-sm text-muted mb-2">${narrativePrompt.prompt}</p>
+          <div class="flex flex-col gap-2">
+            ${narrativePrompt.choices.map(c => `
+              <button class="btn btn-secondary narrative-choice" data-narrative-choice="${c.key}" style="text-align:left">
+                ${c.text}
+              </button>
             `).join('')}
           </div>
         </div>`;
@@ -498,6 +518,7 @@ export class DashboardView {
       ${weighInHtml}
       ${socialHtml}
       ${rivalryHtml}
+      ${narrativeHtml}
       ${sponsorsHtml}
       ${activityHtml}
       ${bookingsHtml}

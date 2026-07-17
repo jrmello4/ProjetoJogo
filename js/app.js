@@ -442,6 +442,19 @@ class App {
       });
     });
 
+    // Evento narrativo — escolha do jogador
+    document.querySelectorAll('.narrative-choice').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const result = await this.game.resolveNarrativeChoice(btn.dataset.narrativeChoice);
+        if (result.ok) {
+          this.notificationService.add('info', '📰 Decisão', result.choice);
+        } else {
+          this.notificationService.add('warning', 'Evento Narrativo', result.reason);
+        }
+        this.renderDashboard();
+      });
+    });
+
     this._bindFighterClicks();
     this._bindEventClicks();
   }

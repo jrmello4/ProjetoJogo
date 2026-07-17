@@ -1080,3 +1080,62 @@ export function absWeekToDate(abs, startedAt) {
   const base = startedAt ? new Date(startedAt) : new Date();
   return new Date(base.getTime() + (abs - 1) * 7 * 86400000);
 }
+
+// ============================================================
+// EVENTOS NARRATIVOS (Fase 1) — prompts periódicos de carreira
+// com escolhas que afetam moral, popularidade, hype e atributos.
+// Gatilho: ~a cada 5 semanas (absWeek % 5 === 0).
+// ============================================================
+export const NARRATIVE_EVENTS = {
+  after_loss: [
+    {
+      prompt: 'Após a derrota, a imprensa quer saber: o que aconteceu?',
+      choices: [
+        { text: 'Assumir a culpa — "Não estava no meu melhor"', effects: { morale: -3, popularity: 3 } },
+        { text: 'Culpar a preparação — "O camp foi mal planejado"', effects: { morale: -5, popularity: 1 } },
+        { text: 'Prometer voltar mais forte', effects: { morale: 5, popularity: 2 } },
+        { text: 'Recusar entrevistas e focar no treino', effects: { morale: 8, popularity: -2 } },
+      ],
+    },
+  ],
+  after_win_streak: [
+    {
+      prompt: 'Você está embalado! A mídia fala em title shot. Como responde?',
+      choices: [
+        { text: 'Confiar que o momento chegou — "Mereço essa chance"', effects: { morale: 5, popularity: 3, hype: 5 } },
+        { text: 'Manter os pés no chão — "Luta por luta"', effects: { morale: 3, popularity: 5 } },
+        { text: 'Provocar o campeão publicamente', effects: { morale: 2, popularity: 8, hype: 10, heat: 3 } },
+      ],
+    },
+  ],
+  injury_return: [
+    {
+      prompt: 'Você voltou de lesão. Sente o ringue diferente?',
+      choices: [
+        { text: 'Voltar cauteloso — "Vou readquirindo o ritmo"', effects: { morale: 3, composure: 2 } },
+        { text: 'Ignorar o medo — "Mesma agressão de sempre"', effects: { morale: -2, power: 2 } },
+        { text: 'Mudar o estilo para proteger a lesão', effects: { morale: 1, awareness: 3 } },
+      ],
+    },
+  ],
+  rival_victory: [
+    {
+      prompt: 'Seu rival venceu uma luta importante. Como reage?',
+      choices: [
+        { text: 'Parabenizar — "Respeito onde merece"', effects: { morale: 2, popularity: 3 } },
+        { text: 'Minimizar — "Ele não enfrentou ninguém ainda"', effects: { popularity: 5, heat: 4 } },
+        { text: 'Pedir a luta agora — "Marca logo"', effects: { hype: 8, heat: 5, popularity: 2 } },
+      ],
+    },
+  ],
+  title_reign: [
+    {
+      prompt: 'Ser campeão muda tudo. Como você lida com o alvo nas costas?',
+      choices: [
+        { text: 'Treinar mais que nunca — "Ninguém tira isso de mim"', effects: { morale: 5, discipline: 3 } },
+        { text: 'Aproveitar o momento — "Toda atenção, todo o glamour"', effects: { popularity: 5, discipline: -2 } },
+        { text: 'Ser um campeão ativo — "Defender contra qualquer um"', effects: { popularity: 3, morale: 3, heat: 2 } },
+      ],
+    },
+  ],
+};

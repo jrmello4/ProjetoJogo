@@ -606,6 +606,22 @@ export const NEGOTIATION_CONFIG = {
   RESCIND_CHANCE: 0.4,
 };
 
+// Momentos críticos na simulação de luta ao vivo — gera eventos discretos
+// por round (golpes, quedas, finalizações, clinch, knockdowns) que são
+// exibidos durante o Live Fight Hub. Puramente apresentação: não altera
+// o resultado da luta nem o placar.
+export const MOMENT_CONFIG = {
+  MOMENTS_PER_ROUND_MIN: 2,
+  MOMENTS_PER_ROUND_MAX: 4,
+  MOMENT_TYPES: {
+    strike: { weight: 40, attrOffense: 'power', attrDefense: 'chin' },
+    takedown: { weight: 20, attrOffense: 'takedowns', attrDefense: 'takedownDefense' },
+    submission: { weight: 10, attrOffense: 'submissionOffense', attrDefense: 'submissionDefense' },
+    clinch: { weight: 15, attrOffense: 'clinch', attrDefense: 'clinch' },
+    knockdown: { weight: 15, attrOffense: 'power', attrDefense: 'chin' },
+  },
+};
+
 // Rótulos de conquistas — reutilizados no toast semanal e no resumo de
 // período (simulação de várias semanas de uma vez).
 export const MILESTONE_LABELS = {

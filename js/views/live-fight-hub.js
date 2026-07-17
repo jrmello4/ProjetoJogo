@@ -92,6 +92,12 @@ export class LiveFightHubView {
                   ? r.roundLog.map(b => LiveFightHubView._beatHtml(b, fighterA, fighterB)).join('')
                   : '<div class="text-xs text-muted" style="padding:0.25rem 0">Round técnico, poucas ações de destaque.</div>'
                 }
+                ${r.moments && r.moments.length > 0 ? `
+                  <div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid var(--border)">
+                    <div class="text-xs text-muted" style="margin-bottom:0.35rem;font-weight:600">Momentos Críticos</div>
+                    ${LiveFightHubView._renderMoments(r.moments, fighterA.id)}
+                  </div>
+                ` : ''}
               </div>
             </div>
           </div>
@@ -110,5 +116,30 @@ export class LiveFightHubView {
         <span class="${isA ? '' : 'text-danger'}">${beat.detail}</span>
       </div>
     `;
+  }
+
+  // Momentos críticos: eventos discretos de striking, takedown, submission,
+  // clinch e knockdown exibidos abaixo dos beats de cada round.
+  static _renderMoments(moments, playerFighterId) {
+    if (!moments || moments.length === 0) return '';
+    return moments.map(m => {
+      const successColor = m.success ? '#4f9a63' : '#c8202f';
+      const icon = this._momentIcon(m.type);
+      return `
+        <div style="border-left:3px solid ${successColor};padding:0.5rem 0.75rem;margin-bottom:0.35rem;background:var(--mat-high);border-radius:2px;font-size:0.85rem">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span>${icon} <strong>${m.actorName}</strong> ${m.success ? 'acertou' : 'tentou'} <strong>${this._momentLabel(m.type)}</strong> ${m.success ? 'em' : 'contra'} <strong>${m.targetName}</strong></span>
+            <span style="color:${successColor};font-size:0.75rem">${m.success ? 'Sucesso' : 'Falha'}</span>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  static _momentIcon(type) {
+    return { strike: '👊', takedown: '🏋️', submission: '🔒', clinch: '🤼', knockdown: '💥' }[type] || '⚔️';
+  }
+
+  static _momentLabel(type) {
+    return { strike: 'golpe', takedown: 'queda', submission: 'finalização', clinch: 'clinch', knockdown: 'nocaute' }[type] || 'ação';
   }
 }

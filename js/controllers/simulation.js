@@ -1,5 +1,5 @@
 import { Gaussian } from '../utils/gaussian.js';
-import { CORNER_INSTRUCTIONS, GAME_PLANS, GAME_PLAN_EDGE, SCOUTING_PLAN_EDGE_RATIOS } from '../config/game-config.js';
+import { CORNER_INSTRUCTIONS, GAME_PLANS, GAME_PLAN_EDGE, SCOUTING_PLAN_EDGE_RATIOS, MOMENT_CONFIG } from '../config/game-config.js';
 import { clamp } from '../utils/helpers.js';
 import { StyleService } from '../services/style-service.js';
 
@@ -246,6 +246,8 @@ export class SimulationEngine {
               ? `${winner.name} castiga ${loser.name} até o árbitro intervir — TKO no round ${r}!`
               : `${winner.name} FINALIZA ${loser.name}! Acabou no round ${r}!`,
         });
+        // Generate critical moments para o round de desfecho
+        const moments = SimulationEngine._generateCriticalMoments(fighterA, fighterB, totalScoreA, totalScoreB, r);
         // Add the round score anyway
         rounds.push({
           round: r,
@@ -256,9 +258,13 @@ export class SimulationEngine {
           finished: true,
           finishMethod: finish.method,
           roundLog,
+          moments,
         });
         break;
       }
+
+      // Generate critical moments para este round (puramente apresentação)
+      const moments = SimulationEngine._generateCriticalMoments(fighterA, fighterB, totalScoreA, totalScoreB, r);
 
       rounds.push({
         round: r,
@@ -267,6 +273,7 @@ export class SimulationEngine {
         ...roundStats,
         finished: false,
         roundLog,
+        moments,
       });
 
       // O ritmo escolhido no córner cobra seu preço (ou ajuda) no fôlego dos rounds seguintes
@@ -847,5 +854,50 @@ export class SimulationEngine {
     if (perfOfNight) bonuses.push({ type: 'Performance da Noite', winner: perfOfNight.winnerName, amount: 10000 });
 
     return bonuses;
+  }
+
+  // Momentos críticos por round — gera eventos discretos (golpes, quedas,
+  // finalizações, clinch, knockdowns) baseados nos atributos ofensivos e
+  // defensivos dos lutadores. Puramente apresentação: não altera resultado.
+  static _generateCriticalMoments(fighterA, fighterB, momentumA, momentumB, roundNum) {
+    const total = MOMENT_CONFIG.MOMENTS_PER_ROUND_MIN +
+      Math.floor(Math.random() * (MOMENT_CONFIG.MOMENTS_PER_ROUND_MAX - MOMENT_CONFIG.MOMENTS_PER_ROUND_MIN + 1));
+
+    const moments = [];
+    const types = Object.entries(MOMENT_CONFIG.MOMENT_TYPES);
+
+    for (let i = 0; i < total; i++) {
+      const totalWeight = types.reduce((s, [, v]) => s + v.weight, 0);
+      let roll = Math.random() * totalWeight;
+      let chosenType = null;
+      for (const [key, cfg] of types) {
+        roll -= cfg.weight;
+        if (roll <= 0) { chosenType = { key, ...cfg }; break; }
+      }
+      if (!chosenType) continue;
+
+      const momentumTotal = momentumA + momentumB;
+      const attacker = (momentumTotal === 0 || Math.random() < momentumA / (momentumTotal + 1))
+        ? fighterA : fighterB;
+      const defender = attacker === fighterA ? fighterB : fighterA;
+
+      const atkVal = (attacker.attributes && attacker.attributes[chosenType.attrOffense]) ?? 50;
+      const defVal = (defender.attributes && defender.attributes[chosenType.attrDefense]) ?? 50;
+      const successChance = Math.max(0.05, Math.min(0.95, (atkVal / (atkVal + defVal)) * 0.8 + 0.1));
+      const success = Math.random() < successChance;
+
+      moments.push({
+        type: chosenType.key,
+        actorId: attacker.id,
+        actorName: attacker.name,
+        targetId: defender.id,
+        targetName: defender.name,
+        attrTested: { offense: chosenType.attrOffense, defense: chosenType.attrDefense },
+        success,
+        round: roundNum,
+      });
+    }
+
+    return moments;
   }
 }

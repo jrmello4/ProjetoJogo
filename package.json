@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "lint": "eslint js/",
-    "test": "vitest run"
+    "test": "vitest run",
+    "balance": "node scripts/balance-harness.mjs"
   },
   "devDependencies": {
     "eslint": "^9.39.0",

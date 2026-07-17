@@ -76,6 +76,16 @@ export class SimulationEngine {
     const rounds = [];
     let totalScoreA = 0, totalScoreB = 0;
 
+    // "Noite dele/dela": variância de UMA luta inteira, sorteada uma vez e
+    // aplicada em todos os rounds. Sem isso, o ruído por round (Gaussian
+    // dentro de _calcRoundPerformance) se cancela pela soma de rounds — uma
+    // vantagem estrutural pequena (poucos pontos de atributo) vira 100% de
+    // vitória garantida em 3-5 rounds por pura lei dos grandes números.
+    // Medido com scripts/balance-harness.mjs: sem isso, +10 em todo atributo
+    // batia 100%/0% em 3000 lutas simuladas — zero chance de upset.
+    const formA = clamp(Gaussian.random(1, 0.22), 0.55, 1.55);
+    const formB = clamp(Gaussian.random(1, 0.22), 0.55, 1.55);
+
     const rawPlan = GAME_PLANS[gamePlanKey] || GAME_PLANS.balanced;
     const plan = this._scalePlan(rawPlan, tactics?.planModFactorA ?? 1);
     const planEdge = tactics ? tactics.edgeA : this._planEdge(plan, fighterB);
@@ -159,8 +169,8 @@ export class SimulationEngine {
       const movesUsedB = selectMoves(profileB, 2 + Math.floor(Math.random() * 3));
       movesUsedThisFight.push(...movesUsedA, ...movesUsedB);
 
-      const perfA = this._calcRoundPerformance(fighterA, fighterB, pressureLevel, staminaFactorA, cornerModA, plan, planEdge, profileA, matchup.bonusA);
-      const perfB = this._calcRoundPerformance(fighterB, fighterA, pressureLevel, staminaFactorB, cornerModB, planB, planEdgeB, profileB, matchup.bonusB);
+      const perfA = this._calcRoundPerformance(fighterA, fighterB, pressureLevel, staminaFactorA, cornerModA, plan, planEdge, profileA, matchup.bonusA, formA);
+      const perfB = this._calcRoundPerformance(fighterB, fighterA, pressureLevel, staminaFactorB, cornerModB, planB, planEdgeB, profileB, matchup.bonusB, formB);
 
       // Prontidão (item 4): o gap de preparo escala a performance inteira do
       // lutador do jogador — score decide o round, striking/grappling decidem
@@ -435,14 +445,14 @@ export class SimulationEngine {
     };
   }
 
-  static _calcRoundPerformance(fighter, opponent, pressureLevel, staminaFactor, cornerMod = null, plan = null, planEdge = 0, profile = null, matchupBonus = 0) {
+  static _calcRoundPerformance(fighter, opponent, pressureLevel, staminaFactor, cornerMod = null, plan = null, planEdge = 0, profile = null, matchupBonus = 0, formFactor = 1) {
     const corner = cornerMod || CORNER_INSTRUCTIONS.balanced;
     const game = plan || GAME_PLANS.balanced;
     const prof = profile || StyleService.resolveFighter(fighter);
     const mods = prof.mods;
     const fatiguePenalty = 1 - (fighter.fatigue / 200);
     const moraleFactor = 0.7 + (fighter.morale / 100) * 0.3;
-    const determinationFactor = 0.8 + (fighter.hidden.determination / 100) * 0.2;
+    const determinationFactor = 0.8 + ((fighter.hidden.determination ?? 50) / 100) * 0.2;
 
     // Stamina decays over rounds
     const staminaEffect = staminaFactor / 100;
@@ -531,9 +541,9 @@ export class SimulationEngine {
       (a.speed ?? 50) * 0.02 +
       (a.strength ?? 50) * 0.01;
 
-    const noise = Gaussian.random(0, 6);
+    const noise = Gaussian.random(0, 9);
     // A leitura do adversário: acertar o plano paga, errar cobra.
-    let finalScore = (baseScore + noise) * (1 + planEdge * adaptBonus) * composureLateBonus;
+    let finalScore = (baseScore + noise) * (1 + planEdge * adaptBonus) * composureLateBonus * formFactor;
 
     // DNA traits + composure escalam com a pressão da luta (§C.3) em vez
     // de tudo-ou-nada — um título pesa mais que uma luta regional de tier 1.

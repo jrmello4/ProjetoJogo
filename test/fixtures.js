@@ -10,7 +10,7 @@ export function makeFighter(overrides = {}) {
     fightingStyle: 'balanced',
     record: { wins: 0, losses: 0, draws: 0 },
     attributes: overrides.attributes || {},
-    hidden: { evolution: 50, discipline: 50, potential: 60, ...(overrides.hidden || {}) },
+    hidden: { evolution: 50, discipline: 50, potential: 60, determination: 50, ...(overrides.hidden || {}) },
     status: 'active',
     organizationId: null,
     createdAt: '2026-01-01',

@@ -1207,4 +1207,64 @@ export const NARRATIVE_EVENTS = {
       ],
     },
   ],
+
+  // P5.2 — Histórias de Bastidores
+  personal_crisis: [
+    {
+      prompt: 'Suas contas estão apertadas este mês. Um ex-colega de equipe oferece uma luta em um evento menor.',
+      choices: [
+        { text: 'Aceitar — dinheiro é necessário', effects: { cash: 3000, morale: -3, popularity: -2 } },
+        { text: 'Recusar — manter foco na carreira', effects: { morale: -5, discipline: 3 } },
+        { text: 'Pedir adiantamento à promoção', effects: { morale: 2, loyalty: -5 } },
+      ],
+    },
+    {
+      prompt: 'Sua família está preocupada com os danos das suas últimas lutas.',
+      choices: [
+        { text: 'Ignorar — isso é meu sonho', effects: { morale: -3, determination: 3 } },
+        { text: 'Conversar sério com eles', effects: { morale: 5, popularity: 2 } },
+        { text: 'Marcar luta rápido para provar que estou bem', effects: { morale: 2, hype: 5 } },
+      ],
+    },
+  ],
+  moral_dilemma: [
+    {
+      prompt: 'Seu parceiro de treino precisa vencer para não ser cortado. Mas você também precisa da vitória.',
+      choices: [
+        { text: 'Lutar normalmente', effects: { morale: -2, discipline: 2 } },
+        { text: 'Segurar um pouco — deixar ele ter seu momento', effects: { morale: -5, popularity: -3, bondBoost: 10 } },
+        { text: 'Conversar antes da luta', effects: { morale: 3, bondBoost: 5 } },
+      ],
+    },
+  ],
+  media_pressure: [
+    {
+      prompt: 'A imprensa está crucificando você. "Ex-campeão em decadência?"',
+      choices: [
+        { text: 'Dar entrevista bombástica', effects: { popularity: 8, morale: -3, heat: 5 } },
+        { text: 'Ignorar e treinar', effects: { morale: 5, discipline: 3 } },
+        { text: 'Processar — isso é difamação', effects: { cash: -2000, popularity: 5, morale: 3 } },
+      ],
+    },
+  ],
+  post_injury: [
+    {
+      prompt: 'Você voltou de lesão, mas algo mudou. Cada golpe parece mais pesado.',
+      choices: [
+        { text: 'Agressão total — medo não pode vencer', effects: { morale: 5, chin: -2 } },
+        { text: 'Adaptar o estilo — ser mais cauteloso', effects: { awareness: 3, power: -1 } },
+        { text: 'Falar com psicólogo esportivo', effects: { cash: -1000, composure: 3 } },
+      ],
+    },
+  ],
+  post_title_loss: [
+    {
+      prompt: 'Perder o cinturão dói. Algo ficou para trás no octógono.',
+      choices: [
+        { text: 'Pedir revanche imediata', effects: { hype: 8, morale: 3, heat: 3 } },
+        { text: 'Reconstruir — subir do zero', effects: { morale: 2, discipline: 5, popularity: 3 } },
+        { text: 'Mudar de peso — nova chance', effects: { morale: 3, hype: 5 } },
+      ],
+    },
+  ],
 };

@@ -65,7 +65,8 @@ export class CareerLogService {
   }
 
   // Retorna um evento narrativo aleatório compatível com o contexto
-  // atual do lutador (derrota recente, streak, lesão, rival, título).
+  // atual do lutador (derrota recente, streak, lesão, rival, título,
+  // bastidores P5.2).
   // Retorna null se nenhum pool de eventos se aplicar.
   selectNarrativeEvent(fighter) {
     const events = [];
@@ -91,6 +92,37 @@ export class CareerLogService {
     // É campeão ou já conquistou títulos
     if (fighter.ranking === 1 || (fighter.titlesWon || 0) > 0) {
       events.push(...(NARRATIVE_EVENTS.title_reign || []));
+    }
+
+    // P5.2: Personal crisis — baixo cash ou série de derrotas
+    const lowCash = (fighter.cash || 0) < 5000;
+    const consecutiveLosses = (() => {
+      let count = 0;
+      for (const f of fighter.fights || []) {
+        if (f.won === false) count++;
+        else break;
+      }
+      return count;
+    })();
+    if (lowCash || consecutiveLosses >= 3) {
+      events.push(...(NARRATIVE_EVENTS.personal_crisis || []));
+    }
+
+    // P5.2: Media pressure — alta popularidade + derrota recente
+    if (lastFightLost && (fighter.popularity || 0) >= 60) {
+      events.push(...(NARRATIVE_EVENTS.media_pressure || []));
+    }
+
+    // P5.2: Post-injury existential
+    const wasSeriouslyInjured = fighter.injuryCount >= 2;
+    if (wasSeriouslyInjured && fighter.status !== 'injured') {
+      events.push(...(NARRATIVE_EVENTS.post_injury || []));
+    }
+
+    // P5.2: Post-title loss — perdeu luta recente tendo histórico de títulos
+    const lostTitle = lastFightLost && (fighter.titlesWon || 0) > 0;
+    if (lostTitle) {
+      events.push(...(NARRATIVE_EVENTS.post_title_loss || []));
     }
 
     if (events.length === 0) return null;

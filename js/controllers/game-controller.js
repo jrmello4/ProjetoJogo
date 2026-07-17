@@ -1181,6 +1181,8 @@ export class GameController {
     // Aplica os efeitos
     const effects = choice.effects || {};
     const logParts = [];
+    const seasonState = await this.seasonService.getState();
+    const absWeekNow = absWeek(seasonState);
     for (const [key, value] of Object.entries(effects)) {
       switch (key) {
         case 'morale':
@@ -1199,8 +1201,43 @@ export class GameController {
           fighter.narrativeHeat = (fighter.narrativeHeat || 0) + value;
           logParts.push(`heat ${value >= 0 ? '+' : ''}${value}`);
           break;
+        // P5.2: Bastidores — efeitos expandidos
+        case 'cash':
+          fighter.addTransaction(absWeekNow, `📰 ${choice.text.slice(0, 30)}`, value);
+          logParts.push(`dinheiro ${value >= 0 ? '+' : ''}${value}`);
+          break;
+        case 'bondBoost':
+          // Tenta boost de bond com o parceiro de treino atual
+          if (this.partnersService && fighter.academyId) {
+            const teammates = await this.partnersService.getTeammates(fighter);
+            if (teammates && teammates.length > 0) {
+              // Escolhe o parceiro com maior bond atual para receber o boost
+              const target = teammates.reduce((best, t) => {
+                const bond = this.partnersService.constructor.bondOf(fighter, t.id);
+                return bond > (best.bond || 0) ? { fighter: t, bond } : best;
+              }, { bond: 0 });
+              if (target.fighter) {
+                const currentBond = this.partnersService.constructor.bondOf(fighter, target.fighter.id);
+                this.partnersService.constructor._setBond(fighter, target.fighter.id, currentBond + value);
+                logParts.push(`vínculo +${value}`);
+              }
+            }
+          }
+          break;
+        case 'loyalty':
+          fighter.loyalty = Math.max(0, Math.min(100, (fighter.loyalty || 50) + value));
+          logParts.push(`lealdade ${value >= 0 ? '+' : ''}${value}`);
+          break;
+        case 'determination':
+          fighter.hidden.determination = Math.max(0, Math.min(100, (fighter.hidden.determination || 50) + value));
+          logParts.push(`determinação ${value >= 0 ? '+' : ''}${value}`);
+          break;
+        case 'discipline':
+          fighter.hidden.discipline = Math.max(0, Math.min(100, (fighter.hidden.discipline || 50) + value));
+          logParts.push(`disciplina ${value >= 0 ? '+' : ''}${value}`);
+          break;
         default:
-          // Atributo do lutador (ex: composure, power, awareness, discipline)
+          // Atributo do lutador (ex: composure, power, awareness, chin, etc.)
           if (key in fighter.attributes) {
             const newVal = Math.min(fighter.effectiveCeiling(key), Math.max(1, (fighter.attributes[key] || 50) + value));
             fighter.attributes[key] = newVal;
@@ -1213,10 +1250,8 @@ export class GameController {
     await this.fighterCtrl.updateFighter(fighter);
     await this.db.delete('gameState', 'narrative-prompt');
 
-    const seasonState = await this.seasonService.getState();
-    const now = absWeek(seasonState);
     if (this.careerLogService) {
-      await this.careerLogService.publish(fighter.id, 'narrative_choice', now, 35, {
+      await this.careerLogService.publish(fighter.id, 'narrative_choice', absWeekNow, 35, {
         prompt: promptData.prompt.slice(0, 80),
         choice: choice.text,
         effects: logParts.join(', '),

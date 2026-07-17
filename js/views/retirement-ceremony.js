@@ -400,7 +400,7 @@ export class RetirementCeremonyView {
         <p>${entry.name} pendurou as luvas</p>
       </div>
 
-      <div class="card" style="text-align:center;padding:2rem;background:linear-gradient(135deg,var(--bg),#1a1a2e);border:2px solid var(--belt)">
+      <div class="card" style="text-align:center;padding:2rem;background:linear-gradient(135deg,var(--mat-high),var(--mat));border:2px solid var(--belt)">
         <div style="font-size:3rem;margin-bottom:0.5rem">🏆</div>
         <h1 style="font-size:1.75rem;margin-bottom:0.25rem">${entry.name}</h1>
         <p class="text-muted">${getWeightClassName(entry.weightClass)} · ${entry.nationality} · ${stats.ageAtInduction} anos</p>

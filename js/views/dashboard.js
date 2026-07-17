@@ -65,7 +65,7 @@ export class DashboardView {
       </div>` : '';
 
     const reencounterStrap = booking.isReencounter ? `
-      <div class="poster-title-strap" style="background:linear-gradient(135deg, var(--red), #c0392b)">
+      <div class="poster-title-strap" style="background:linear-gradient(135deg, var(--red), var(--red-deep))">
         <span>⚔️ REENCONTRO — ${booking.opponentName} já treinou na sua academia!</span>
       </div>` : '';
 

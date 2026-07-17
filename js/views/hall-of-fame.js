@@ -102,8 +102,8 @@ export class HallOfFameView {
         `).join('')}
       </div>
 
-      <div class="card" style="margin-top:2rem;padding:1.5rem;text-align:center;border-color:rgba(232,226,217,0.06)">
-        <div style="font-family:'Archivo',sans-serif;font-size:1.1rem;font-weight:700;color:#f4f2ef;margin-bottom:0.25rem">
+      <div class="card" style="margin-top:2rem;padding:1.5rem;text-align:center">
+        <div style="font-family:var(--font-display);font-size:1.1rem;font-weight:700;color:var(--chalk);margin-bottom:0.25rem">
           Construa dinastias. Destrua legados.
         </div>
         <div class="text-xs text-muted" style="margin-bottom:1rem">
@@ -112,7 +112,7 @@ export class HallOfFameView {
         <button class="btn btn-primary btn-sm hall-of-fame-share" data-share="hall-of-fame">
           📤 Compartilhar Minha Jornada
         </button>
-        <div class="text-xs" style="margin-top:1rem;color:#4a4438">
+        <div class="text-xs" style="margin-top:1rem;color:var(--ash)">
           Conhece um fã de MMA? Manda esse link pra ele. 👊
         </div>
       </div>

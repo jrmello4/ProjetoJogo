@@ -1015,7 +1015,7 @@ tbody tr:hover td { background: var(--bg-hover); }
 .icon-skull::before { content: "\2620"; color: var(--ash); }
 .icon-check::before { content: "\2713"; color: var(--money); font-weight: 700; }
 .icon-cross::before { content: "\2715"; color: var(--red-ink); }
-.icon-alert::before { content: "\26A0"; color: #f1c40f; }
+.icon-alert::before { content: "\26A0"; color: var(--warning); }
 .icon-arrow::before { content: "\2192"; }
 .icon-medal::before { content: "\25CF"; color: var(--belt-ink); }
 

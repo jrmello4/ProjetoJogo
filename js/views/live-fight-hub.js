@@ -99,10 +99,10 @@ export class LiveFightHubView {
                   </div>
                 ` : ''}
                 ${r.injuries && r.injuries.length > 0 ? r.injuries.map(inj => `
-                  <div style="border-left:3px solid #c8202f;padding:0.5rem 0.75rem;margin-bottom:0.35rem;background:var(--mat-high);border-radius:2px;font-size:0.85rem">
+                  <div style="border-left:3px solid var(--red);padding:0.5rem 0.75rem;margin-bottom:0.35rem;background:var(--mat-high);border-radius:var(--radius);font-size:0.85rem">
                     <div style="display:flex;justify-content:space-between;align-items:center">
                       <span>🤕 ${inj.fighterName} sofreu <strong>lesão no ${inj.attr}</strong></span>
-                      <span style="color:#c8202f;font-size:0.75rem">-${inj.reduction}</span>
+                      <span style="color:var(--red-ink);font-size:0.75rem">-${inj.reduction}</span>
                     </div>
                     <div style="color:var(--text-muted);font-size:0.75rem">Atributo reduzido para ${inj.newVal} — afeta rounds seguintes</div>
                   </div>

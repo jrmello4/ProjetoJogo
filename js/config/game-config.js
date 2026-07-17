@@ -191,6 +191,12 @@ export const OFFER_CONFIG = {
 // em dólar de bônus na bolsa da luta (purse + winBonus).
 export const HYPE_PURSE_RATIO = 50;
 
+// Fase 1: bônus pós-luta (FOTN/POTN) — recompensa extra por desempenho
+export const POST_FIGHT_BONUSES = {
+  FIGHT_OF_NIGHT: { label: 'Fight of the Night', purseBonus: 0.50, popularityGain: 5 },
+  PERFORMANCE_OF_NIGHT: { label: 'Performance of the Night', purseBonus: 0.50, popularityGain: 3 },
+};
+
 // Épico F2: penalidades e pesos de expectativas de atletas
 export const EXPECTATION_CONFIG = {
   // Dano semanal de moral/loyalty quando expectativa em urgência 3 está ativa

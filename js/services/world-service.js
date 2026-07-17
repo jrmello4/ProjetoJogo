@@ -15,6 +15,7 @@ import {
   TITLE_CONFIG,
   TITLE_ROLE,
   HYPE_PURSE_RATIO,
+  POST_FIGHT_BONUSES,
   PROMOTIONS,
   OFFER_CONFIG,
   TIER_MOVEMENT_CONFIG,
@@ -530,6 +531,27 @@ export class WorldService {
     fighter.addTransaction(absWeekNow, `Bolsa — ${promo.short}${manager ? ` (empresário: -$${managerCut.toLocaleString()})` : ''}${bonusTags.length ? ` (c/ ${bonusTags.join(' + ')})` : ''}`, netPurse);
     fighter.careerEarnings = (fighter.careerEarnings || 0) + grossPurse;
 
+    // Fase 1: Bônus pós-luta (FOTN/POTN)
+    const bonuses = this._calculatePostFightBonuses(result, fighter, fight.fighterB);
+    for (const bonus of bonuses) {
+      if (bonus.bothFighters) {
+        const bonusValue = Math.round(grossPurse * bonus.purseBonus);
+        fighter.addTransaction(absWeekNow, `${bonus.label}`, bonusValue);
+        fighter.updatePopularity(bonus.popularityGain);
+        fighter.fightNightBonuses = (fighter.fightNightBonuses || 0) + 1;
+
+        if (fight.fighterB) {
+          fight.fighterB.addTransaction(absWeekNow, `${bonus.label}`, bonusValue);
+          await this.fighterCtrl.updateFighter(fight.fighterB);
+        }
+      } else if (bonus.winnerId === fighter.id) {
+        const bonusValue = Math.round(grossPurse * bonus.purseBonus);
+        fighter.addTransaction(absWeekNow, `${bonus.label}`, bonusValue);
+        fighter.updatePopularity(bonus.popularityGain);
+        fighter.performanceBonuses = (fighter.performanceBonuses || 0) + 1;
+      }
+    }
+
     if (isDraw) {
       // Empate não conta como vitória nem derrota no cartel.
       await this.notifService.add('info', '🤝 Empate', `Você empatou com ${result.fighterBName} (${result.method}) no ${promo.nextEventName()}. Bolsa líquida: $${netPurse.toLocaleString()}.`);
@@ -643,6 +665,42 @@ export class WorldService {
     if (this.contractService) {
       await this.contractService.consumeFight(fighter.id, isDraw ? null : won, absWeekNow);
     }
+  }
+
+  // Fase 1: calcula bônus pós-luta (FOTN/POTN) com base no resultado.
+  // O motor é chamado de _settlePlayerFight e decide quem ganha o quê.
+  _calculatePostFightBonuses(result, fighterA, fighterB) {
+    const bonuses = [];
+
+    // Performance of the Night: KO/TKO rápido ou submissão no 1º round
+    const isQuickFinish = result.round === 1 &&
+      (result.method?.startsWith('KO') || result.method?.startsWith('TKO') || result.method === 'Submission');
+    if (isQuickFinish) {
+      bonuses.push({
+        type: 'performance',
+        label: POST_FIGHT_BONUSES.PERFORMANCE_OF_NIGHT.label,
+        purseBonus: POST_FIGHT_BONUSES.PERFORMANCE_OF_NIGHT.purseBonus,
+        popularityGain: POST_FIGHT_BONUSES.PERFORMANCE_OF_NIGHT.popularityGain,
+        winnerId: result.winnerId,
+      });
+    }
+
+    // Fight of the Night: 3+ rounds, scores próximos
+    const totalRounds = result.rounds?.length || result.round || 3;
+    const scoreDiff = Math.abs((result.totalScoreA || 0) - (result.totalScoreB || 0));
+    const isFOTN = totalRounds >= 3 && scoreDiff < 15;
+    if (isFOTN) {
+      bonuses.push({
+        type: 'fight_of_night',
+        label: POST_FIGHT_BONUSES.FIGHT_OF_NIGHT.label,
+        purseBonus: POST_FIGHT_BONUSES.FIGHT_OF_NIGHT.purseBonus,
+        popularityGain: POST_FIGHT_BONUSES.FIGHT_OF_NIGHT.popularityGain,
+        winnerId: result.winnerId,
+        bothFighters: true,
+      });
+    }
+
+    return bonuses;
   }
 
   // Ofertas aceitas desta promoção cuja luta é nesta semana (ou atrasada)

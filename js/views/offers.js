@@ -315,6 +315,76 @@ export class OffersView {
           `;
         }).join('');
 
+    // P7.x — grid de comparação. Só aparece com 2+ ofertas na mesa: uma
+    // oferta só já tem o card detalhado embaixo, comparar contra nada não
+    // ajuda ninguém. Reaproveita as MESMAS classes/data-id de accept/decline
+    // dos cards de baixo — os listeners de app.js já fazem
+    // querySelectorAll('.offer-accept') a cada render, então não precisa de
+    // wiring novo.
+    const comparisonHtml = pending.length < 2 ? '' : `
+      <div class="section-label" data-reveal>⚖️ Comparar Ofertas</div>
+      <div class="card mb-4" data-reveal style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;min-width:${Math.max(480, pending.length * 170)}px">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:0.5rem;font-size:0.7rem;color:var(--text-muted,#888);text-transform:uppercase"></th>
+              ${pending.map(o => `<th style="padding:0.5rem;text-align:center;min-width:150px;border-bottom:1px solid var(--border)">${o.opponentName}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-xs text-muted" style="padding:0.5rem">Promoção</td>
+              ${pending.map(o => `<td style="text-align:center;padding:0.5rem">${tierBadge(o.tier)} <span class="text-xs">${o.promotionName}</span></td>`).join('')}
+            </tr>
+            <tr>
+              <td class="text-xs text-muted" style="padding:0.5rem">Adversário</td>
+              ${pending.map(o => `<td style="text-align:center;padding:0.5rem;font-size:0.8rem">${o.opponentRecord ? `${o.opponentRecord.wins}-${o.opponentRecord.losses}-${o.opponentRecord.draws}` : '—'} · OVR ${o.opponentOverall ?? '?'}${o.opponentStyle ? `<br>${o.opponentStyle}` : ''}</td>`).join('')}
+            </tr>
+            <tr>
+              <td class="text-xs text-muted" style="padding:0.5rem">Bolsa</td>
+              ${pending.map(o => `<td style="text-align:center;padding:0.5rem;color:var(--success);font-weight:bold">${formatCurrency(o.purse)}</td>`).join('')}
+            </tr>
+            <tr>
+              <td class="text-xs text-muted" style="padding:0.5rem">Bônus vitória</td>
+              ${pending.map(o => `<td style="text-align:center;padding:0.5rem">${formatCurrency(o.winBonus)}</td>`).join('')}
+            </tr>
+            <tr>
+              <td class="text-xs text-muted" style="padding:0.5rem">Luta em</td>
+              ${pending.map(o => `<td style="text-align:center;padding:0.5rem">${o.eventAbsWeek - now} sem</td>`).join('')}
+            </tr>
+            <tr>
+              <td class="text-xs text-muted" style="padding:0.5rem">Posição no card</td>
+              ${pending.map(o => `<td style="text-align:center;padding:0.5rem"><span class="badge ${CARD_POSITION[o.cardPosition]?.badge || 'badge-secondary'}">${CARD_POSITION[o.cardPosition]?.shortLabel || 'Prelim'}</span></td>`).join('')}
+            </tr>
+            <tr>
+              <td class="text-xs text-muted" style="padding:0.5rem">Avisos</td>
+              ${pending.map(o => {
+                const tags = [
+                  o.isTitleFight ? '🏆 Título' : '',
+                  o.isSuperFight ? '⭐ Super Fight' : '',
+                  o.isShortNotice ? '🔥 Short Notice' : '',
+                  o.opponentWeightBully ? '⚠️ Corta Peso' : '',
+                  rivalries[o.id] ? `⚔️ ${rivalries[o.id].label}` : '',
+                ].filter(Boolean);
+                return `<td style="text-align:center;padding:0.5rem;font-size:0.7rem">${tags.length ? tags.join('<br>') : '<span class="text-muted">—</span>'}</td>`;
+              }).join('')}
+            </tr>
+            <tr>
+              <td></td>
+              ${pending.map(o => `
+                <td style="text-align:center;padding:0.5rem">
+                  <div class="flex gap-1" style="justify-content:center">
+                    <button class="btn btn-sm btn-success offer-accept" data-id="${o.id}">Aceitar</button>
+                    <button class="btn btn-sm btn-secondary offer-decline" data-id="${o.id}">Recusar</button>
+                  </div>
+                </td>
+              `).join('')}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    `;
+
     // O camp: estudar o adversário e escolher o plano. É aqui que a luta
     // é ganha, antes de alguém dar o primeiro soco.
     const acceptedHtml = accepted.length === 0 ? '' : `
@@ -398,6 +468,7 @@ export class OffersView {
       </div>
 
       ${contractHtml}
+      ${comparisonHtml}
       ${pendingHtml}
       ${acceptedHtml}
       ${historyHtml}

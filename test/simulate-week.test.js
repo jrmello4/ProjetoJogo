@@ -10,7 +10,7 @@ import { RankingService } from '../js/services/ranking.js';
 // incluem o lutador. Usa fake-indexeddb porque db.js fala com IndexedDB de
 // verdade — sem isso não dá pra exercitar GameController fora do browser.
 describe('GameController.simulateWeeks — invariantes de integração', () => {
-  it('roda 30 semanas de carreira sem lançar e mantém o estado consistente', async () => {
+  it('roda 60 semanas de carreira sem lançar e mantém o estado consistente', async () => {
     const game = new GameController();
     await game.init();
 
@@ -25,9 +25,14 @@ describe('GameController.simulateWeeks — invariantes de integração', () => {
     });
     expect(fighter).toBeTruthy();
 
-    const result = await game.simulateWeeks(30);
+    // 60 semanas (não 30): oferta aceita pode ser cancelada se o adversário
+    // ficar indisponível sem substituto (comportamento real do mundo, não
+    // bug) — uma janela curta demais some flakeando esse teste quando isso
+    // acontece na 1ª tentativa. 60 dá margem de sobra pra uma 2ª oferta
+    // completar mesmo depois de um cancelamento.
+    const result = await game.simulateWeeks(60);
 
-    expect(result.weeksSimulated).toBe(30);
+    expect(result.weeksSimulated).toBe(60);
     expect(result.offersAccepted).toBeGreaterThanOrEqual(1);
 
     const endFighter = await game.getPlayerFighter();

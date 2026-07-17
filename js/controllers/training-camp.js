@@ -1,5 +1,5 @@
 import { clamp } from '../utils/helpers.js';
-import { CAMP_CONFIG, TAPE_CONFIG, PLAN_SPECIALTY } from '../config/game-config.js';
+import { CAMP_CONFIG, TAPE_CONFIG, PLAN_SPECIALTY, INJURY_CONFIG } from '../config/game-config.js';
 import { TapeService } from '../services/tape-service.js';
 import { TrainingPartnersService } from '../services/training-partners-service.js';
 
@@ -89,8 +89,10 @@ export class TrainingCamp {
 
     // Aplicar ganhos com bônus de sparring — respeita o teto reduzido por
     // sequela permanente (§B.2), igual Fighter.evolve()
+    // P2.2: return stage — gains at 50%
+    const returnMult = fighter.injury?.stage === 'return' ? INJURY_CONFIG.RETURN_TRAINING_MULT : 1.0;
     for (const [attr, amount] of Object.entries(gains)) {
-      const boosted = Math.round(amount * (1 + sparringBonus));
+      const boosted = Math.round(amount * (1 + sparringBonus) * returnMult);
       fighter.attributes[attr] = clamp(fighter.attributes[attr] + boosted, 0, fighter.effectiveCeiling(attr));
     }
 
@@ -142,11 +144,15 @@ export class TrainingCamp {
       const prevStatus = fighter.status;
       fighter.status = 'injured';
       fighter.injury = {
-        untilAbsWeek: absWeekNow + injuryWeeks,
+        stage: 'rest',
+        restUntilAbsWeek: absWeekNow + injuryWeeks,
+        rehabEndAbsWeek: 0,
         description: `Lesionado no treino (${intensity})`,
+        rehabCost: 0,
+        rehabChosen: false,
         resumeStatus: prevStatus,
       };
-      fighter.availableFromAbsWeek = fighter.injury.untilAbsWeek;
+      fighter.availableFromAbsWeek = fighter.injury.restUntilAbsWeek;
 
       // Lesão intensa cancela a luta
       if (intensity === 'intense' && CAMP_CONFIG.CAMP_INJURY_CANCELS_FIGHT) {
@@ -169,8 +175,8 @@ export class TrainingCamp {
     if (spec === 'recovery') {
       // Recuperação: reduz fadiga extra e acelera lesões
       fighter.fatigue = clamp(fighter.fatigue - 10, 0, 100);
-      if (fighter.injury) {
-        fighter.injury.untilAbsWeek -= 7; // acelera em 1 semana
+      if (fighter.injury && fighter.injury.stage === 'rest') {
+        fighter.injury.restUntilAbsWeek -= 7; // acelera em 1 semana
       }
     }
     if (spec === 'strategy') {
@@ -217,6 +223,11 @@ export class TrainingCamp {
     if (fighter.dna?.injuryProne) injuryChance *= 2.0;
     if (fighter.dna?.exceptionalRecovery) injuryChance *= 0.5;
     if (fighter.dna?.emotionallyUnstable) overtrainingChance *= 1.5;
+
+    // P2.2: return stage — 2x injury risk
+    if (fighter.injury?.stage === 'return') {
+      injuryChance *= INJURY_CONFIG.RETURN_REINJURY_MULT;
+    }
 
     return {
       injuryChance: Math.min(injuryChance, 0.5),

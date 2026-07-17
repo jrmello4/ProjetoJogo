@@ -66,7 +66,7 @@ export class SocialMedia {
     const lastFight = fighter.fights?.[0];
     const streak = fighter.winStreak || 0;
     const isChampion = fighter.ranking === 1 || (fighter.titlesWon || 0) > 0;
-    const recentEvent = this._getRecentCareerEvent(careerLog);
+    const _recentEvent = this._getRecentCareerEvent(careerLog);
 
     // APÓS DERROTA
     if (lastFight && lastFight.won === false) {

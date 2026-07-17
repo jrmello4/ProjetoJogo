@@ -25,6 +25,9 @@ import { FightOffer } from '../models/fight-offer.js';
 import { generateId, clamp, pickTopRandom } from '../utils/helpers.js';
 import { TrainingCamp } from './training-camp.js';
 import { WeeklyTrainingController } from './weekly-training.js';
+import { FinanceController } from './finance-controller.js';
+import { NarrativeController } from './narrative-controller.js';
+import { CareerController } from './career-controller.js';
 import {
   ACADEMIES,
   ARCHETYPES,
@@ -80,6 +83,9 @@ export class GameController {
     this.careerLogService = null;
     this.rivalryService = null;
     this.socialMediaService = null;
+    this.financeCtrl = null;
+    this.narrativeCtrl = null;
+    this.careerCtrl = null;
   }
 
   async init() {
@@ -102,6 +108,11 @@ export class GameController {
     this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.contractService, this.rivalryService);
     this.sponsorService = new SponsorService(this.db, this.notifService, this.careerLogService);
     this.socialMediaService = new SocialMediaService(this.db, this.notifService);
+
+    // Sub-controllers extraídos do GameController (P8.2)
+    this.financeCtrl = new FinanceController();
+    this.narrativeCtrl = new NarrativeController(this.db, this.fighterCtrl, this.notifService, this.careerLogService, this.rivalryService, this.partnersService, this.socialMediaService, this.seasonService, this.worldService);
+    this.careerCtrl = new CareerController(this.db, this.fighterCtrl, this.notifService, this.careerLogService, this.seasonService, this.titleService);
 
     const meta = await this.db.get('gameState', 'meta');
     if (!meta || meta.mode !== WORLD_MODE || meta.schemaVersion !== WORLD_SCHEMA) {
@@ -525,9 +536,9 @@ export class GameController {
       await this.contractService.generateOffers(fighter, now, academy?.reputation ?? 30);
     }
 
-    const economy = this._applyWeeklyEconomy(fighter, academy, now);
+    const economy = FinanceController.applyWeeklyEconomy(fighter, academy, now);
     // Serviços opcionais (nutricionista, fisioterapeuta, psicólogo)
-    this._applyWeeklyServices(fighter);
+    FinanceController.applyWeeklyServices(fighter);
 
     // P5.3: Passive income from commentator career
     if (fighter.passiveIncome > 0 && fighter.status === 'retired') {
@@ -565,14 +576,14 @@ export class GameController {
     }
 
     // P2.2: Staged injury recovery
-    await this._processInjuryStages(fighter, now);
+    await this.careerCtrl.processInjuryStages(fighter, now);
 
     // Fase 3 — sumir do mapa te torna um enigma de novo. É a única forma
     // gratuita de baixar a exposição, e ela cobra o preço mais alto do jogo:
     // não estar lutando.
     TapeService.decayIdle(fighter, now);
 
-    await this._checkExpectations(now, fighter);
+    await this.narrativeCtrl.checkExpectations(now, fighter);
 
     const campResults = await this._applyWeeklyCamp(now, fighter);
     if (campResults.canceledFight) {
@@ -584,21 +595,21 @@ export class GameController {
       }
     }
 
-    const milestonesUnlocked = await this._checkMilestones(world.playerEvents, fighter);
+    const milestonesUnlocked = await this.careerCtrl.checkMilestones(world.playerEvents, fighter);
 
-    await this._generateHeadlines(now, world, fighter);
-    await this._generateCallouts(now, fighter);
+    await this.narrativeCtrl.generateHeadlines(now, world, fighter);
+    await this.narrativeCtrl.generateCallouts(now, fighter);
 
     // §D.2 — só lê `fighter` (id/status), nunca muta nem salva: os efeitos
     // de popularidade/moral só acontecem quando o jogador responde ao
     // prompt (resolveSocialPrompt), bem depois do save único deste método.
     // Atividade de lazer semanal (§PRD: vida fora do octógono)
-    this._applyWeeklyActivity(fighter, now);
+    FinanceController.applyWeeklyActivity(fighter, now);
 
     if (fighter.status !== 'retired') {
       const bookings = await this.offerService.getAccepted();
       const hasBooking = bookings.some(b => b.fighterId === fighter.id);
-      await this._rollSocialMediaPrompt(now, fighter, hasBooking);
+      await this.narrativeCtrl.rollSocialMediaPrompt(now, fighter, hasBooking);
     }
 
     // §D.3 — prompt semanal de rivalidade
@@ -1055,61 +1066,10 @@ export class GameController {
     return await this.socialMediaService.processWeek(now, hasBooking, rivalInfo);
   }
 
-  // Resolve o prompt pendente com a escolha do jogador. Fetch-mutate-save
-  // PRÓPRIO e isolado (busca o fighter fresco, muta, salva uma vez só) —
-  // chamado direto por um clique do jogador (padrão idêntico a
-  // accept/declineSponsorOffer), nunca de dentro de processWeek, então não
-  // há risco do bug de "outro código já salvou uma instância mais nova".
   async resolveSocialPrompt(choice) {
     const fighter = await this.getPlayerFighter();
     if (!fighter) return { ok: false, reason: 'Nenhum lutador ativo.' };
-
-    const state = await this.socialMediaService.getState();
-    const pending = state.pending;
-    if (!pending) return { ok: false, reason: 'Nenhum post pendente.' };
-
-    const seasonState = await this.seasonService.getState();
-    const now = absWeek(seasonState);
-
-    const result = SocialMedia.applyContextualChoice(fighter, choice, {
-      isChampion: fighter.ranking === 1 || (fighter.titlesWon || 0) > 0,
-    });
-
-    if (result.provoked) {
-      await this.careerLogService.publish(fighter.id, 'provocation', now, SOCIAL_CONFIG.PROVOCATION_MAGNITUDE, {
-        targetFighterId: pending.rivalFighterId || null,
-        targetName: pending.rivalName || null,
-      });
-
-      if (pending.rivalryId) {
-        const rivalryData = await this.db.get('rivalries', pending.rivalryId);
-        if (rivalryData) {
-          const rivalry = new Rivalry(rivalryData);
-          rivalry.increaseIntensity(SOCIAL_CONFIG.PROVOKE_RIVALRY_INTENSITY_GAIN);
-          rivalry.addEvent('provocation', `Provocação pública contra ${pending.rivalName || 'rival'} nas redes sociais`);
-          await this.db.put('rivalries', rivalry);
-        }
-      }
-    }
-
-    if (result.viral) {
-      await this.notifService.add('headline', '🔥 Viral!', 'Seu post explodiu nas redes sociais! Popularidade extra e novos olhos no seu trabalho.');
-      if (this.careerLogService) {
-        await this.careerLogService.publish(fighter.id, 'viral', now, 65, {});
-      }
-    }
-
-    if (result.backfire) {
-      await this.notifService.add('warning', '💥 Repercussão Negativa', 'Seu post teve uma repercussão negativa inesperada. Popularidade caiu.');
-      if (this.careerLogService) {
-        await this.careerLogService.publish(fighter.id, 'backfire', now, 40, {});
-      }
-    }
-
-    await this.fighterCtrl.updateFighter(fighter);
-    await this.socialMediaService.clearPending();
-
-    return { ok: true, choice, effects: result.effects };
+    return this.narrativeCtrl.resolveSocialPrompt(choice, fighter.id);
   }
 
   // ===== Pesagem pré-luta =====

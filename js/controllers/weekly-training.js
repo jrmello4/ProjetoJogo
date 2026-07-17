@@ -50,8 +50,12 @@ export class WeeklyTrainingController {
     if (Math.random() < cfg.injuryRisk) {
       fighter.status = 'injured';
       fighter.injury = {
-        untilAbsWeek: (fighter.injury?.untilAbsWeek || 0) + Math.ceil(Math.random() * 3),
+        stage: 'rest',
+        restUntilAbsWeek: (fighter.injury?.restUntilAbsWeek || 0) + Math.ceil(Math.random() * 3),
+        rehabEndAbsWeek: 0,
         description: 'Lesão leve durante treino',
+        rehabCost: 0,
+        rehabChosen: false,
         resumeStatus: 'active',
       };
       injured = true;

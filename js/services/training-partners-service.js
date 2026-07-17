@@ -142,11 +142,15 @@ export class TrainingPartnersService {
     const prevStatus = partner.status;
     partner.status = 'injured';
     partner.injury = {
-      untilAbsWeek: absWeekNow + weeks,
+      stage: 'rest',
+      restUntilAbsWeek: absWeekNow + weeks,
+      rehabEndAbsWeek: 0,
       description: 'Lesionado no sparring',
+      rehabCost: 0,
+      rehabChosen: false,
       resumeStatus: prevStatus,
     };
-    partner.availableFromAbsWeek = partner.injury.untilAbsWeek;
+    partner.availableFromAbsWeek = partner.injury.restUntilAbsWeek;
     await this.fighterCtrl.updateFighter(partner);
 
     await this.notifService.add(

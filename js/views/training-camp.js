@@ -142,7 +142,7 @@ export class TrainingCampView {
           </div>
         ` : injured ? `
           <div class="card-body" style="padding:1rem">
-            <p class="text-sm" style="color:var(--accent)">🏥 Lesionado · disponível em ${Math.max(0, (fighter.injury?.untilAbsWeek || now) - now)} semanas</p>
+            <p class="text-sm" style="color:var(--accent)">🏥 Lesionado · disponível em ${Math.max(0, (fighter.injury?.restUntilAbsWeek || fighter.injury?.untilAbsWeek || now) - now)} semanas</p>
           </div>
         ` : suspended ? `
           <div class="card-body" style="padding:1rem">

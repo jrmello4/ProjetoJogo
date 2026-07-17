@@ -1,6 +1,6 @@
 import { Rivalry } from '../models/rivalry.js';
 import { SocialMedia } from './social-media.js';
-import { SOCIAL_CONFIG, RIVALRY_CONFIG, EXPECTATION_CONFIG, absWeek } from '../config/game-config.js';
+import { SOCIAL_CONFIG, EXPECTATION_CONFIG, absWeek } from '../config/game-config.js';
 import { pickTopRandom } from '../utils/helpers.js';
 
 // Narrativa semanal: redes sociais, callouts, headlines, expectativas,

@@ -1,4 +1,4 @@
-import { LIFESTYLE_TIERS, LIFESTYLE_DOWNGRADE_MORALE_PENALTY, OPTIONAL_SERVICES, WEEKLY_ACTIVITIES } from '../config/game-config.js';
+import { LIFESTYLE_TIERS, OPTIONAL_SERVICES, WEEKLY_ACTIVITIES } from '../config/game-config.js';
 import { clamp } from '../utils/helpers.js';
 
 // Financeiro pessoal do lutador — custo de vida, serviços opcionais,

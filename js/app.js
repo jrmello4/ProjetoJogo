@@ -20,6 +20,7 @@ import { NotificationsView } from './views/notifications.js';
 import { GameController } from './controllers/game-controller.js';
 import { TrainingCamp } from './controllers/training-camp.js';
 import { PressConference } from './controllers/press-conference.js';
+import { WeeklyTrainingController } from './controllers/weekly-training.js';
 import { CornerAdvice } from './controllers/corner-advice.js';
 import { RivalryService } from './services/rivalry-service.js';
 import { SeasonService } from './services/season-service.js';
@@ -454,6 +455,11 @@ class App {
         this.renderDashboard();
       });
     });
+
+    // Fase 1: Weekly training micro-decision modal
+    if (data.weeklyTrainingPrompt?.active) {
+      this._showWeeklyTrainingModal(data.fighter);
+    }
 
     this._bindFighterClicks();
     this._bindEventClicks();
@@ -951,6 +957,86 @@ class App {
     });
 
     modal.querySelector('#conflictCancel').addEventListener('click', () => {
+      modal.remove();
+    });
+  }
+
+  // Fase 1: Modal de microdecisão de treino semanal
+  _showWeeklyTrainingModal(fighter) {
+    const existing = document.getElementById('weeklyTrainingModal');
+    if (existing) return;
+
+    const choices = WeeklyTrainingController.getChoices(fighter);
+    const choiceCards = choices.map(c => `
+      <div class="card weekly-training-card" data-choice="${c.key}" style="cursor:pointer;padding:1rem;transition:border-color 0.15s">
+        <h4 style="margin:0 0 0.25rem 0;color:var(--accent)">${c.label}</h4>
+        <p class="text-sm" style="color:var(--text-secondary);margin:0 0 0.5rem 0">${c.description}</p>
+        <div class="text-xs" style="color:var(--text-muted)">
+          ${c.fatigueGain > 0 ? `+${c.fatigueGain} fadiga` : c.fatigueGain < 0 ? `${c.fatigueGain} fadiga` : ''}
+          ${c.moraleEffect !== 0 ? ` · ${c.moraleEffect > 0 ? '+' : ''}${c.moraleEffect} moral` : ''}
+          ${c.bondBoost ? ' · +vínculo' : ''}
+          · ${Math.round(c.injuryRisk * 100)}% lesão
+        </div>
+      </div>
+    `).join('');
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'weeklyTrainingModal';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:560px">
+        <div class="modal-header">
+          <h3>🏋️ Foco do Treino da Semana</h3>
+          <button class="modal-close" data-close="weeklyTrainingModal">&times;</button>
+        </div>
+        <p class="text-sm" style="color:var(--text-secondary);margin-bottom:1rem">
+          Sem luta marcada esta semana — você pode escolher um foco especial para o treino.
+          Cada opção tem um perfil diferente de risco e recompensa.
+        </p>
+        <div style="display:flex;flex-direction:column;gap:0.75rem" id="weeklyTrainingChoices">
+          ${choiceCards}
+        </div>
+        <div class="modal-actions" style="margin-top:1rem">
+          <button class="btn btn-sm btn-secondary w-full dismiss-training-modal">Agora não</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    modal.querySelector('#weeklyTrainingChoices').addEventListener('click', async (e) => {
+      const card = e.target.closest('[data-choice]');
+      if (!card) return;
+
+      const choiceKey = card.dataset.choice;
+      modal.querySelectorAll('.weekly-training-card').forEach(c => c.style.borderColor = '');
+      card.style.borderColor = 'var(--accent)';
+
+      const result = await this.game.resolveWeeklyTraining(choiceKey);
+      if (result.ok) {
+        const parts = [];
+        const gainLabels = Object.entries(result.gains).map(([attr, val]) => `${attr}+${val}`);
+        if (gainLabels.length > 0) parts.push(`Ganhos: ${gainLabels.join(', ')}`);
+        if (result.fatigueDelta > 0) parts.push(`Fadiga +${result.fatigueDelta}`);
+        else if (result.fatigueDelta < 0) parts.push(`Fadiga ${result.fatigueDelta}`);
+        if (result.moraleDelta !== 0) parts.push(`Moral ${result.moraleDelta > 0 ? '+' : ''}${result.moraleDelta}`);
+        if (result.injured) parts.push('Você se lesionou!');
+        if (result.bondGains?.length > 0) {
+          parts.push(`Vínculo com ${result.bondGains[0].partnerName} aumentou`);
+        }
+        this.notificationService.add('info', '🏋️ Treino Semanal', parts.join(' · ') || 'Sessão concluída.');
+      } else {
+        this.notificationService.add('warning', 'Treino Semanal', result.reason);
+      }
+
+      modal.remove();
+      this.renderDashboard();
+    });
+
+    modal.querySelector('.dismiss-training-modal').addEventListener('click', () => {
+      modal.remove();
+    });
+
+    modal.querySelector('[data-close="weeklyTrainingModal"]').addEventListener('click', () => {
       modal.remove();
     });
   }

@@ -24,6 +24,7 @@ import { Rivalry } from '../models/rivalry.js';
 import { FightOffer } from '../models/fight-offer.js';
 import { generateId, clamp, pickTopRandom } from '../utils/helpers.js';
 import { TrainingCamp } from './training-camp.js';
+import { WeeklyTrainingController } from './weekly-training.js';
 import {
   ACADEMIES,
   ARCHETYPES,
@@ -44,6 +45,8 @@ import {
   PARTNER_CONFIG,
   DNA_DISCOVERY_MAGNITUDE,
   READINESS_CONFIG,
+  WEEKLY_TRAINING_CHOICES,
+  WEEKLY_TRAINING_FREQUENCY,
   absWeek,
 } from '../config/game-config.js';
 import { TapeService } from '../services/tape-service.js';
@@ -433,6 +436,22 @@ export class GameController {
     this._applyWeeklyServices(fighter);
     const sponsorActivity = await this.sponsorService.processWeek(now, fighter);
     await this._applyWeeklyTraining(fighter, academy);
+
+    // Fase 1: Weekly training micro-decision check
+    if (fighter.status !== 'retired') {
+      const bookings = await this.offerService.getAccepted();
+      const booking = bookings.find(b => b.fighterId === fighter.id);
+      const weeksSinceStart = fighter.fights?.length > 0
+        ? now - fighter.fights[0].absWeek
+        : now;
+      if (!booking && fighter.status !== 'injured' && weeksSinceStart % WEEKLY_TRAINING_FREQUENCY === 0) {
+        let existing;
+        try { existing = await this.db.get('gameState', 'weeklyTrainingPrompt'); } catch { /* ok */ }
+        if (!existing) {
+          await this.db.put('gameState', { id: 'weeklyTrainingPrompt', active: true, absWeek: now });
+        }
+      }
+    }
 
     // XP: treinar dá XP
     if (fighter) {
@@ -1151,6 +1170,44 @@ export class GameController {
     return { ok: true, choice: choice.text, effects: logParts };
   }
 
+  // ===== Treino Semanal: resolve a escolha do jogador =====
+  async resolveWeeklyTraining(choiceKey) {
+    const fighter = await this.getPlayerFighter();
+    if (!fighter) return { ok: false, reason: 'Nenhum lutador ativo.' };
+
+    let prompt;
+    try { prompt = await this.db.get('gameState', 'weeklyTrainingPrompt'); } catch { /* ok */ }
+    if (!prompt || !prompt.active) return { ok: false, reason: 'Nenhum prompt de treino semanal pendente.' };
+
+    const cfg = WEEKLY_TRAINING_CHOICES[choiceKey];
+    if (!cfg) return { ok: false, reason: 'Escolha de treino inválida.' };
+
+    const academy = await this.getAcademy(fighter.academyId);
+    const teammates = await this.partnersService.getTeammates(fighter);
+
+    const result = WeeklyTrainingController.applyChoice(fighter, choiceKey, academy, teammates);
+    if (!result) return { ok: false, reason: 'Falha ao aplicar treino semanal.' };
+
+    await this.fighterCtrl.updateFighter(fighter);
+    await this.db.delete('gameState', 'weeklyTrainingPrompt');
+
+    const seasonState = await this.seasonService.getState();
+    const now = absWeek(seasonState);
+    if (this.careerLogService) {
+      await this.careerLogService.publish(fighter.id, 'weekly_training', now, 20, {
+        choice: choiceKey,
+        gains: Object.keys(result.gains).length > 0 ? Object.entries(result.gains).map(([a, v]) => `${a}+${v}`).join(', ') : 'nenhum',
+        injured: result.injured,
+      });
+    }
+
+    if (result.injured) {
+      await this.notifService.add('warning', 'Lesão no Treino', 'Você se lesionou durante o treino semanal intenso.');
+    }
+
+    return { ok: true, ...result };
+  }
+
   async _checkExpectations(now, fighter) {
     if (fighter.status === 'injured' || fighter.status === 'retired') return;
     if (!fighter.promotionContract && !fighter.organizationId) return;
@@ -1756,6 +1813,9 @@ export class GameController {
     let narrativePrompt = null;
     try { const np = await this.db.get('gameState', 'narrative-prompt'); if (np?.choices) narrativePrompt = np; } catch { /* ok */ }
 
+    let weeklyTrainingPrompt = null;
+    try { const wtp = await this.db.get('gameState', 'weeklyTrainingPrompt'); if (wtp?.active) weeklyTrainingPrompt = wtp; } catch { /* ok */ }
+
     // Prontidão (item 4) — resumo pro dashboard quando há luta marcada.
     // Mesma conta da simulação; prontidão do adversário exige scouting 1+.
     let readiness = null;
@@ -1791,6 +1851,7 @@ export class GameController {
       socialPrompt,
       rivalryPrompt,
       narrativePrompt,
+      weeklyTrainingPrompt,
       weighInPrompt,
       readiness,
       state,

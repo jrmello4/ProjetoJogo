@@ -1075,6 +1075,31 @@ export const SCOUTING_MISREAD_CHANCE = {
   2: 0,    // 0% no nível Estudado+
 };
 
+// ============================================================
+// TREINO SEMANAL (Fase 1) — microdecisões a cada ~4 semanas.
+// O jogador escolhe o foco da semana: intenso, técnico,
+// recuperação ativa ou treino com parceiro.
+// ============================================================
+export const WEEKLY_TRAINING_CHOICES = {
+  intense: {
+    label: 'Intenso', description: 'Ganho acelerado, risco de lesão',
+    attrMult: 1.5, fatigueGain: 15, moraleEffect: -2, injuryRisk: 0.20,
+  },
+  technical: {
+    label: 'Técnico', description: 'Progressão de golpes, risco baixo',
+    attrMult: 1.0, fatigueGain: 8, moraleEffect: 0, injuryRisk: 0.08,
+  },
+  active_recovery: {
+    label: 'Recuperação Ativa', description: 'Pouco ganho, recupera fadiga',
+    attrMult: 0.5, fatigueGain: -10, moraleEffect: 3, injuryRisk: 0.02,
+  },
+  partners: {
+    label: 'Parceiro', description: 'Foco em vínculo e osmose',
+    attrMult: 0.7, fatigueGain: 10, moraleEffect: 2, injuryRisk: 0.12, bondBoost: true,
+  },
+};
+export const WEEKLY_TRAINING_FREQUENCY = 4;
+
 // Data sintética para exibição: início do jogo + semanas decorridas
 export function absWeekToDate(abs, startedAt) {
   const base = startedAt ? new Date(startedAt) : new Date();

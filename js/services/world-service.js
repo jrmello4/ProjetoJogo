@@ -139,11 +139,8 @@ export class WorldService {
 
       if (outcome.playerResults.length > 0) {
         playerEvents.push(outcome);
-      } else if (outcome.results.length > 0) {
-        const main = outcome.results[0];
-        aiHeadlines.push(main.isDraw
-          ? `${outcome.event.name}: ${main.fighterAName} e ${main.fighterBName} empataram.`
-          : `${outcome.event.name}: ${main.winnerName} venceu ${main.winnerId === main.fighterAId ? main.fighterBName : main.fighterAName} por ${main.method}.`);
+      } else {
+        aiHeadlines.push(...this._buildEventHeadlines(outcome));
       }
     }
 
@@ -258,7 +255,7 @@ export class WorldService {
     }
 
     // 2) Lutas de IA para completar o card
-    const aiPairs = await this._buildAiCard(promo.id, bookedIds, absWeekNow);
+    const aiPairs = await this._buildAiCard(promo, bookedIds, absWeekNow);
     aiPairs.forEach((pair, i) => {
       fights.push({
         fighterA: pair[0],
@@ -363,6 +360,10 @@ export class WorldService {
       result.card = fight.card;
       result.isTitleFight = !!fight.titleWeightClass;
       result.titleWeightClass = fight.titleWeightClass || null;
+      // P11.2 — rating no momento da luta (antes de lesão/sequela mexerem
+      // nos atributos), pra manchete de zebra comparar quem "devia" ganhar.
+      result.ratingA = fighterA.overallRating;
+      result.ratingB = fighterB.overallRating;
 
       fighterA.recoverFromWeightCut();
       fighterB.recoverFromWeightCut();
@@ -724,8 +725,8 @@ export class WorldService {
     return accepted.filter(o => o.promotionId === promotionId && o.eventAbsWeek <= absWeekNow);
   }
 
-  async _buildAiCard(promotionId, excludeIds, absWeekNow) {
-    const rosterData = await this.db.getIndex('fighters', 'organizationId', promotionId);
+  async _buildAiCard(promo, excludeIds, absWeekNow) {
+    const rosterData = await this.db.getIndex('fighters', 'organizationId', promo.id);
     const available = rosterData
       .map(d => new Fighter(d))
       .filter(f => f.status === 'roster' && !excludeIds.has(f.id) && f.availableFromAbsWeek <= absWeekNow);
@@ -735,15 +736,13 @@ export class WorldService {
       (byWeight[f.weightClass] ||= []).push(f);
     }
 
-    // Pareia vizinhos de rating dentro de cada divisão, alternando
-    // divisões para variar os cards de evento para evento.
+    // Pareia vizinhos de rating dentro de cada divisão (com chance de caos,
+    // ver _pairDivision), alternando divisões pra variar os cards de evento
+    // para evento.
     const divisionPairs = [];
     for (const fighters of Object.values(byWeight)) {
       fighters.sort((a, b) => b.overallRating - a.overallRating);
-      const pairs = [];
-      for (let i = 0; i + 1 < fighters.length; i += 2) {
-        pairs.push([fighters[i], fighters[i + 1]]);
-      }
+      const pairs = this._pairDivision(fighters, promo);
       if (pairs.length > 0) divisionPairs.push(pairs);
     }
 
@@ -764,6 +763,81 @@ export class WorldService {
     }
 
     return card;
+  }
+
+  // P11.1 — fator caos: por padrão pareia vizinhos de rating (lutas
+  // sensatas), mas cada divisão rola uma vez por evento a chance de uma
+  // luta estranha — um "styles clash" (topo da divisão contra alguém da
+  // metade de baixo) ou um teste de prospecto contra veterano. Precisa de
+  // pelo menos 4 lutadores pra sobrar gente pro resto do pareamento normal.
+  _pairDivision(fighters, promo) {
+    const list = [...fighters];
+    const pairs = [];
+    const mult = WORLD_CONFIG.AI_CHAOS_TIER_MULTIPLIER[promo.tier] ?? 1;
+
+    if (list.length >= 4) {
+      const roll = Math.random();
+      const experimentalChance = WORLD_CONFIG.AI_CHAOS_EXPERIMENTAL_BASE_CHANCE * mult;
+      const veteranProspectChance = WORLD_CONFIG.AI_CHAOS_VETERAN_PROSPECT_BASE_CHANCE * mult;
+
+      if (roll < experimentalChance) {
+        const top = list.shift();
+        const rivalIdx = Math.floor(list.length / 2) + Math.floor(Math.random() * Math.ceil(list.length / 2));
+        const [rival] = list.splice(Math.min(rivalIdx, list.length - 1), 1);
+        pairs.push([top, rival]);
+      } else if (roll < experimentalChance + veteranProspectChance) {
+        const veteran = list.find(f => (f.age || 0) >= WORLD_CONFIG.AI_CHAOS_VETERAN_AGE_MIN);
+        const prospect = [...list].reverse().find(f => f !== veteran && (f.totalFights || 0) <= WORLD_CONFIG.AI_CHAOS_PROSPECT_MAX_FIGHTS);
+        if (veteran && prospect) {
+          pairs.push([veteran, prospect]);
+          list.splice(list.indexOf(prospect), 1);
+          list.splice(list.indexOf(veteran), 1);
+        }
+      }
+    }
+
+    for (let i = 0; i + 1 < list.length; i += 2) {
+      pairs.push([list[i], list[i + 1]]);
+    }
+    return pairs;
+  }
+
+  // P11.2 — giro do MMA com drama de verdade. `results` já vem ordenado por
+  // billing ascendente (prelim -> main -> título, ver _runEvent), então o
+  // último item é sempre o fecho da noite — antes este método pegava
+  // `results[0]` (uma prelim qualquer) e chamava isso de "main event".
+  _buildEventHeadlines(outcome) {
+    const { event, results } = outcome;
+    if (results.length === 0) return [];
+
+    const top = results[results.length - 1];
+    const headlines = [this._formatHeadline(event.name, top)];
+
+    // Zebra num coadjuvante do card também vira manchete — senão o upset de
+    // quem não fechou a noite nunca chega no jogador.
+    const upset = results.find(r => r !== top && !r.isDraw && this._isUpset(r));
+    if (upset) headlines.push(this._formatHeadline(event.name, upset));
+
+    return headlines;
+  }
+
+  _isUpset(result) {
+    if (result.isDraw) return false;
+    const winnerRating = result.winnerId === result.fighterAId ? result.ratingA : result.ratingB;
+    const loserRating = result.winnerId === result.fighterAId ? result.ratingB : result.ratingA;
+    return (loserRating ?? 0) - (winnerRating ?? 0) >= WORLD_CONFIG.AI_HEADLINE_UPSET_RATING_GAP;
+  }
+
+  _formatHeadline(eventName, result) {
+    if (result.isDraw) {
+      return `${eventName}: ${result.fighterAName} e ${result.fighterBName} empataram.`;
+    }
+    const loserName = result.winnerId === result.fighterAId ? result.fighterBName : result.fighterAName;
+    const totalRounds = result.rounds?.length || result.round || 3;
+    const scoreDiff = Math.abs((result.totalScoreA || 0) - (result.totalScoreB || 0));
+    const isFOTN = totalRounds >= 3 && scoreDiff < 15;
+    const prefix = this._isUpset(result) ? '😱 ZEBRA — ' : isFOTN ? '🔥 Luta Disputada — ' : '';
+    return `${prefix}${eventName}: ${result.winnerName} venceu ${loserName} por ${result.method}.`;
   }
 
   async _findReplacement(promotionId, fighter, excludeIds, absWeekNow) {

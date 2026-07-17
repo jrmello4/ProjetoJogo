@@ -57,6 +57,7 @@ import {
 import { TapeService } from '../services/tape-service.js';
 import { ReadinessService } from '../services/readiness-service.js';
 import { HallOfFame } from '../services/hall-of-fame.js';
+import { OnboardingService } from '../services/onboarding-service.js';
 import { LEVEL_CONFIG, MOVES, OPTIONAL_SERVICES, WEEKLY_ACTIVITIES, INJURY_CONFIG, OFFER_CONFIG } from '../config/game-config.js';
 
 const WORLD_MODE = 'career-1-fighter';
@@ -1134,6 +1135,7 @@ export class GameController {
       resolvedAbsWeek: now,
       auto,
     };
+    OnboardingService.markWeighedIn(fighter);
 
     await this.fighterCtrl.updateFighter(fighter);
     await this.db.put('offers', booking);
@@ -1586,10 +1588,12 @@ export class GameController {
     const result = await this.offerService.accept(offerId, absWeekNow);
     if (!result) return null;
 
+    OnboardingService.markOfferAccepted(fighter);
+
     if (teammate) {
       await this.partnersService.breakBond(fighter, teammate.id, absWeekNow);
-      await this.fighterCtrl.updateFighter(fighter);
     }
+    await this.fighterCtrl.updateFighter(fighter);
     return result;
   }
 
@@ -2174,7 +2178,19 @@ export class GameController {
       endCareerPrompt: state.endCareerPrompt || false,
       state,
       now,
+      onboarding: fighter && OnboardingService.shouldShow(fighter)
+        ? { activeStep: OnboardingService.activeStep(fighter), progress: OnboardingService.progress(fighter) }
+        : null,
     };
+  }
+
+  // P7.4 — onboarding guiado: dispensa o banner de dicas pra sempre, mesmo
+  // com passos incompletos (o jogador já disse que sabe o que fazer).
+  async dismissOnboarding() {
+    const fighter = await this.getPlayerFighter();
+    if (!fighter) return;
+    OnboardingService.dismiss(fighter);
+    await this.fighterCtrl.updateFighter(fighter);
   }
 
   // P4.3: Encontra a oferta de luta correspondente a um resultado

@@ -20,6 +20,7 @@ import { ReadinessService } from './services/readiness-service.js';
 import { NotificationsView } from './views/notifications.js';
 import { GameController } from './controllers/game-controller.js';
 import { TrainingCamp } from './controllers/training-camp.js';
+import { OnboardingService } from './services/onboarding-service.js';
 import { PressConference } from './controllers/press-conference.js';
 import { WeeklyTrainingController } from './controllers/weekly-training.js';
 import { CornerAdvice } from './controllers/corner-advice.js';
@@ -424,6 +425,11 @@ class App {
     document.getElementById('weekAdvanceBtn')?.addEventListener('click', () => this.advanceWeek());
     document.getElementById('saveLoadBtn')?.addEventListener('click', () => this.handleSaveLoad());
     document.getElementById('simulatePeriodBtn')?.addEventListener('click', () => this.openSimulatePeriod());
+
+    document.querySelector('[data-onboarding-dismiss]')?.addEventListener('click', async () => {
+      await this.game.dismissOnboarding();
+      this.renderDashboard();
+    });
 
     document.querySelectorAll('[data-sponsor-accept]').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -1496,6 +1502,7 @@ class App {
         const profFocus = document.querySelector('#camp-proficiency-focus')?.value || null;
 
         TrainingCamp.configureCamp(fighter, intensity, spec || 'striking', partnerId, weaponTarget, profFocus);
+        OnboardingService.markCampConfigured(fighter);
         await this.game.fighterCtrl.updateFighter(fighter);
 
         const cost = CAMP_CONFIG.WEEKLY_COST[intensity] || 0;

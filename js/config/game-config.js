@@ -277,6 +277,20 @@ export const WORLD_CONFIG = {
   // Fase 1: teto de população — acima disto, veteranos irrelevantes são
   // aposentados forçadamente para evitar degradação da performance.
   POPULATION_CAP: 300,
+
+  // P11.1 — fator caos no card de IA: em vez de sempre parear vizinhos de
+  // rating, a promoção às vezes monta uma luta estranha (styles clash) ou
+  // testa um prospecto contra um veterano. Cada divisão rola uma vez por
+  // evento. Tier elite é mais conservador; regional arrisca mais.
+  AI_CHAOS_EXPERIMENTAL_BASE_CHANCE: 0.05,
+  AI_CHAOS_VETERAN_PROSPECT_BASE_CHANCE: 0.10,
+  AI_CHAOS_TIER_MULTIPLIER: { 1: 0.5, 2: 1, 3: 1.5 },
+  AI_CHAOS_VETERAN_AGE_MIN: 32,
+  AI_CHAOS_PROSPECT_MAX_FIGHTS: 5,
+
+  // P11.2 — zebra no giro do MMA: perdedor com rating maior que o vencedor
+  // por esta margem vira manchete de upset.
+  AI_HEADLINE_UPSET_RATING_GAP: 8,
 };
 
 // §B.2 — sequelas permanentes de lesão. Cada entrada reduz o TETO
@@ -1354,3 +1368,34 @@ export const CHALLENGE_MODES = {
     },
   },
 };
+
+// P7.4 — onboarding guiado. Uma missão leve por vez, na ordem natural do
+// primeiro contrato: aceitar oferta → configurar camp → bater o peso →
+// lutar. `done(fighter)` deriva o estado sem precisar de flag nova onde já
+// existe sinal suficiente (ex.: "lutar" via record.wins+losses+draws).
+export const ONBOARDING_STEPS = [
+  {
+    id: 'offerAccepted',
+    label: 'Aceite sua primeira oferta de luta',
+    hint: 'Veja a aba Ofertas — toda semana livre, promoções te chamam.',
+    done: (fighter) => fighter.onboarding.offerAccepted,
+  },
+  {
+    id: 'campConfigured',
+    label: 'Configure seu camp de treino',
+    hint: 'Com luta marcada, escolha intensidade e foco na aba Treino.',
+    done: (fighter) => fighter.onboarding.campConfigured,
+  },
+  {
+    id: 'weighedIn',
+    label: 'Bata o peso na pesagem',
+    hint: 'Na semana da luta, a pesagem decide o quanto o corte de peso custou.',
+    done: (fighter) => fighter.onboarding.weighedIn,
+  },
+  {
+    id: 'firstFight',
+    label: 'Lute sua primeira luta',
+    hint: 'Comande o córner entre os rounds — as instruções mudam o resultado.',
+    done: (fighter) => (fighter.record?.wins || 0) + (fighter.record?.losses || 0) + (fighter.record?.draws || 0) > 0,
+  },
+];

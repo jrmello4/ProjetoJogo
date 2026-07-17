@@ -116,6 +116,12 @@ export class Fighter {
     // a luta é liquidada. É o maior componente do score de prontidão.
     this.campReadinessPoints = data.campReadinessPoints || 0;
 
+    // P7.4 — onboarding guiado. Cada flag vira true na primeira vez que a
+    // ação correspondente acontece (ver OnboardingService); "lutar" não
+    // precisa de flag própria porque totalFights já responde por ela.
+    // `dismissed` esconde o banner pra sempre, mesmo com passos incompletos.
+    this.onboarding = data.onboarding || { offerAccepted: false, campConfigured: false, weighedIn: false, dismissed: false };
+
     // Épico F2: expectativas dos atletas
     this.expectation = data.expectation || null; // { kind: 'title_shot'|'move_up_tier'|'more_fights'|'better_pay', sinceAbsWeek, urgency: 1-3 }
     this.lastExpectationCheck = data.lastExpectationCheck || 0;

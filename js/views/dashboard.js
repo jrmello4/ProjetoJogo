@@ -130,9 +130,22 @@ export class DashboardView {
   }
 
   static render(data, weekLabel) {
-    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, rivalryPrompt, narrativePrompt, weighInPrompt, pendingRehab, readiness, now, endCareerPrompt } = data;
+    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, rivalryPrompt, narrativePrompt, weighInPrompt, pendingRehab, readiness, now, endCareerPrompt, onboarding } = data;
 
     const tierBadge = (tier) => `<span class="badge ${tierBadgeCls(tier)}">${TIER_LABELS[tier]}</span>`;
+
+    // ===== P7.4: Onboarding guiado — uma dica de cada vez, some sozinho =====
+    const onboardingHtml = onboarding ? `
+      <div class="card mb-4" data-reveal style="border-top-color:var(--gold);position:relative">
+        <button class="btn btn-sm btn-secondary" data-onboarding-dismiss title="Dispensar dicas" style="position:absolute;top:0.75rem;right:0.75rem">✕</button>
+        <div class="card-header">
+          <span class="card-title">🎓 Primeiros Passos (${onboarding.progress.done}/${onboarding.progress.total})</span>
+        </div>
+        <div class="progress-bar mb-2"><div class="progress-fill" style="width:${Math.round((onboarding.progress.done / onboarding.progress.total) * 100)}%"></div></div>
+        <p class="text-sm font-bold mb-1">${onboarding.activeStep.label}</p>
+        <p class="text-xs text-muted">${onboarding.activeStep.hint}</p>
+      </div>
+    ` : '';
 
     // ===== Ofertas pendentes =====
     let offersHtml = '';
@@ -512,7 +525,11 @@ export class DashboardView {
       <div class="section-label" data-reveal>Últimos Eventos</div>
       <div class="card mb-4" data-reveal>
         ${pastEvents.slice(0, 4).map(e => {
-          const main = e.results?.[0];
+          // results vem ordenado por billing ascendente (prelim -> main ->
+          // título, ver world-service._runEvent); o último item fecha a
+          // noite — pegar [0] mostraria sempre uma prelim como se fosse o
+          // resultado principal do evento.
+          const main = e.results?.[e.results.length - 1];
           return `
             <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border);cursor:pointer" data-event-click="${e.id}">
               <div>
@@ -528,6 +545,7 @@ export class DashboardView {
 
     return `
       ${this._renderPoster(data, weekLabel)}
+      ${onboardingHtml}
 
       <!-- Stats -->
       <div class="section-label" data-reveal>Visão Geral</div>

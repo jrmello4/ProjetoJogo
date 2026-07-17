@@ -1,5 +1,5 @@
 import { Gaussian } from '../utils/gaussian.js';
-import { CORNER_INSTRUCTIONS, GAME_PLANS, GAME_PLAN_EDGE } from '../config/game-config.js';
+import { CORNER_INSTRUCTIONS, GAME_PLANS, GAME_PLAN_EDGE, SCOUTING_PLAN_EDGE_RATIOS } from '../config/game-config.js';
 import { clamp } from '../utils/helpers.js';
 import { StyleService } from '../services/style-service.js';
 
@@ -7,7 +7,7 @@ export class SimulationEngine {
   // Styles make fights. O plano de jogo é lido contra o adversário REAL —
   // o jogador só sabe o que estudou. Acertar a leitura vale +10% por round;
   // errar custa −8%. Não estudar é jogar na sorte.
-  static _planEdge(plan, opponent) {
+  static _planEdge(plan, opponent, scoutingLevel = 0) {
     if (!plan.strongVs && !plan.weakVs) return 0;
 
     const a = opponent.attributes;
@@ -29,9 +29,13 @@ export class SimulationEngine {
     if ((a.speed ?? 50) >= 65) traits.add('fast');
     if ((a.composure ?? 50) <= 40) traits.add('nervous');
 
-    if (plan.strongVs && traits.has(plan.strongVs)) return GAME_PLAN_EDGE.strong;
-    if (plan.weakVs && traits.has(plan.weakVs)) return GAME_PLAN_EDGE.weak;
-    return 0;
+    let rawEdge = 0;
+    if (plan.strongVs && traits.has(plan.strongVs)) rawEdge = GAME_PLAN_EDGE.strong;
+    else if (plan.weakVs && traits.has(plan.weakVs)) rawEdge = GAME_PLAN_EDGE.weak;
+
+    // Scale by scouting level — pior scouting = menos precisão = edge mais fraco
+    const ratio = SCOUTING_PLAN_EDGE_RATIOS[Math.min(Math.max(scoutingLevel, 0), 4)] ?? 1.0;
+    return rawEdge * ratio;
   }
 
   // Arma crua (Fase 3): uma arma nova instalada pela metade entrega o plano

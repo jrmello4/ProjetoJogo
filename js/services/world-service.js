@@ -54,6 +54,18 @@ export class WorldService {
       rivalryIntensity = shared?.intensity || 0;
     }
 
+    // Resolve scouting level to scale plan edge — segue o mesmo padrão de
+    // _resolveReadiness (scoutingService.knowledgeOf + manager baseline).
+    let scoutingLevel = 0;
+    if (this.scoutingService) {
+      let hasBaseline = false;
+      if (this.managerService && player.managerId) {
+        const manager = await this.managerService.getManager(player.managerId);
+        hasBaseline = this.managerService.givesBaselineScouting(manager);
+      }
+      scoutingLevel = await this.scoutingService.knowledgeOf(opponent, player.id, hasBaseline);
+    }
+
     return TapeService.resolveTactics({
       player,
       opponent,
@@ -64,7 +76,7 @@ export class WorldService {
       // O vazamento (§Fase 3b): quem dividiu o tatame com você não precisa da
       // fita. Ele te viu.
       sparredWeeks: player.sparredWith?.[opponent.id] || 0,
-      planEdgeFn: (plan, target) => SimulationEngine._planEdge(plan, target),
+      planEdgeFn: (plan, target) => SimulationEngine._planEdge(plan, target, scoutingLevel),
     });
   }
 

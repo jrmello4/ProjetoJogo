@@ -437,6 +437,10 @@ export const GAME_PLANS = {
 // Quanto o acerto (ou o erro) de leitura vale na performance de cada round
 export const GAME_PLAN_EDGE = { strong: 0.10, weak: -0.08 };
 
+// Escala do bônus/penalidade do plano de jogo por nível de scouting (0-4).
+// Indexa por scoutingLevel: nível 0 (sem scouting) = ratio 1.0 (full edge).
+export const SCOUTING_PLAN_EDGE_RATIOS = [1.0, 0.85, 0.70, 0.50, 0.30];
+
 // ===== O Livro Sobre Você (Fase 3) =====
 // O mundo passa a te estudar de volta. A tese: o plano que te faz vencer é o
 // mesmo que te faz previsível. Ver spec 2026-07-14-o-livro-sobre-voce-design.

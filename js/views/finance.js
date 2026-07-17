@@ -29,7 +29,7 @@ export class FinanceView {
     const runwayLabel = runway === Infinity ? '∞' : String(Math.max(0, runway));
 
     const ledgerHtml = !fighter.ledger || fighter.ledger.length === 0
-      ? '<div class="text-center text-muted text-sm" style="padding:1rem">Sem movimentações ainda. Avance a semana para o fluxo começar.</div>'
+      ? '<div class="empty-state"><p>Sem movimentações ainda. Avance a semana para o fluxo começar.</p></div>'
       : fighter.ledger.slice(0, 20).map(t => `
           <div class="cost-row">
             <span>

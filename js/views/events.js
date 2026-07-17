@@ -31,7 +31,7 @@ export class EventsView {
                   <span class="badge ${weeksOut <= 0 ? 'badge-danger' : 'badge-warning'}">${weeksOut <= 0 ? 'esta semana' : `em ${weeksOut} sem`}</span>
                 </div>
                 ${eventBookings.map(b => `
-                  <div class="text-xs mt-1" style="color:var(--gold,#d4a843)">🥊 Seu atleta no card: vs ${b.opponentName} — bolsa ${formatCurrency(b.purse)}</div>
+                  <div class="text-xs mt-1" style="color:var(--gold)">🥊 Seu atleta no card: vs ${b.opponentName} — bolsa ${formatCurrency(b.purse)}</div>
                 `).join('')}
               </div>
             `;
@@ -178,7 +178,7 @@ export class EventsView {
         ${(results || []).map((r, i) => {
           const isPlayer = playerFighterIds.has(r.fighterAId) || playerFighterIds.has(r.fighterBId);
           return `
-          <div class="card mb-2 fight-result-card" style="cursor:pointer${isPlayer ? ';border-left:3px solid var(--gold,#d4a843)' : ''}" data-expand="fight-${i}">
+          <div class="card mb-2 fight-result-card" style="cursor:pointer${isPlayer ? ';border-left:3px solid var(--gold)' : ''}" data-expand="fight-${i}">
             <div class="flex items-center justify-between mb-2">
               <div>
                 <span class="badge ${r.card === 'main' ? 'badge-info' : 'badge-warning'}">${r.card === 'main' ? 'Main Card' : 'Prelim'}</span>
@@ -217,8 +217,8 @@ export class EventsView {
                     ${r.rounds.map(rd => `
                       <tr>
                         <td style="text-align:left">${rd.round}</td>
-                        <td style="text-align:center;font-weight:bold;color:${rd.scoreA > rd.scoreB ? 'var(--success,#2ecc71)' : ''}">${rd.scoreA}</td>
-                        <td style="text-align:center;font-weight:bold;color:${rd.scoreB > rd.scoreA ? 'var(--success,#2ecc71)' : ''}">${rd.scoreB}</td>
+                        <td style="text-align:center;font-weight:bold;color:${rd.scoreA > rd.scoreB ? 'var(--success)' : ''}">${rd.scoreA}</td>
+                        <td style="text-align:center;font-weight:bold;color:${rd.scoreB > rd.scoreA ? 'var(--success)' : ''}">${rd.scoreB}</td>
                         <td style="text-align:center;font-size:0.75rem">
                           ${rd.knockdownsA > 0 ? '🔴 KD' : ''}
                           ${rd.knockdownsB > 0 ? '🔵 KD' : ''}

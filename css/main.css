@@ -699,6 +699,23 @@ tbody tr:hover td { background: var(--bg-hover); }
 
 .modal-close:hover { color: var(--chalk); }
 
+/* Icon-only button (rename, close, etc). Dim until touched — hover AND
+   keyboard focus get the same feedback, not just the mouse. */
+.btn-icon {
+  font-size: 0.8rem;
+  vertical-align: middle;
+  margin-left: 0.5rem;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 2px;
+  opacity: 0.5;
+  transition: opacity var(--anim-fast) ease;
+}
+
+.btn-icon:hover,
+.btn-icon:focus-visible { opacity: 1; }
+
 .modal-actions {
   display: flex;
   gap: 0.625rem;

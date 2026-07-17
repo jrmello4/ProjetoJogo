@@ -48,7 +48,7 @@ export class TrainingCampView {
       : '';
 
     return `
-      <div class="camp-weapon mt-3 p-3" style="border:1px dashed var(--gold,#d4a843);border-radius:6px;${cfg.spec === 'install_weapon' ? '' : 'display:none'}" data-weapon-block>
+      <div class="camp-weapon mt-3 p-3" style="border:1px dashed var(--gold);border-radius:var(--radius);${cfg.spec === 'install_weapon' ? '' : 'display:none'}" data-weapon-block>
         <div class="text-xs font-bold text-secondary mb-2">🧰 ARMA NOVA</div>
         <p class="text-xs text-muted mb-2">
           Semanas gastas aqui são semanas não gastas afiando o que você já sabe.
@@ -203,7 +203,7 @@ export class TrainingCampView {
         `}
 
         ${cfg.intensity && hasFight && !injured && !suspended ? `
-          <div class="card-footer" style="padding:0.5rem 1rem;background:var(--surface-raised,#0f1115);border-top:1px solid var(--border,#2a2a2a)">
+          <div class="card-footer" style="padding:0.5rem 1rem;background:var(--mat-high);border-top:1px solid var(--border)">
             <div class="flex items-center gap-3">
               <span class="text-xs text-muted">Camp ativo:</span>
               <span class="text-xs">${cfg.intensity === 'light' ? '🔵 Leve' : cfg.intensity === 'moderate' ? '🟡 Moderado' : '🔴 Intenso'}</span>

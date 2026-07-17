@@ -128,7 +128,7 @@ export class FighterProfileView {
       <div class="page-header">
         <h2>
           ${getNationalityFlag(fighter.nationality?.code || '')} ${fighter.name}
-          <button class="btn-icon fighter-rename" data-id="${fighter.id}" title="Renomear lutador" style="font-size:0.8rem;vertical-align:middle;margin-left:0.5rem;cursor:pointer;background:none;border:none;padding:2px;opacity:0.5;transition:opacity 0.2s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.5">✏️</button>
+          <button class="btn-icon fighter-rename" data-id="${fighter.id}" title="Renomear lutador" aria-label="Renomear lutador">✏️</button>
         </h2>
         <p>${fighter.nationality?.name || 'Desconhecido'} · ${fighter.age} anos · ${FIGHTING_STYLES[fighter.style]?.label || fighter.fightingStyle || 'Freestyle'}</p>
       </div>
@@ -414,7 +414,7 @@ export class FighterProfileView {
               <div class="flex gap-1 flex-wrap">
                 ${poolMoves.filter(m => !equippedSet.has(m)).map(moveId => {
                   const move = MOVES[moveId];
-                  return `<button class="btn btn-sm btn-add-move" data-move-id="${moveId}" style="font-size:0.65rem;padding:2px 6px;background:var(--bg-raised);border:1px solid var(--border);border-radius:4px;cursor:pointer">+ ${move?.name || moveId}</button>`;
+                  return `<button class="btn btn-sm btn-add-move" data-move-id="${moveId}" style="font-size:0.65rem;padding:2px 6px;background:var(--mat-high);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer">+ ${move?.name || moveId}</button>`;
                 }).join('')}
               </div>
             </div>

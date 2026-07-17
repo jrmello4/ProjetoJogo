@@ -10,7 +10,7 @@ export class LiveFightHubView {
 
     return `
       <div class="page-header" style="text-align:center;border:none">
-        <div id="hubFaceOff" style="width:100%;height:200px;border-radius:12px;overflow:hidden;margin-bottom:1rem"></div>
+        <div id="hubFaceOff" class="faceoff-container" style="height:200px"></div>
         <h2 id="hubFightTitle" style="opacity:0">⚔️ ${fighterA.name} vs ${fighterB.name}</h2>
         <p id="hubFightSubtitle" class="text-muted" style="opacity:0">${result.method || 'Decisão'} · ${result.round ? `R${result.round}` : rounds.length > 0 ? `${rounds.length} rounds` : ''}</p>
       </div>
@@ -22,7 +22,7 @@ export class LiveFightHubView {
       </div>
 
       <!-- Resultado final (oculto até o fim) -->
-      <div id="liveHubSummary" class="card" style="display:none;text-align:center;padding:1.5rem;background:linear-gradient(135deg,var(--bg),#1a1a2e)">
+      <div id="liveHubSummary" class="card" style="display:none;text-align:center;padding:1.5rem;background:linear-gradient(135deg,var(--mat-high),var(--mat))">
         <div id="hubResultIcon" style="font-size:3rem;opacity:0">${result.isDraw ? '🤝' : isWin ? '🏆' : '😔'}</div>
         <h2 id="hubResultText" class="${result.isDraw ? '' : isWin ? 'text-success' : 'text-danger'}" style="margin:0.5rem 0;opacity:0">
           ${result.isDraw ? 'EMPATE!' : isWin ? `${fighterA.name} VENCEU!` : `${fighterB.name} VENCEU!`}
@@ -80,7 +80,7 @@ export class LiveFightHubView {
             <div class="card" style="border-left:3px solid ${r.finished ? 'var(--red)' : 'var(--border)'}">
               <div class="card-header" style="padding:0.5rem 0.75rem">
                 <span class="card-title">
-                  <span class="live-round-badge" style="display:inline-block;background:${r.finished ? 'var(--red)' : 'var(--border)'};color:var(--bg);padding:0 6px;border-radius:3px;font-size:0.65rem;font-weight:700;margin-right:0.5rem">
+                  <span class="live-round-badge" style="display:inline-block;background:${r.finished ? 'var(--red)' : 'var(--border)'};color:${r.finished ? '#fff' : 'var(--chalk)'};padding:0 6px;border-radius:3px;font-size:0.65rem;font-weight:700;margin-right:0.5rem">
                     ${r.finished ? 'FIM' : `R${r.round}`}
                   </span>
                   ${r.finished ? 'Luta Encerrada!' : `Round ${r.round}`}

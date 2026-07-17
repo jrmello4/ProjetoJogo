@@ -115,6 +115,13 @@
   height: 100% !important;
 }
 
+/* Cena 3D é lit pro tema escuro (fog quase preto, luzes frias) — hardcoded
+   no Three.js, que não lê CSS custom properties. Mesma decisão já tomada
+   pro pôster (.poster-arena): tema claro é o cartaz impresso, sem a jaula
+   por trás. Sem isto, o card face-off ficaria escuro sobre uma página
+   clara durante a luta ao vivo — o momento de maior apelo do jogo. */
+[data-theme="light"] .faceoff-container { display: none; }
+
 .faceoff-vs {
   position: absolute;
   top: 50%;

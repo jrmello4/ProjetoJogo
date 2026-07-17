@@ -28,14 +28,14 @@ export class OffersView {
   static _renderReadiness(rd) {
     if (!rd) return '';
     const cls = rd.player >= 60 ? 'badge-success' : rd.player >= 45 ? 'badge-warning' : 'badge-danger';
-    const barColor = rd.player >= 60 ? 'var(--success)' : rd.player >= 45 ? 'var(--gold,#d4a843)' : 'var(--danger)';
+    const barColor = rd.player >= 60 ? 'var(--success)' : rd.player >= 45 ? 'var(--gold)' : 'var(--danger)';
 
     const chip = (p) => {
       const zero = p.value === 0;
       const sign = p.value > 0 ? '+' : '';
       const style = p.value < 0
         ? 'color:var(--danger)'
-        : zero ? 'color:var(--text-muted,#888)' : 'color:var(--success)';
+        : zero ? 'color:var(--text-muted)' : 'color:var(--success)';
       return `<span class="text-xs" style="${style}">${p.label}: ${sign}${p.value}${p.key === 'camp' ? `/${p.max}` : ''}</span>`;
     };
 
@@ -81,7 +81,7 @@ export class OffersView {
       : '<p class="text-sm text-muted mt-2">Você não faz ideia do que ele preparou. Estude-o para saber o que ele sabe.</p>';
 
     const weapon = r.weapon && GAME_PLANS[r.weapon.planKey]
-      ? `<p class="text-xs mt-2" style="color:var(--gold,#d4a843)">
+      ? `<p class="text-xs mt-2" style="color:var(--gold)">
            🧰 Carta na manga: <strong>${GAME_PLANS[r.weapon.planKey].label}</strong> (${Math.round(r.weapon.mastery)}% instalada).
            Ninguém sabe que você tem isso — mas só funciona uma vez.
          </p>`
@@ -241,7 +241,7 @@ export class OffersView {
               : `Disputa de cinturão ${getWeightClassName(o.weightClass)}`;
 
           return `
-            <div class="card mb-2 ${o.isTitleFight ? 'offer-card--title' : ''}" data-reveal ${o.isTitleFight ? '' : `style="border-top-color:${o.tier === 1 ? 'var(--accent)' : o.tier === 2 ? 'var(--gold,#d4a843)' : 'var(--border)'}"`}>
+            <div class="card mb-2 ${o.isTitleFight ? 'offer-card--title' : ''}" data-reveal ${o.isTitleFight ? '' : `style="border-top-color:${o.tier === 1 ? 'var(--accent)' : o.tier === 2 ? 'var(--gold)' : 'var(--border)'}"`}>
               ${o.isTitleFight ? `<div class="offer-title-strap"><span class="belt-mark">🏆</span> ${titleLabel}</div>` : ''}
               <div class="flex items-center justify-between mb-2">
                 <div class="flex items-center gap-2">
@@ -282,7 +282,7 @@ export class OffersView {
                     <div class="text-xs text-muted">Luta em</div>
                     <div class="text-sm font-bold">${weeksToFight} semana${weeksToFight === 1 ? '' : 's'}</div>
                   </div>
-                  ${o.isShortNotice ? '<div class="text-xs mt-1" style="color:var(--gold,#d4a843);width:100%">⚡ Aviso curto: apenas 2-3 semanas de camp. A bolsa já inclui o bônus de última hora.</div>' : ''}
+                  ${o.isShortNotice ? '<div class="text-xs mt-1" style="color:var(--gold);width:100%">⚡ Aviso curto: apenas 2-3 semanas de camp. A bolsa já inclui o bônus de última hora.</div>' : ''}
                   ${o.opponentWeightBully ? '<div class="text-xs mt-1" style="color:var(--warning);width:100%">⚠️ Ele corta muito peso — chega bem maior no dia da luta (mais poder, mais fadiga acumulada).</div>' : ''}
                   <div>
                     <div class="text-xs text-muted">Divisão</div>
@@ -296,7 +296,7 @@ export class OffersView {
                 </div>
               </div>
               ${risky ? '<div class="text-xs mt-2" style="color:var(--accent)">⚠️ Adversário mais forte no papel — risco alto, recompensa de reputação maior.</div>' : ''}
-              ${fighter && fighter.fatigue >= 40 ? '<div class="text-xs mt-1" style="color:var(--gold,#d4a843)">⚡ Seu atleta ainda carrega fadiga — considere o tempo de recuperação.</div>' : ''}
+              ${fighter && fighter.fatigue >= 40 ? '<div class="text-xs mt-1" style="color:var(--gold)">⚡ Seu atleta ainda carrega fadiga — considere o tempo de recuperação.</div>' : ''}
 
               ${o.negotiated
                 ? '<div class="text-xs text-muted mt-2">Bolsa já negociada nesta oferta.</div>'
@@ -327,7 +327,7 @@ export class OffersView {
         <table style="width:100%;border-collapse:collapse;min-width:${Math.max(480, pending.length * 170)}px">
           <thead>
             <tr>
-              <th style="text-align:left;padding:0.5rem;font-size:0.7rem;color:var(--text-muted,#888);text-transform:uppercase"></th>
+              <th style="text-align:left;padding:0.5rem;font-size:0.7rem;color:var(--text-muted);text-transform:uppercase"></th>
               ${pending.map(o => `<th style="padding:0.5rem;text-align:center;min-width:150px;border-bottom:1px solid var(--border)">${o.opponentName}</th>`).join('')}
             </tr>
           </thead>

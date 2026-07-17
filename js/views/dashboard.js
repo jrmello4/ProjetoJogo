@@ -375,7 +375,7 @@ export class DashboardView {
     // baixa = você está indo pra guerra sem camp, sem plano, sem estudo.
     let readinessHtml = '';
     if (readiness) {
-      const barColor = readiness.player >= 60 ? 'var(--success)' : readiness.player >= 45 ? 'var(--gold,#d4a843)' : 'var(--danger)';
+      const barColor = readiness.player >= 60 ? 'var(--success)' : readiness.player >= 45 ? 'var(--gold)' : 'var(--danger)';
       const missing = readiness.parts.filter(p => p.value === 0 && ['camp', 'plan', 'scouting'].includes(p.key)).map(p => p.label);
       readinessHtml = `
         <div style="padding:0.5rem 0">
@@ -440,7 +440,7 @@ export class DashboardView {
             </div>
           </div>
           ${injured ? `<div class="text-xs" style="color:var(--accent)">🏥 ${fighter.injury?.description || 'Lesionado'}</div>` : bookings[0]
-            ? `<div class="text-xs" style="color:var(--gold,#d4a843)">🥊 Luta em ${Math.max(0, bookings[0].eventAbsWeek - now)} sem vs ${bookings[0].opponentName}</div>`
+            ? `<div class="text-xs" style="color:var(--gold)">🥊 Luta em ${Math.max(0, bookings[0].eventAbsWeek - now)} sem vs ${bookings[0].opponentName}</div>`
             : fighter.availableFromAbsWeek > now
               ? `<div class="text-xs" style="color:var(--warning)">⏳ Suspensão médica · ${fighter.availableFromAbsWeek - now} sem</div>`
               : '<div class="text-xs text-muted">Sem luta marcada</div>'}

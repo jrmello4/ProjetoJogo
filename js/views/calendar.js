@@ -28,7 +28,7 @@ export function renderCalendar(calendarData) {
       <p class="text-muted text-sm">Próximas semanas da carreira</p>
     </div>
     ${upcomingFight ? `
-      <div class="card" style="border-left:4px solid var(--danger, #e74c3c);margin-bottom:1.5rem">
+      <div class="card" style="border-left:4px solid var(--danger);margin-bottom:1.5rem">
         <div class="card-body">
           <strong>🥊 Próxima Luta:</strong> ${upcomingFight.opponentName} · ${upcomingFight.promotionName}
           ${upcomingFight.isTitleFight ? ' 🏆 Disputa de Cinturão' : ''}

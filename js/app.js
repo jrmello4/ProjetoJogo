@@ -804,12 +804,20 @@ class App {
   }
 
   async runSimulatePeriod(weeks, trainingFocus) {
+    // Mesmo componente de espera do boot (index.html) — antes esta tela usava
+    // .empty-state (uma caixa tracejada de "nada aqui"), a linguagem visual
+    // errada pra "algo está processando". simulateWeeks(60) já levou ~5-10s
+    // nos testes; sem o spinner girando, alguns segundos de tela parada
+    // parecem trava, não trabalho em andamento.
     await LayoutView.render(`
       <div class="page-header">
         <h2>Simulando...</h2>
         <p>Avançando ${weeks} semanas na sua carreira</p>
       </div>
-      <div class="empty-state"><p>O tempo está passando — isso pode levar alguns segundos.</p></div>
+      <div class="loading-state">
+        <div class="loading-spinner"></div>
+        <p>O tempo está passando — isso pode levar alguns segundos.</p>
+      </div>
     `, false);
 
     const result = await this.game.simulateWeeks(weeks, { trainingFocus });
@@ -1153,9 +1161,13 @@ class App {
     });
 
     document.querySelectorAll('[data-expand]').forEach(card => {
-      card.addEventListener('click', () => {
+      card.setAttribute('aria-expanded', 'false');
+      this._makeClickable(card).addEventListener('click', () => {
         const target = document.getElementById(card.dataset.expand);
-        if (target) target.style.display = target.style.display === 'none' ? 'block' : 'none';
+        if (!target) return;
+        const willShow = target.style.display === 'none';
+        target.style.display = willShow ? 'block' : 'none';
+        card.setAttribute('aria-expanded', String(willShow));
       });
     });
   }

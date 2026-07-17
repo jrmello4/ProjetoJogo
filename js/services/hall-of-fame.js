@@ -2,6 +2,11 @@
 // Calcula elegibilidade com base em marcos (vitórias, OVR, ranking) e
 // gera um verbete de carreira completo no momento da indução.
 export class HallOfFame {
+  static async hasCompletedCareer(db) {
+    const entries = await db.getAll('hallOfFame');
+    return entries.length > 0;
+  }
+
   static checkEligibility(fighter) {
     const reasons = [];
 

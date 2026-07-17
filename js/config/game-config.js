@@ -1268,3 +1268,49 @@ export const NARRATIVE_EVENTS = {
     },
   ],
 };
+
+// ============================================================
+// P9.2 — MODOS DESAFIO
+// ============================================================
+// Modificam as condições iniciais de uma nova carreira. Só disponíveis
+// após completar pelo menos uma carreira (Hall da Fama tem entrada).
+export const CHALLENGE_MODES = {
+  do_zero: {
+    id: 'do_zero',
+    name: 'Do Zero',
+    description: 'Comece sem nada. OVR 50, sem equipamento, sem empresário.',
+    icon: '🌱',
+    requirements: 'Complete uma carreira',
+    apply(fighter) {
+      for (const key of Object.keys(fighter.attributes)) {
+        fighter.attributes[key] = Math.min(fighter.attributes[key], 50);
+      }
+      fighter.managerId = null;
+      fighter.purseShare = 1.0;
+      fighter.cash = 500;
+      fighter.popularity = 5;
+    },
+  },
+  veterano: {
+    id: 'veterano',
+    name: 'Veterano',
+    description: 'Comece com 35+ anos. O relógio está correndo.',
+    icon: '👴',
+    requirements: 'Complete uma carreira',
+    apply(fighter) {
+      fighter.age = 35 + Math.floor(Math.random() * 3);
+      // retirementWindow = 3 years = ~156 weeks
+      fighter.retirementWindow = 156;
+    },
+  },
+  revanche: {
+    id: 'revanche',
+    name: 'Revanche',
+    description: 'Comece com uma rivalidade no nível máximo.',
+    icon: '⚔️',
+    requirements: 'Complete uma carreira',
+    apply(fighter) {
+      fighter.startingRivalry = true;
+    },
+  },
+};

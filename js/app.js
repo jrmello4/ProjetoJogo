@@ -10,6 +10,7 @@ import { RivalriesView } from './views/rivalries.js';
 import { PressConferenceView } from './views/press-conference.js';
 import { HallOfFameView } from './views/hall-of-fame.js';
 import { RetirementCeremonyView } from './views/retirement-ceremony.js';
+import { HallOfFame } from './services/hall-of-fame.js';
 import { renderCalendar } from './views/calendar.js';
 import { RankingsView } from './views/rankings.js';
 import { FinanceView } from './views/finance.js';
@@ -29,7 +30,7 @@ import { SaveService } from './services/save-service.js';
 import { ThreeArena } from './three-arena.js';
 import { ThreeBackground } from './three-background.js';
 import { motion } from './motion/motion-engine.js';
-import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, ARCHETYPES, ORIGINS, absWeekToLabel, SYNERGY_CONFIG, FIGHTING_STYLES, PERKS } from './config/game-config.js';
+import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, ARCHETYPES, ORIGINS, absWeekToLabel, SYNERGY_CONFIG, FIGHTING_STYLES, PERKS, CHALLENGE_MODES } from './config/game-config.js';
 import { formatCurrency, getAdjacentWeightClasses, clamp } from './utils/helpers.js';
 import { CAMP_CONFIG, HYPE_PURSE_RATIO, absWeek } from './config/game-config.js';
 
@@ -106,6 +107,7 @@ class App {
   async _showCharacterCreation() {
     const academies = await this.game.getAcademies();
     const managers = await this.game.getManagers();
+    const hasCompletedCareer = await HallOfFame.hasCompletedCareer(this.game.db);
 
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
@@ -198,6 +200,27 @@ class App {
           </div>
         </div>
 
+        <div class="form-group" id="challengeModeGroup">
+          <label class="form-label">Modo Desafio <span class="text-xs text-muted">(opcional)</span></label>
+          <div class="difficulty-grid" style="grid-template-columns:repeat(3,1fr)">
+            ${Object.entries(CHALLENGE_MODES).map(([key, m]) => {
+              const disabled = !hasCompletedCareer ? 'disabled' : '';
+              const lockedClass = !hasCompletedCareer ? 'challenge-locked' : '';
+              return `
+                <div class="difficulty-option challenge-option ${lockedClass}" data-challenge="${key}" data-disabled="${!hasCompletedCareer}">
+                  <div class="difficulty-name">${m.icon} ${m.name}</div>
+                  <div class="text-xs text-muted mt-2">${m.description}</div>
+                  ${!hasCompletedCareer ? `<div class="text-xs mt-1" style="color:var(--color-warning)">🔒 ${m.requirements}</div>` : ''}
+                </div>
+              `;
+            }).join('')}
+            <div class="difficulty-option selected" data-challenge="" data-disabled="false">
+              <div class="difficulty-name">🎯 Normal</div>
+              <div class="text-xs text-muted mt-2">Sem modificações — experiência padrão.</div>
+            </div>
+          </div>
+        </div>
+
         <div class="modal-actions">
           <button class="btn btn-primary w-full" id="characterCreationStartBtn">Começar carreira</button>
         </div>
@@ -236,6 +259,15 @@ class App {
       });
     });
 
+    // P9.2: Challenge mode selection
+    modal.querySelectorAll('[data-challenge]').forEach(opt => {
+      opt.addEventListener('click', () => {
+        if (opt.dataset.disabled === 'true') return;
+        modal.querySelectorAll('[data-challenge]').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
+      });
+    });
+
     modal.querySelector('#characterCreationStartBtn').addEventListener('click', async () => {
       const name = modal.querySelector('#charName').value.trim() || 'Lutador Anônimo';
       const weightClass = modal.querySelector('#charWeightClass').value;
@@ -244,8 +276,9 @@ class App {
       const difficultyId = modal.querySelector('[data-difficulty].selected')?.dataset.difficulty || 'normal';
       const academyId = modal.querySelector('[data-academy].selected')?.dataset.academy || academies[0]?.id;
       const managerId = modal.querySelector('[data-manager].selected')?.dataset.manager || managers[0]?.id;
+      const challengeMode = modal.querySelector('[data-challenge].selected')?.dataset.challenge || null;
 
-      await this.game.createPlayerFighter({ name, weightClass, archetype, origin, difficultyId, academyId, managerId });
+      await this.game.createPlayerFighter({ name, weightClass, archetype, origin, difficultyId, academyId, managerId, challengeMode });
 
       localStorage.setItem('characterCreationDone', '1');
       modal.remove();

@@ -47,6 +47,7 @@ import {
   READINESS_CONFIG,
   WEEKLY_TRAINING_CHOICES,
   WEEKLY_TRAINING_FREQUENCY,
+  CHALLENGE_MODES,
   absWeek,
 } from '../config/game-config.js';
 import { TapeService } from '../services/tape-service.js';
@@ -211,7 +212,7 @@ export class GameController {
   // Gera o lutador do jogador com viés leve de arquétipo/origem sobre a
   // base do DataGenerator (reaproveita toda a lógica de atributos/DNA/
   // corte de peso já existente — só empurra a semente antes de gerar).
-  async createPlayerFighter({ name, weightClass, archetype, origin, difficultyId, academyId, managerId = null }) {
+  async createPlayerFighter({ name, weightClass, archetype, origin, difficultyId, academyId, managerId = null, challengeMode = null }) {
     const difficulty = DIFFICULTIES.find(d => d.id === difficultyId) || DIFFICULTIES[1];
     const arch = ARCHETYPES[archetype] || ARCHETYPES.generalist;
     const orig = ORIGINS[origin] || null;
@@ -243,11 +244,27 @@ export class GameController {
     data.cash = difficulty.cash;
     data.lifestyleTier = 'modest';
 
+    // P9.2: Apply challenge mode modifications before saving
+    if (challengeMode && CHALLENGE_MODES[challengeMode]) {
+      // Apply directly to data (raw object before Fighter instantiation)
+      CHALLENGE_MODES[challengeMode].apply(data);
+    }
+
     await this.db.put('fighters', data);
     await this.fighterCtrl.setPlayerFighterId(data.id);
 
     const fighter = new Fighter(data);
     await this._ensureInitialOffers(fighter);
+
+    // P9.2: Log challenge mode start
+    if (challengeMode && CHALLENGE_MODES[challengeMode] && this.careerLogService) {
+      const state = await this.seasonService.getState();
+      await this.careerLogService.publish(
+        fighter.id, 'challenge_start', absWeek(state), 50,
+        { mode: CHALLENGE_MODES[challengeMode].name }
+      );
+    }
+
     return fighter;
   }
 
@@ -608,6 +625,24 @@ export class GameController {
         await this.careerLogService.publish(fighter.id, 'dna_discovered', now, DNA_DISCOVERY_MAGNITUDE[trait] ?? 55, {
           trait, traitLabel: DNA_TRAIT_NAMES[trait] || trait,
         });
+      }
+    }
+
+    // P9.2: Veterano — retirement window countdown
+    if (fighter.retirementWindow > 0) {
+      fighter.retirementWindow--;
+      if (fighter.retirementWindow <= 0) {
+        fighter.status = 'retired';
+        fighter.organizationId = null;
+        fighter.academyId = null;
+        await this.notifService.add('hall-of-fame', '👴 Aposentadoria Forçada',
+          `Sua idade finalmente cobrou o preço. Aos ${fighter.age} anos, o corpo não aguenta mais o ritmo. Sua carreira chegou ao fim.`);
+        if (this.careerLogService) {
+          await this.careerLogService.publish(fighter.id, 'challenge_end', now, 50, {
+            reason: 'retirement_window_expired',
+            mode: 'Veterano',
+          });
+        }
       }
     }
 

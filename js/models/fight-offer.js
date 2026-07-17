@@ -57,6 +57,9 @@ export class FightOffer {
     // e bolsa majorada. O flag persiste na reserva para afetar exibição.
     this.isShortNotice = data.isShortNotice || false;
 
+    // P4.x: Weight bullying — adversário corta peso agressivo, chega maior
+    this.opponentWeightBully = data.opponentWeightBully || false;
+
     // P4.3: Super fight — luta entre campeões de promoções diferentes
     this.isSuperFight = data.isSuperFight || false;
     // P4.3: Mudança de peso

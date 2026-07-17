@@ -53,6 +53,39 @@ describe('WorldService._pairDivision', () => {
   });
 });
 
+describe('WorldService._applyWeightBullyBoost', () => {
+  it('does nothing when the booking is not flagged as a weight bully', () => {
+    const ws = new WorldService();
+    const opponent = makeFighter({ attributes: { power: 50, strength: 50 } });
+    const delta = ws._applyWeightBullyBoost(opponent, { opponentWeightBully: false });
+    expect(delta).toEqual({ power: 0, strength: 0 });
+    expect(opponent.attributes.power).toBe(50);
+  });
+
+  it('boosts power/strength by naturalWeight and reports the real delta', () => {
+    const ws = new WorldService();
+    const opponent = makeFighter({ attributes: { power: 50, strength: 50 }, weightCut: { naturalWeight: 15, ease: 40, lastCutImpact: 0 } });
+    const delta = ws._applyWeightBullyBoost(opponent, { opponentWeightBully: true });
+    expect(delta.power).toBeGreaterThan(0);
+    expect(delta.strength).toBeGreaterThan(0);
+    expect(opponent.attributes.power).toBe(50 + delta.power);
+  });
+
+  it('reports a clamped delta (not the nominal bonus) when the attribute is near the 99 ceiling — regression: naive revert would permanently drain points', () => {
+    const ws = new WorldService();
+    const opponent = makeFighter({ attributes: { power: 97, strength: 97 }, weightCut: { naturalWeight: 15, ease: 40, lastCutImpact: 0 } });
+    const delta = ws._applyWeightBullyBoost(opponent, { opponentWeightBully: true });
+    expect(opponent.attributes.power).toBe(99);
+    expect(delta.power).toBe(2); // clamped: 97 -> 99, not the full nominal bonus
+    // Simulando o revert do chamador: subtrair exatamente o delta reportado
+    // sempre volta ao valor original, mesmo perto do teto.
+    opponent.attributes.power -= delta.power;
+    opponent.attributes.strength -= delta.strength;
+    expect(opponent.attributes.power).toBe(97);
+    expect(opponent.attributes.strength).toBe(97);
+  });
+});
+
 describe('WorldService._buildEventHeadlines / upset detection', () => {
   it('uses the top-billing (last) result for the headline, not the first prelim', () => {
     const ws = new WorldService();

@@ -25,6 +25,7 @@ import {
   GAME_PLANS,
   TAPE_CONFIG,
   INJURY_CONFIG,
+  WEIGHT_BULLY_CONFIG,
   absWeekToDate,
   computeSuspensionWeeks,
 } from '../config/game-config.js';
@@ -283,7 +284,12 @@ export class WorldService {
       // A reserva do jogador pode carregar uma estratégia de pesagem. A IA
       // continua usando o impacto normal do próprio corte de peso.
       fighterA.applyWeightCutImpact(fight.booking?.weighIn?.impactMultiplier ?? 1);
-      fighterB.applyWeightCutImpact();
+
+      // P4.x — Weight bullying: o mesmo aviso que a oferta mostrou ao
+      // jogador vira efeito de verdade na noite da luta. Ganho temporário
+      // (revertido logo abaixo, com recoverFromWeightCut) — nunca some pra
+      // sempre, senão um rival recorrente ficaria permanentemente maior.
+      const weightBullyDeltas = this._applyWeightBullyBoost(fighterB, fight.booking);
 
       // Instruções de córner ao vivo só existem para a luta do jogador,
       // e só quando o app.js fornece os hooks (fast-forward simula automático).
@@ -367,6 +373,8 @@ export class WorldService {
 
       fighterA.recoverFromWeightCut();
       fighterB.recoverFromWeightCut();
+      fighterB.attributes.power -= weightBullyDeltas.power;
+      fighterB.attributes.strength -= weightBullyDeltas.strength;
 
       // Cartel dentro desta promoção — é o que abre a porta do cinturão.
       // Empate não conta nem como vitória nem como derrota no cartel.
@@ -875,6 +883,27 @@ export class WorldService {
       if (rivalry?.type === 'grudge') pressure += RIVALRY_CONFIG.GRUDGE_PRESSURE_BONUS;
     }
     return Math.min(100, pressure);
+  }
+
+  // P4.x — aplica o bônus de "chegou maior" quando a oferta marcou o
+  // adversário como weight bully. Devolve o DELTA de verdade aplicado
+  // (pós-clamp em 99, não o bônus nominal) para o chamador reverter exato
+  // depois da luta — um adversário perto do teto teria a soma cortada mas a
+  // subtração ingênua não, drenando pontos permanentemente a cada luta.
+  _applyWeightBullyBoost(fighterB, booking) {
+    const bonus = booking?.opponentWeightBully
+      ? Math.round(fighterB.weightCut.naturalWeight * WEIGHT_BULLY_CONFIG.POWER_PER_KG)
+      : 0;
+    if (bonus <= 0) {
+      fighterB.applyWeightCutImpact();
+      return { power: 0, strength: 0 };
+    }
+    const powerBefore = fighterB.attributes.power;
+    const strengthBefore = fighterB.attributes.strength;
+    fighterB.attributes.power = Math.min(99, powerBefore + bonus);
+    fighterB.attributes.strength = Math.min(99, strengthBefore + bonus);
+    fighterB.applyWeightCutImpact(WEIGHT_BULLY_CONFIG.CARDIO_IMPACT_MULT);
+    return { power: fighterB.attributes.power - powerBefore, strength: fighterB.attributes.strength - strengthBefore };
   }
 
   // Suspensão médica pós-luta: aplicada a TODOS os lutadores (jogador e IA)

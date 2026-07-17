@@ -293,6 +293,18 @@ export const WORLD_CONFIG = {
   AI_HEADLINE_UPSET_RATING_GAP: 8,
 };
 
+// P4.x — Weight bullying. Adversário com corte de peso natural alto
+// (weightCut.naturalWeight) chega maior no dia da luta: ganha power/
+// strength temporário (só nesta luta, revertido depois — ver
+// WorldService._runEvent) mas paga com um corte mais castigado (mais fadiga
+// acumulada via applyWeightCutImpact). O jogador vê o aviso na oferta ANTES
+// de aceitar — decisão real de "encarar o cara grande ou não".
+export const WEIGHT_BULLY_CONFIG = {
+  NATURAL_WEIGHT_THRESHOLD: 11,
+  POWER_PER_KG: 0.8,
+  CARDIO_IMPACT_MULT: 1.6,
+};
+
 // §B.2 — sequelas permanentes de lesão. Cada entrada reduz o TETO
 // (Fighter.effectiveCeiling) de alguns atributos e compensa um pouco em
 // outro (a dor ensina a lutar diferente) — nunca mexe no valor atual.

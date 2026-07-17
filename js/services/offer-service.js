@@ -2,7 +2,7 @@ import { FightOffer, OFFER_STATUS } from '../models/fight-offer.js';
 import { Fighter } from '../models/fighter.js';
 import { generateId, clamp } from '../utils/helpers.js';
 import { getWeightClassName } from '../utils/helpers.js';
-import { OFFER_CONFIG, NEGOTIATION_CONFIG, TITLE_CONFIG, TITLE_ROLE, RIVALRY_CONFIG, CARD_POSITION } from '../config/game-config.js';
+import { OFFER_CONFIG, NEGOTIATION_CONFIG, TITLE_CONFIG, TITLE_ROLE, RIVALRY_CONFIG, CARD_POSITION, WEIGHT_BULLY_CONFIG } from '../config/game-config.js';
 
 // Ciclo de vida das ofertas de luta: geração semanal pelas promoções,
 // expiração, aceite e recusa.
@@ -246,6 +246,7 @@ export class OfferService {
       cardPosition,
       createdAtAbsWeek: absWeekNow,
       isShortNotice, // P4.2
+      opponentWeightBully: opponent.weightCut.naturalWeight >= WEIGHT_BULLY_CONFIG.NATURAL_WEIGHT_THRESHOLD, // P4.x
     });
 
     await this.db.put('offers', offer);
@@ -258,6 +259,9 @@ export class OfferService {
     created.push(offer);
 
     await this.notifService.add('offer', '📩 Nova Oferta de Luta', `${promo.name} quer você contra ${opponent.name} — bolsa de $${purse.toLocaleString()}.${isShortNotice ? ' ⚡ SHORT NOTICE!' : ''}`);
+    if (offer.opponentWeightBully) {
+      await this.notifService.add('warning', '⚠️ Corte de Peso Pesado', `${opponent.name} corta muito peso pra fazer ${getWeightClassName(fighter.weightClass)} — ele chega bem maior no dia da luta.`);
+    }
 
     return created;
   }

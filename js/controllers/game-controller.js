@@ -51,7 +51,7 @@ import {
 } from '../config/game-config.js';
 import { TapeService } from '../services/tape-service.js';
 import { ReadinessService } from '../services/readiness-service.js';
-import { LEVEL_CONFIG, MOVES, NARRATIVE_EVENTS, OPTIONAL_SERVICES, WEEKLY_ACTIVITIES } from '../config/game-config.js';
+import { LEVEL_CONFIG, MOVES, OPTIONAL_SERVICES, WEEKLY_ACTIVITIES, INJURY_CONFIG, OFFER_CONFIG } from '../config/game-config.js';
 
 const WORLD_MODE = 'career-1-fighter';
 // v4: carreira de 1 lutador — Academy substitui Gym/RivalGym, economia
@@ -421,6 +421,55 @@ export class GameController {
       }
     }
 
+    // P4.3: Super fight win bonus, title defense quality, double champion tracking
+    for (const evt of world.playerEvents) {
+      for (const result of evt.playerResults) {
+        if (!result || !result.fighterAId) continue;
+        const playerIsA = evt.playerFighterIds?.has(result.fighterAId);
+        if (!playerIsA && !evt.playerFighterIds?.has(result.fighterBId)) continue;
+        const playerId = playerIsA ? result.fighterAId : result.fighterBId;
+        const won = result.winnerId === playerId;
+
+        if (won && playerId === fighter.id) {
+          // Busca a oferta correspondente a esta luta
+          const oppId = playerIsA ? result.fighterBId : result.fighterAId;
+          const booking = await this._findFightOffer(fighter.id, oppId);
+
+          if (booking) {
+            // Super fight — vitória contra campeão de outra promoção
+            if (booking.isSuperFight) {
+              fighter.updatePopularity(OFFER_CONFIG.SUPER_FIGHT.POPULARITY_GAIN);
+              const oppName = playerIsA ? result.fighterBName : result.fighterAName;
+              await this.careerLogService.publish(fighter.id, 'super_fight_win', now, 90, {
+                opponentName: oppName,
+                promo: booking.promotionName,
+              });
+            }
+
+            // Qualidade da defesa de cinturão
+            if (booking.isTitleFight && booking.titleRole === 'defense' && won) {
+              const opponent = await this.fighterCtrl.getFighter(oppId);
+              const quality = Math.max(1, (opponent?.overallRating || 60) - 60);
+              fighter.titleDefenseQuality = (fighter.titleDefenseQuality || 0) + quality;
+              fighter.titleDefenses = (fighter.titleDefenses || 0) + 1;
+            }
+
+            // Duplo campeão: rastreia em quantas divisões diferentes o lutador já foi campeão
+            if (booking.isTitleFight && won && !result.titleRetained) {
+              const wc = booking.weightClass || result.titleWeightClass || fighter.weightClass;
+              if (!fighter.titleWeightClasses) fighter.titleWeightClasses = [];
+              if (!fighter.titleWeightClasses.includes(wc)) {
+                fighter.titleWeightClasses.push(wc);
+              }
+              if (fighter.titleWeightClasses.length >= 2) {
+                fighter.doubleChampion = true;
+              }
+            }
+          }
+        }
+      }
+    }
+
     await this.offerService.expireOld(now);
     const promotions = await this.worldService.getPromotions();
     const offersCreated = fighter.status !== 'retired'
@@ -463,6 +512,9 @@ export class GameController {
         await this.notifService.add('success', '⬆️ Level Up!', `Treino semanal te levou ao Nv.${fighter.level}!${bonusPts}`);
       }
     }
+
+    // P2.2: Staged injury recovery
+    await this._processInjuryStages(fighter, now);
 
     // Fase 3 — sumir do mapa te torna um enigma de novo. É a única forma
     // gratuita de baixar a exposição, e ela cobra o preço mais alto do jogo:
@@ -754,7 +806,7 @@ export class GameController {
       }
     }
     if (act.injuryHealChance && fighter.injury && Math.random() < act.injuryHealChance) {
-      fighter.injury.untilAbsWeek -= 7; // acelera recuperação em 1 semana
+      fighter.injury.restUntilAbsWeek -= 7; // acelera recuperação em 1 semana
     }
     if (act.attrGainChance && Math.random() < act.attrGainChance) {
       const keys = Object.keys(fighter.attributes);
@@ -1759,6 +1811,76 @@ export class GameController {
     };
   }
 
+  // ===== P2.2: Staged injury recovery =====
+  async _processInjuryStages(fighter, absWeekNow) {
+    if (!fighter.injury || !fighter.injury.stage) return;
+
+    const injury = fighter.injury;
+
+    if (injury.stage === 'rest' && absWeekNow >= injury.restUntilAbsWeek) {
+      // Rest stage complete — move to rehab stage
+      injury.stage = 'rehab';
+      injury.rehabEndAbsWeek = absWeekNow + INJURY_CONFIG.REHAB_FREE_WEEKS;
+      await this.notifService.add('injury', 'Lesão em recuperação',
+        'Sua lesão entrou na fase de reabilitação. Você pode escolher entre fisioterapia rápida (paga) ou gratuita (mais lenta) no painel principal.');
+    }
+
+    if (injury.stage === 'rehab' && injury.rehabChosen && absWeekNow >= injury.rehabEndAbsWeek) {
+      // Rehab complete — move to return stage
+      injury.stage = 'return';
+      injury.restUntilAbsWeek = absWeekNow + INJURY_CONFIG.RETURN_WEEKS;
+      fighter.status = 'active';
+      await this.notifService.add('injury', 'Retorno gradual',
+        'Você está liberado para treinar, mas com intensidade reduzida.');
+    }
+
+    if (injury.stage === 'return' && absWeekNow >= (injury.restUntilAbsWeek || 0)) {
+      // Fully healed
+      fighter.injury = null;
+      fighter.status = 'active';
+      await this.notifService.add('info', 'Recuperado',
+        'Você está 100% recuperado da lesão.');
+    }
+  }
+
+  // ===== P2.2: Resolve rehab choice =====
+  async resolveRehabChoice(choiceKey) {
+    const fighter = await this.getPlayerFighter();
+    if (!fighter?.injury || fighter.injury.stage !== 'rehab' || fighter.injury.rehabChosen) {
+      return { ok: false, reason: 'Nenhuma escolha de reabilitação pendente.' };
+    }
+
+    const state = await this.seasonService.getState();
+    const now = absWeek(state);
+
+    if (choiceKey === 'fast') {
+      const cost = INJURY_CONFIG.REHAB_FAST_COST * INJURY_CONFIG.REHAB_FAST_WEEKS;
+      if (fighter.cash < cost) {
+        return { ok: false, reason: `Você precisa de $${cost} para fisioterapia rápida.` };
+      }
+      fighter.cash -= cost;
+      fighter.injury.rehabEndAbsWeek = now + INJURY_CONFIG.REHAB_FAST_WEEKS;
+      fighter.injury.rehabCost = cost;
+      fighter.addTransaction(now, 'Fisioterapia rápida', -cost);
+    } else {
+      // Free rehab — already set in _processInjuryStages
+      fighter.injury.rehabEndAbsWeek = fighter.injury.rehabEndAbsWeek || (now + INJURY_CONFIG.REHAB_FREE_WEEKS);
+    }
+
+    fighter.injury.rehabChosen = true;
+    await this.fighterCtrl.updateFighter(fighter);
+    // Clear pending signal
+    try { await this.db.delete('gameState', 'rehabChoicePrompt'); } catch { /* ok */ }
+
+    const weeks = choiceKey === 'fast' ? INJURY_CONFIG.REHAB_FAST_WEEKS : INJURY_CONFIG.REHAB_FREE_WEEKS;
+    return {
+      ok: true,
+      choice: choiceKey,
+      rehabWeeks: weeks,
+      cost: choiceKey === 'fast' ? INJURY_CONFIG.REHAB_FAST_COST * INJURY_CONFIG.REHAB_FAST_WEEKS : 0,
+    };
+  }
+
   // ===== Dashboard =====
   async getDashboard() {
     const fighter = await this.getPlayerFighter();
@@ -1816,6 +1938,9 @@ export class GameController {
     let weeklyTrainingPrompt = null;
     try { const wtp = await this.db.get('gameState', 'weeklyTrainingPrompt'); if (wtp?.active) weeklyTrainingPrompt = wtp; } catch { /* ok */ }
 
+    // P2.2: rehab choice pending
+    const pendingRehab = fighter?.injury?.stage === 'rehab' && !fighter.injury.rehabChosen;
+
     // Prontidão (item 4) — resumo pro dashboard quando há luta marcada.
     // Mesma conta da simulação; prontidão do adversário exige scouting 1+.
     let readiness = null;
@@ -1852,10 +1977,78 @@ export class GameController {
       rivalryPrompt,
       narrativePrompt,
       weeklyTrainingPrompt,
+      pendingRehab,
       weighInPrompt,
       readiness,
       state,
       now,
     };
+  }
+
+  // P4.3: Encontra a oferta de luta correspondente a um resultado
+  async _findFightOffer(fighterId, opponentId) {
+    const all = await this.db.getAll('offers');
+    return all.find(o =>
+      o.fighterId === fighterId &&
+      (o.opponentId === opponentId) &&
+      (o.status === 'completed' || o.status === 'accepted' || o.status === 'cancelled')
+    );
+  }
+
+  // P4.3: Mudança de peso — sobe ou desce uma categoria.
+  // Exige lealdade mínima, tem lockout de 8 semanas.
+  async changeWeightClass(fighterId, newWeightClass) {
+    const fighter = await this.fighterCtrl.getFighter(fighterId);
+    if (!fighter) return { ok: false, reason: 'Lutador não encontrado.' };
+
+    const classes = ['Strawweight', 'Flyweight', 'Bantamweight', 'Featherweight', 'Lightweight', 'Welterweight', 'Middleweight', 'Light Heavyweight', 'Heavyweight'];
+    const currentIdx = classes.indexOf(fighter.weightClass);
+    const targetIdx = classes.indexOf(newWeightClass);
+
+    if (currentIdx === -1 || targetIdx === -1) return { ok: false, reason: 'Classe de peso inválida.' };
+    if (Math.abs(currentIdx - targetIdx) !== 1) return { ok: false, reason: 'Só pode mudar uma categoria por vez.' };
+    if ((fighter.loyalty || 0) < OFFER_CONFIG.WEIGHT_MOVE.MIN_LOYALTY) return { ok: false, reason: 'Sua lealdade com a academia é muito baixa para mudar de peso.' };
+
+    const state = await this.seasonService.getState();
+    const absWeekNow = absWeek(state);
+
+    // Verifica lockout de mudança de peso
+    if (fighter.weightMoveLockedUntilAbsWeek && fighter.weightMoveLockedUntilAbsWeek > absWeekNow) {
+      return { ok: false, reason: `Você mudou de peso recentemente. Aguarde ${fighter.weightMoveLockedUntilAbsWeek - absWeekNow} semana(s).` };
+    }
+
+    // Verifica se tem contrato ativo e precisa de permissão da promoção
+    if (fighter.promotionContract?.status === 'active' && fighter.promotionContract.titleClause && fighter.weightClass !== newWeightClass) {
+      // Com title clause ativa, mudar de peso pode significar vagar cinturão
+      const belts = await this.titleService.beltsOf(fighterId);
+      const currentBelt = belts.find(b => b.weightClass === fighter.weightClass);
+      if (currentBelt) {
+        // Vaga o cinturão atual
+        await this.titleService.vacateBeltsOf(fighterId);
+        await this.notifService.add('warning', 'Cinturão Vagado',
+          `Você abdicou do cinturão ${fighter.weightClass} para mudar de divisão.`);
+      }
+    }
+
+    // Registra o peso anterior antes de trocar
+    if (!fighter.originalWeightClass) {
+      fighter.originalWeightClass = fighter.weightClass;
+    }
+    fighter.weightClass = newWeightClass;
+    fighter.weightMoveLockedUntilAbsWeek = absWeekNow + OFFER_CONFIG.WEIGHT_MOVE.RECOMMIT_WEEKS;
+
+    await this.fighterCtrl.updateFighter(fighter);
+
+    if (this.careerLogService) {
+      await this.careerLogService.publish(fighter.id, 'weight_change', absWeekNow, 60, {
+        from: fighter.originalWeightClass,
+        to: newWeightClass,
+      });
+    }
+
+    await this.notifService.add('success', 'Mudança de Peso',
+      `Você mudou para ${newWeightClass}. Esta decisão está travada por ${OFFER_CONFIG.WEIGHT_MOVE.RECOMMIT_WEEKS} semanas.`);
+
+    return { ok: true, newWeightClass };
   }
 }

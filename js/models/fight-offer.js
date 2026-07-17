@@ -53,6 +53,16 @@ export class FightOffer {
     // reserva para que o evento aplique exatamente o impacto combinado.
     this.weighIn = data.weighIn || null;
 
+    // P4.2: Short notice — oferta de última hora com 2-3 semanas de aviso
+    // e bolsa majorada. O flag persiste na reserva para afetar exibição.
+    this.isShortNotice = data.isShortNotice || false;
+
+    // P4.3: Super fight — luta entre campeões de promoções diferentes
+    this.isSuperFight = data.isSuperFight || false;
+    // P4.3: Mudança de peso
+    this.isWeightMove = data.isWeightMove || false;
+    this.originalWeightClass = data.originalWeightClass || null;
+
     // Fase 3 — a isca: fingir a sua assinatura e trazer o oposto. Vive na
     // reserva, ao lado do plano, porque é uma decisão POR LUTA, não um traço
     // do lutador.

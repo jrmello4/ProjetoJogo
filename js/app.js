@@ -435,6 +435,22 @@ class App {
       });
     });
 
+    // P2.2: Escolha de reabilitação de lesão
+    document.querySelectorAll('[data-rehab-choice]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const result = await this.game.resolveRehabChoice(btn.dataset.rehabChoice);
+        if (result.ok) {
+          this.notificationService.add('info', 'Reabilitação',
+            result.choice === 'fast'
+              ? `Fisioterapia rápida contratada por $${result.cost}. Recuperação em ${result.rehabWeeks} semanas.`
+              : `Fisioterapia gratuita iniciada. Recuperação em ${result.rehabWeeks} semanas.`);
+        } else {
+          this.notificationService.add('warning', 'Reabilitação', result.reason);
+        }
+        this.renderDashboard();
+      });
+    });
+
     // Rivalidade — escolha do prompt semanal
     document.querySelectorAll('.rivalry-choice').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -1267,33 +1283,17 @@ class App {
         const newWeightClass = dir === 'up' ? adj.up : adj.down;
         if (!newWeightClass) return;
 
-        const cost = 5000;
-        if (f.cash < cost) {
-          this.notificationService.add('warning', 'Divisão', `Saldo insuficiente. Mudança custa ${formatCurrency(cost)}.`);
+        if ((f.loyalty || 0) < 40) {
+          this.notificationService.add('warning', 'Mudança de Peso', 'Sua lealdade com a academia é muito baixa para mudar de peso.');
           return;
         }
 
-        const oldClass = f.weightClass;
-        f.weightClass = newWeightClass;
-
-        if (dir === 'up') {
-          f.attributes.power = Math.max(1, (f.attributes.power || 50) - 3);
-          f.attributes.strength = Math.max(1, (f.attributes.strength || 50) - 2);
-          f.attributes.speed = Math.min(99, (f.attributes.speed || 50) + 2);
-          f.attributes.cardio = Math.min(99, (f.attributes.cardio || 50) + 1);
-        } else {
-          f.attributes.power = Math.min(99, (f.attributes.power || 50) + 2);
-          f.attributes.strength = Math.min(99, (f.attributes.strength || 50) + 3);
-          f.attributes.speed = Math.max(1, (f.attributes.speed || 50) - 2);
-          f.attributes.cardio = Math.max(1, (f.attributes.cardio || 50) - 2);
+        const result = await this.game.changeWeightClass(fId, newWeightClass);
+        if (!result.ok) {
+          this.notificationService.add('warning', 'Mudança de Peso', result.reason);
+          return;
         }
 
-        const state = await this.seasonService.getState();
-        const week = absWeek(state);
-        f.addTransaction(week, `Mudança divisão: ${oldClass} → ${newWeightClass}`, -cost);
-        await this.game.fighterCtrl.updateFighter(f);
-
-        this.notificationService.add('success', 'Divisão Alterada', `Você mudou de ${oldClass} para ${newWeightClass}.`);
         this.showFighterProfile(fighterId);
       });
     });

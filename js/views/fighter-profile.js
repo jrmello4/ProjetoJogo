@@ -330,7 +330,7 @@ export class FighterProfileView {
       ${(fighter.permanentScars || []).length > 0 ? `
         <div class="card mt-4">
           <div class="card-header">
-            <span class="card-title">Sequelas de Lesão</span>
+            <span class="card-title">Danos Permanentes</span>
           </div>
           ${fighter.permanentScars.map(s => `
             <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
@@ -339,6 +339,22 @@ export class FighterProfileView {
             </div>
           `).join('')}
           <div class="text-xs text-muted mt-2">Reduz o teto de evolução dos atributos acima pro resto da carreira.</div>
+        </div>
+      ` : ''}
+
+      <!-- P10.1: Sequelas mecânicas de lesões -->
+      ${(fighter.sequelae || []).length > 0 ? `
+        <div class="card mt-4">
+          <div class="card-header">
+            <span class="card-title">Sequelas de Combate</span>
+          </div>
+          ${fighter.sequelae.map(s => `
+            <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
+              <span class="text-sm">⚠️ ${s.description}</span>
+              <span class="text-xs text-danger font-bold">${s.attr} -${s.reduction}</span>
+            </div>
+          `).join('')}
+          <div class="text-xs text-muted mt-2">Reduções permanentes em atributos causadas por lesões graves em combate.</div>
         </div>
       ` : ''}
 
@@ -468,16 +484,38 @@ export class FighterProfileView {
         ${isPlayer ? (() => {
           const adj = getAdjacentWeightClasses(fighter.weightClass);
           const options = [];
-          if (adj.up) options.push({ dir: 'up', label: `Subir para ${getWeightClassShort(adj.up)} (menos peso)`, cost: 5000, attrPenalty: 'power -3, strength -2', attrBonus: 'speed +2, cardio +1' });
-          if (adj.down) options.push({ dir: 'down', label: `Descer para ${getWeightClassShort(adj.down)} (mais peso)`, cost: 3000, attrPenalty: 'speed -2, cardio -2', attrBonus: 'power +2, strength +3' });
+          if (adj.up) options.push({ dir: 'up', label: `Subir para ${getWeightClassShort(adj.up)} (menos peso)` });
+          if (adj.down) options.push({ dir: 'down', label: `Descer para ${getWeightClassShort(adj.down)} (mais peso)` });
+
+          // P4.3: verifica lockout de mudança de peso
+          if (fighter.weightMoveLockedUntilAbsWeek) {
+            return `
+              <div class="mt-3">
+                <div class="text-xs text-muted">Mudança de peso travada por mais algumas semanas (lockout ativo).</div>
+              </div>
+            `;
+          }
+          if ((fighter.loyalty || 0) < 40) {
+            return `
+              <div class="mt-3">
+                <div class="text-xs text-muted">Sua lealdade (${fighter.loyalty ?? 0}%) é muito baixa para mudar de peso.</div>
+              </div>
+            `;
+          }
+          if ((fighter.popularity || 0) < 60) {
+            return `
+              <div class="mt-3">
+                <div class="text-xs text-muted">Você precisa de pelo menos 60 de popularidade para mudar de peso.</div>
+              </div>
+            `;
+          }
           return options.length > 0 ? `
             <div class="mt-3">
-              <div class="text-xs text-muted mb-2">Mudar de divisão (custa $${Math.max(...options.map(o => o.cost)).toLocaleString()}):</div>
+              <div class="text-xs text-muted mb-2">Mudar de divisão (travado por 8 semanas após a mudança):</div>
               <div class="flex gap-2 flex-wrap">
                 ${options.map(opt => `
                   <button class="btn btn-sm btn-secondary change-weight-class" data-dir="${opt.dir}" data-fighter="${fighter.id}">
                     ${opt.label}
-                    <div class="text-xs text-muted mt-1">${opt.attrPenalty} · ${opt.attrBonus}</div>
                   </button>
                 `).join('')}
               </div>

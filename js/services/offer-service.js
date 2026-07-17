@@ -164,6 +164,13 @@ export class OfferService {
       return created;
     }
 
+    // P4.3: Super fight — cross-promotion champion fight
+    const superFight = await this._trySuperFight(fighter, promotions, absWeekNow);
+    if (superFight) {
+      created.push(superFight);
+      return created;
+    }
+
     // Épico B: contrato exclusivo limita ofertas à promoção contratante
     let availablePromotions;
     if (fighter.promotionContract?.status === 'active') {
@@ -186,7 +193,13 @@ export class OfferService {
     // Épico F4: reencontro — o adversário já treinou na SUA academia atual
     const isReencounter = fighter.academyId && (opponent.previousAcademyIds || []).includes(fighter.academyId);
 
-    const eventAbsWeek = this._nextEventWeek(promo, absWeekNow);
+    // P4.2: Short notice — ~10% das ofertas são de última hora
+    const isShortNotice = Math.random() < OFFER_CONFIG.SHORT_NOTICE.CHANCE;
+    const noticeWeeks = isShortNotice
+      ? OFFER_CONFIG.SHORT_NOTICE.MIN_WEEKS + Math.floor(Math.random() * (OFFER_CONFIG.SHORT_NOTICE.MAX_WEEKS - OFFER_CONFIG.SHORT_NOTICE.MIN_WEEKS + 1))
+      : OFFER_CONFIG.MIN_WEEKS_NOTICE + Math.floor(Math.random() * (OFFER_CONFIG.MAX_WEEKS_NOTICE - OFFER_CONFIG.MIN_WEEKS_NOTICE + 1));
+
+    const eventAbsWeek = absWeekNow + noticeWeeks;
 
     // Épico B: usar bolsa do contrato se tiver contrato ativo
     let rawPurse, winBonus;
@@ -197,6 +210,10 @@ export class OfferService {
       const purseCfg = OFFER_CONFIG.PURSE[promo.tier];
       rawPurse = purseCfg.base + fighter.popularity * purseCfg.perPop;
       winBonus = Math.round((rawPurse * OFFER_CONFIG.WIN_BONUS_RATIO) / 50) * 50;
+    }
+    if (isShortNotice) {
+      rawPurse = Math.round(rawPurse * OFFER_CONFIG.SHORT_NOTICE.PURSE_MULT / 50) * 50;
+      winBonus = Math.round(winBonus * OFFER_CONFIG.SHORT_NOTICE.WIN_BONUS_MULT / 50) * 50;
     }
     const purse = Math.round(rawPurse / 50) * 50;
 
@@ -228,6 +245,7 @@ export class OfferService {
       isReencounter, // Épico F4
       cardPosition,
       createdAtAbsWeek: absWeekNow,
+      isShortNotice, // P4.2
     });
 
     await this.db.put('offers', offer);
@@ -239,7 +257,7 @@ export class OfferService {
     }
     created.push(offer);
 
-    await this.notifService.add('offer', '📩 Nova Oferta de Luta', `${promo.name} quer você contra ${opponent.name} — bolsa de $${purse.toLocaleString()}.`);
+    await this.notifService.add('offer', '📩 Nova Oferta de Luta', `${promo.name} quer você contra ${opponent.name} — bolsa de $${purse.toLocaleString()}.${isShortNotice ? ' ⚡ SHORT NOTICE!' : ''}`);
 
     return created;
   }
@@ -452,5 +470,73 @@ export class OfferService {
       Math.abs(b.overallRating - fighter.overallRating)
     );
     return candidates[0];
+  }
+
+  // P4.3: Super fight — luta entre campeões de promoções diferentes.
+  // Só ativa quando a popularidade do lutador está alta (85+).
+  async _trySuperFight(fighter, promotions, absWeekNow) {
+    // Só quando a popularidade está alta o suficiente
+    if ((fighter.popularity || 0) < OFFER_CONFIG.SUPER_FIGHT.POPULARITY_THRESHOLD) return null;
+    if (Math.random() > OFFER_CONFIG.SUPER_FIGHT.CHANCE_PER_WEEK) return null;
+
+    // Encontra promoções de elite (tier 1-2) diferentes da atual do lutador
+    const ownPromoId = fighter.promotionContract?.status === 'active'
+      ? fighter.promotionContract.promotionId
+      : fighter.organizationId;
+    const eligiblePromos = promotions.filter(p => p.tier <= 2);
+    if (eligiblePromos.length === 0) return null;
+
+    // Busca campeões da mesma divisão em outras promoções
+    const champCandidates = [];
+    for (const promo of eligiblePromos) {
+      if (ownPromoId && promo.id === ownPromoId) continue;
+      const rosterData = await this.db.getIndex('fighters', 'organizationId', promo.id);
+      const champ = rosterData.find(f =>
+        f.ranking === 1 &&
+        f.weightClass === fighter.weightClass &&
+        f.overallRating >= OFFER_CONFIG.SUPER_FIGHT.MIN_OVR &&
+        f.id !== fighter.id
+      );
+      if (champ) champCandidates.push({ ...champ, promo });
+    }
+    if (champCandidates.length === 0) return null;
+
+    const opponent = champCandidates[Math.floor(Math.random() * champCandidates.length)];
+
+    // Cria a oferta com bolsa majorada (2.5x) e posição de main event
+    const purseCfg = OFFER_CONFIG.PURSE[1]; // tier 1 purse
+    let rawPurse = (purseCfg.base + fighter.popularity * purseCfg.perPop) * OFFER_CONFIG.SUPER_FIGHT.PURSE_MULT;
+    let winBonus = Math.round((rawPurse * OFFER_CONFIG.WIN_BONUS_RATIO) / 50) * 50;
+    const purse = Math.round(rawPurse / 50) * 50;
+
+    const eventAbsWeek = absWeekNow + 6 + Math.floor(Math.random() * 4); // 6-9 weeks notice
+
+    const offer = new FightOffer({
+      id: generateId(),
+      promotionId: opponent.promo.id,
+      promotionName: opponent.promo.name,
+      tier: opponent.promo.tier,
+      fighterId: fighter.id,
+      opponentId: opponent.id,
+      opponentName: opponent.name,
+      opponentRecord: { ...opponent.record },
+      opponentOverall: opponent.overallRating,
+      opponentStyle: opponent.fightingStyle,
+      weightClass: fighter.weightClass,
+      purse,
+      winBonus,
+      eventAbsWeek,
+      expiresAbsWeek: absWeekNow + OFFER_CONFIG.EXPIRY_WEEKS,
+      createdAtAbsWeek: absWeekNow,
+      isSuperFight: true,
+      cardPosition: 'main_event',
+    });
+
+    await this.db.put('offers', offer);
+
+    await this.notifService.add('achievement', '⭐ Super Fight!',
+      `O campeão ${opponent.name} (${opponent.promo.name}) desafia você para uma luta de campeões! Bolsa de $${purse.toLocaleString()}.`);
+
+    return offer;
   }
 }

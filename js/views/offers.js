@@ -248,6 +248,8 @@ export class OffersView {
                   ${tierBadge(o.tier)}
                   <span class="font-bold">${o.promotionName}</span>
                   <span class="badge ${CARD_POSITION[o.cardPosition]?.badge || 'badge-secondary'}">${CARD_POSITION[o.cardPosition]?.shortLabel || 'Prelim'}</span>
+                  ${o.isShortNotice ? '<span class="badge badge-warning" style="margin-left:0.25rem">🔥 Short Notice</span>' : ''}
+                  ${o.isSuperFight ? '<span class="badge badge-danger" style="margin-left:0.25rem">⭐ Super Fight</span>' : ''}
                 </div>
                 <span class="badge ${weeksToExpire <= 1 ? 'badge-danger' : 'badge-warning'}">expira em ${weeksToExpire} sem</span>
               </div>
@@ -279,6 +281,7 @@ export class OffersView {
                     <div class="text-xs text-muted">Luta em</div>
                     <div class="text-sm font-bold">${weeksToFight} semana${weeksToFight === 1 ? '' : 's'}</div>
                   </div>
+                  ${o.isShortNotice ? '<div class="text-xs mt-1" style="color:var(--gold,#d4a843);width:100%">⚡ Aviso curto: apenas 2-3 semanas de camp. A bolsa já inclui o bônus de última hora.</div>' : ''}
                   <div>
                     <div class="text-xs text-muted">Divisão</div>
                     <div class="text-sm font-bold">${getWeightClassShort(o.weightClass)}</div>
@@ -322,7 +325,7 @@ export class OffersView {
           <div class="card mb-2 ${o.isTitleFight ? 'offer-card--title' : ''}" data-reveal>
             <div class="flex items-center justify-between mb-3">
               <div>
-                <div class="text-sm font-bold">${o.isTitleFight ? '<span class="belt-mark">🏆</span> ' : ''}${fighter ? fighter.name : '—'} vs ${o.opponentName}${o.isReencounter ? ' <span class="badge badge-danger" style="font-size:0.65rem">⚔️ REENCONTRO</span>' : ''}${rivalries[o.id] ? ` <span class="badge badge-danger" style="font-size:0.65rem">⚔️ RIVAL · ${rivalries[o.id].label}</span>` : ''}</div>
+                <div class="text-sm font-bold">${o.isTitleFight ? '<span class="belt-mark">🏆</span> ' : ''}${fighter ? fighter.name : '—'} vs ${o.opponentName}${o.isReencounter ? ' <span class="badge badge-danger" style="font-size:0.65rem">⚔️ REENCONTRO</span>' : ''}${o.isShortNotice ? ' <span class="badge badge-warning" style="font-size:0.65rem">🔥 Short Notice</span>' : ''}${o.isSuperFight ? ' <span class="badge badge-danger" style="font-size:0.65rem">⭐ Super Fight</span>' : ''}${rivalries[o.id] ? ` <span class="badge badge-danger" style="font-size:0.65rem">⚔️ RIVAL · ${rivalries[o.id].label}</span>` : ''}</div>
                 <div class="text-xs text-muted">${o.promotionName} · ${formatCurrency(o.purse)} + ${formatCurrency(o.winBonus)} por vitória</div>
               </div>
               <span class="badge ${weeksOut <= 1 ? 'badge-danger' : 'badge-warning'}">${weeksOut <= 0 ? 'Esta semana!' : `em ${weeksOut} sem`}</span>

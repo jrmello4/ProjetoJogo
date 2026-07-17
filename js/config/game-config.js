@@ -173,10 +173,41 @@ export const OFFER_CONFIG = {
   REUNION_CHANCE: 0.3,
   // Semanas mínimas entre a oferta e a luta — um fight camp de verdade
   MIN_WEEKS_NOTICE: 6,
+  // Semanas máximas entre a oferta e a luta (usado para sortear aviso)
+  MAX_WEEKS_NOTICE: 10,
   // Semanas até a oferta expirar
   EXPIRY_WEEKS: 3,
   // Diferença máxima de OVR preferida ao escolher adversário
   OPPONENT_OVR_WINDOW: 8,
+
+  // P4.2: Ofertas Short Notice — ~10% das ofertas são de última hora,
+  // com 2-3 semanas de aviso e bolsa 1.75x mais alta.
+  SHORT_NOTICE: {
+    CHANCE: 0.10,
+    MIN_WEEKS: 2,
+    MAX_WEEKS: 3,
+    PURSE_MULT: 1.75,
+    WIN_BONUS_MULT: 1.5,
+  },
+
+  // P4.3: Super fight — luta entre campeões de promoções diferentes.
+  // Ativada quando a popularidade do lutador ultrapassa 85.
+  SUPER_FIGHT: {
+    POPULARITY_THRESHOLD: 85,
+    CHANCE_PER_WEEK: 0.08,      // 8% chance por semana quando elegível
+    PURSE_MULT: 2.5,            // 2.5x a bolsa normal
+    POPULARITY_GAIN: 10,        // popularidade extra se vencer
+    MIN_OVR: 75,                // oponente precisa ter pelo menos este OVR
+  },
+
+  // P4.3: Mudança de peso — o lutador pode subir/descer uma categoria.
+  // Decisão significativa com custo e período de lockout.
+  WEIGHT_MOVE: {
+    MIN_LOYALTY: 40,            // precisa ter pelo menos essa lealdade
+    PURSE_REDUCTION: 0.7,       // bolsa inicial na nova divisão é 70%
+    RECOMMIT_WEEKS: 8,          // semanas até poder voltar ao peso anterior
+    POPULARITY_THRESHOLD: 60,   // mínimo de popularidade para tentar
+  },
 
   // Requisitos para receber ofertas de cada tier.
   // Wins calibrados para o ritmo de ~3-4 lutas/ano: subir de tier leva
@@ -1099,6 +1130,19 @@ export const WEEKLY_TRAINING_CHOICES = {
   },
 };
 export const WEEKLY_TRAINING_FREQUENCY = 4;
+
+// Injury recovery stage system — P2.2
+export const INJURY_CONFIG = {
+  REST_WEEKS_MIN: 2,
+  REST_WEEKS_MAX: 4,
+  REHAB_FAST_COST: 500,        // cost per week for fast rehab
+  REHAB_FAST_WEEKS: 3,         // fast rehab takes this many weeks
+  REHAB_FREE_WEEKS: 6,         // free rehab takes this many
+  RETURN_TRAINING_MULT: 0.5,   // 50% gains during return stage
+  RETURN_REINJURY_MULT: 2.0,   // 2x injury risk during return
+  SEVERE_INJURY_CHANCE: 0.3,   // 30% of serious injuries leave sequelae
+  RETURN_WEEKS: 2,             // weeks of gradual return
+};
 
 // Data sintética para exibição: início do jogo + semanas decorridas
 export function absWeekToDate(abs, startedAt) {

@@ -129,6 +129,25 @@ export class CareerController {
     };
   }
 
+  // Indução forçada (se ainda não existe) + aponta a cerimônia de
+  // aposentadoria pra este lutador. Sem isso, gameState.meta.
+  // lastRetirementFighterId nunca era setado pra escolhas do próprio
+  // jogador (só o sorteio de aposentadoria por idade de NPCs setava, e
+  // aquele branch é inalcançável pro jogador — ver world-service.js
+  // _processYearEnd, que dá `continue` no lutador do jogador antes de
+  // chegar lá) — a cerimônia (RetirementCeremonyView) sempre caía pro Hall
+  // da Fama comum, nunca abria de verdade.
+  async _markRetirementForCeremony(fighter, reasons) {
+    const existing = await this.db.get('hallOfFame', fighter.id);
+    if (!existing) {
+      await HallOfFame.forceInduct(this.db, fighter, reasons);
+    }
+    const state = await this.seasonService.getState();
+    state.meta = state.meta || {};
+    state.meta.lastRetirementFighterId = fighter.id;
+    await this.db.put('gameState', state);
+  }
+
   // P5.3: Resolve a escolha de fim de carreira do jogador
   async resolveEndCareer(fighterId, choiceKey) {
     const fighter = await this.fighterCtrl.getFighter(fighterId);
@@ -139,8 +158,7 @@ export class CareerController {
       case 'dignified':
         fighter.status = 'retired';
         fighter.updatePopularity(15);
-        // Force Hall of Fame induction
-        await HallOfFame.forceInduct(this.db, fighter, ['Aposentadoria Digna — Legado Preservado']);
+        await this._markRetirementForCeremony(fighter, ['Aposentadoria Digna — Legado Preservado']);
         await this.notifService.add('success', '👑 Aposentadoria Digna', 'Você pendurou as luvas no auge. A torcida aplaude de pé.');
         break;
 
@@ -166,6 +184,7 @@ export class CareerController {
           bonusValue: 5,
           retiredAtAbsWeek: absWeekNow,
         }));
+        await this._markRetirementForCeremony(fighter, ['Virou Técnico — Legado Repassado']);
         await this.notifService.add('success', '📋 Virou Técnico', 'Uma nova geração precisa de você. Bônus desbloqueado para a próxima carreira!');
         break;
 
@@ -174,6 +193,7 @@ export class CareerController {
         fighter.passiveIncome = 500; // $500/week
         fighter.organizationId = null;
         fighter.academyId = null;
+        await this._markRetirementForCeremony(fighter, ['Virou Comentarista — Voz do Esporte']);
         await this.notifService.add('success', '🎙️ Comentarista', 'Sua voz vale ouro. Renda passiva de $500/semana garantida.');
         break;
 

@@ -113,7 +113,13 @@ export class HallOfFame {
   // normais de elegibilidade.
   static async forceInduct(db, fighter, reasons = []) {
     const entry = {
-      id: `hof-${fighter.id}`,
+      // Mesma convenção de induct()/_processYearEnd (id = fighter.id, sem
+      // prefixo): a cerimônia de aposentadoria busca por
+      // db.get('hallOfFame', fighterId) usando o id CRU. Com o prefixo
+      // "hof-" antigo, essa busca nunca encontrava nada — quem se
+      // aposentava via escolha de fim de carreira nunca via a cerimônia,
+      // só a lista comum do Hall da Fama.
+      id: fighter.id,
       fighterId: fighter.id,
       name: fighter.name,
       weightClass: fighter.weightClass,

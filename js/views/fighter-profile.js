@@ -124,11 +124,20 @@ export class FighterProfileView {
       `
         : '';
 
+    // Antes não existia jeito nenhum de encerrar a carreira por vontade
+    // própria — só o prompt automático de fim de carreira (idade/janela de
+    // aposentadoria), que podia nunca chegar. Sem isso, uma carreira travada
+    // (ou simplesmente que o jogador queira encerrar) não tinha saída.
+    const retireBtn = isPlayer && fighter.status !== 'retired'
+      ? `<button class="btn btn-sm btn-danger fighter-retire" data-id="${fighter.id}" style="margin-left:0.5rem;vertical-align:middle">Aposentar-se</button>`
+      : '';
+
     return `
       <div class="page-header">
         <h2>
           ${getNationalityFlag(fighter.nationality?.code || '')} ${fighter.name}
           <button class="btn-icon fighter-rename" data-id="${fighter.id}" title="Renomear lutador" aria-label="Renomear lutador">✏️</button>
+          ${retireBtn}
         </h2>
         <p>${fighter.nationality?.name || 'Desconhecido'} · ${fighter.age} anos · ${FIGHTING_STYLES[fighter.style]?.label || fighter.fightingStyle || 'Freestyle'}</p>
       </div>

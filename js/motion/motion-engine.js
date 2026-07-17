@@ -29,6 +29,13 @@ export class MotionEngine {
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       smoothWheel: true,
       wheelMultiplier: 0.85,
+      // Lenis por padrão sequestra o wheel da página inteira — sem excluir
+      // a sidebar e os modais (criação de personagem, etc.), o scroll do
+      // mouse dentro deles nunca chegava no overflow-y:auto nativo deles.
+      // .lenis.lenis-smooth [data-lenis-prevent] já existia no CSS pra isso,
+      // mas nenhum elemento real usava o atributo — a exclusão nunca
+      // acontecia de verdade.
+      prevent: (node) => !!node.closest?.('.sidebar, .modal-overlay'),
     });
 
     this.lenis.on('scroll', ScrollTrigger.update);

@@ -124,6 +124,9 @@ export class LayoutView {
       });
     }
 
+    // Estado inicial já é aplicado por um script inline no <head> (antes do
+    // primeiro paint, sem isso o padrão claro pisca em escuro por um frame).
+    // Aqui só liga o clique do toggle.
     const themeToggle = document.getElementById('themeToggle');
     if (themeToggle) {
       themeToggle.addEventListener('click', () => {
@@ -133,11 +136,6 @@ export class LayoutView {
         html.setAttribute('data-theme', next);
         localStorage.setItem('theme', next);
       });
-    }
-
-    const saved = localStorage.getItem('theme');
-    if (saved) {
-      document.documentElement.setAttribute('data-theme', saved);
     }
 
     document.addEventListener('click', (e) => {

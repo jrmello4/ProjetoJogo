@@ -514,6 +514,12 @@ export class GameController {
       fighter.status = 'retired';
       fighter.organizationId = null;
       fighter.academyId = null;
+      // Só quem venceu a despedida ganha a cerimônia — perder a última luta
+      // já "mancha o legado" (mensagem acima); forçar indução mesmo assim
+      // contradiria isso.
+      if (lastFight?.won) {
+        await this.careerCtrl._markRetirementForCeremony(fighter, ['Última Luta — Saiu Vencendo']);
+      }
       if (this.careerLogService) {
         await this.careerLogService.publish(fighter.id, 'challenge_end', now, 70, {
           reason: 'last_fight_completed',

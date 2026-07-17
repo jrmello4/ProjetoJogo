@@ -1384,6 +1384,21 @@ class App {
       });
     });
 
+    // Aposentadoria voluntária — a única saída que existia antes era o
+    // prompt automático por idade/janela, que pode nunca disparar. Sem
+    // isto, uma carreira que o jogador queira encerrar não tinha fim.
+    document.querySelectorAll('.fighter-retire').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const fId = btn.dataset.id;
+        const confirmed = confirm(`Tem certeza que quer aposentar ${fighter.name}? Esta ação não pode ser desfeita — a carreira atual termina aqui.`);
+        if (!confirmed) return;
+
+        await this.game.resolveEndCareer(fId, 'dignified');
+        this.notificationService.add('success', '👑 Aposentadoria Digna', `${fighter.name} pendurou as luvas.`);
+        this.navigateTo('retirement');
+      });
+    });
+
     // Task 10: perks teia — aprender perks no perfil
     // Gap #1: equipar/remover golpes
     // Gap #2: troca de estilo
@@ -1729,6 +1744,17 @@ class App {
 
     document.getElementById('backToHallBtn')?.addEventListener('click', () => {
       this.navigateTo('hall-of-fame');
+    });
+
+    // Sem isto, a carreira nunca tinha um jeito de recomeçar: career.
+    // playerFighterId continuava apontando pro lutador aposentado pra
+    // sempre, getPlayerFighter() nunca voltava null, e a criação de
+    // personagem nunca era mostrada de novo. Limpa a identidade e reabre
+    // o mesmo fluxo de criação — o mundo, promoções e Hall da Fama
+    // continuam intactos.
+    document.getElementById('startNewCareerBtn')?.addEventListener('click', async () => {
+      await this.game.fighterCtrl.setPlayerFighterId(null);
+      this._showCharacterCreation();
     });
   }
 

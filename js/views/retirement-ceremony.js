@@ -423,7 +423,8 @@ export class RetirementCeremonyView {
         <p class="text-muted" style="max-width:500px;margin:1rem auto">${heroLine}</p>
 
         <div style="margin-top:1.5rem">
-          <button class="btn btn-secondary" id="viewFullCareerBtn" data-fighter-id="${entry.fighterId}">Ver Carreira Completa</button>
+          <button class="btn btn-primary" id="startNewCareerBtn">🥊 Começar Nova Carreira</button>
+          <button class="btn btn-secondary" id="viewFullCareerBtn" data-fighter-id="${entry.fighterId}" style="margin-left:0.5rem">Ver Carreira Completa</button>
           <button class="btn btn-secondary" id="backToHallBtn" style="margin-left:0.5rem">Hall da Fama</button>
         </div>
       </div>

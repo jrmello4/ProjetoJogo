@@ -152,6 +152,17 @@ export const PROMOTIONS = [
   { id: 'promo-vtr', name: 'Vale Tudo Regional', short: 'VTR', tier: 3, reputation: 27, cadenceWeeks: 3, rosterSize: 28, skill: [28, 48] },
 ];
 
+// Posição no card do evento — reflete a visibilidade da luta dentro do
+// card. A posição sobe com a popularidade: Main Event só para os maiores
+// nomes, Co-Main para nomes consolidados, Featured Prelim para quem já
+// tem algum reconhecimento. Title fights são sempre Main Event.
+export const CARD_POSITION = {
+  main_event: { label: 'Main Event', shortLabel: 'Main', badge: 'badge-danger', popMin: 80 },
+  co_main: { label: 'Co-Main Event', shortLabel: 'Co-Main', badge: 'badge-warning', popMin: 60 },
+  featured_prelim: { label: 'Featured Prelim', shortLabel: 'Featured', badge: 'badge-info', popMin: 35 },
+  preliminary: { label: 'Preliminar', shortLabel: 'Prelim', badge: 'badge-secondary', popMin: 0 },
+};
+
 export const OFFER_CONFIG = {
   // Chance semanal de um lutador livre da equipe receber oferta.
   // Calibrada para ~2-3 lutas por ano por atleta (no MMA real um

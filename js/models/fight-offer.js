@@ -46,6 +46,9 @@ export class FightOffer {
     // Épico F4: o reencontro — adversário foi da academia
     this.isReencounter = data.isReencounter || false;
 
+    // Posição no card — main_event, co_main, featured_prelim ou preliminary
+    this.cardPosition = data.cardPosition || 'preliminary';
+
     // Pesagem pré-luta: a estratégia escolhida é registrada na própria
     // reserva para que o evento aplique exatamente o impacto combinado.
     this.weighIn = data.weighIn || null;

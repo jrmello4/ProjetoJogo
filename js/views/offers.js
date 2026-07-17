@@ -1,5 +1,5 @@
 import { formatCurrency, getWeightClassShort, getWeightClassName, renderAttrRange } from '../utils/helpers.js';
-import { TIER_LABELS, NEGOTIATION_CONFIG, TITLE_ROLE, GAME_PLANS } from '../config/game-config.js';
+import { TIER_LABELS, NEGOTIATION_CONFIG, TITLE_ROLE, GAME_PLANS, CARD_POSITION } from '../config/game-config.js';
 import { OFFER_STATUS } from '../models/fight-offer.js';
 
 const STATUS_LABELS = {
@@ -247,6 +247,7 @@ export class OffersView {
                 <div class="flex items-center gap-2">
                   ${tierBadge(o.tier)}
                   <span class="font-bold">${o.promotionName}</span>
+                  <span class="badge ${CARD_POSITION[o.cardPosition]?.badge || 'badge-secondary'}">${CARD_POSITION[o.cardPosition]?.shortLabel || 'Prelim'}</span>
                 </div>
                 <span class="badge ${weeksToExpire <= 1 ? 'badge-danger' : 'badge-warning'}">expira em ${weeksToExpire} sem</span>
               </div>

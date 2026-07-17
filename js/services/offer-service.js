@@ -2,7 +2,7 @@ import { FightOffer, OFFER_STATUS } from '../models/fight-offer.js';
 import { Fighter } from '../models/fighter.js';
 import { generateId, clamp } from '../utils/helpers.js';
 import { getWeightClassName } from '../utils/helpers.js';
-import { OFFER_CONFIG, NEGOTIATION_CONFIG, TITLE_CONFIG, TITLE_ROLE, RIVALRY_CONFIG } from '../config/game-config.js';
+import { OFFER_CONFIG, NEGOTIATION_CONFIG, TITLE_CONFIG, TITLE_ROLE, RIVALRY_CONFIG, CARD_POSITION } from '../config/game-config.js';
 
 // Ciclo de vida das ofertas de luta: geração semanal pelas promoções,
 // expiração, aceite e recusa.
@@ -200,6 +200,15 @@ export class OfferService {
     }
     const purse = Math.round(rawPurse / 50) * 50;
 
+    // Posição no card baseada na popularidade do lutador
+    const cardPosition = (() => {
+      const pop = fighter.popularity || 0;
+      if (pop >= CARD_POSITION.main_event.popMin) return 'main_event';
+      if (pop >= CARD_POSITION.co_main.popMin) return 'co_main';
+      if (pop >= CARD_POSITION.featured_prelim.popMin) return 'featured_prelim';
+      return 'preliminary';
+    })();
+
     const offer = new FightOffer({
       id: generateId(),
       promotionId: promo.id,
@@ -217,6 +226,7 @@ export class OfferService {
       eventAbsWeek,
       expiresAbsWeek: absWeekNow + OFFER_CONFIG.EXPIRY_WEEKS,
       isReencounter, // Épico F4
+      cardPosition,
       createdAtAbsWeek: absWeekNow,
     });
 
@@ -321,6 +331,7 @@ export class OfferService {
         createdAtAbsWeek: absWeekNow,
         isTitleFight: true,
         titleRole: role,
+        cardPosition: 'main_event',
       });
 
       await this.db.put('offers', offer);

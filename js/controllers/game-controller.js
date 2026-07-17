@@ -698,6 +698,13 @@ export class GameController {
     }
 
     // P5.3: End-of-career choices — trigger prompt before forced retirement
+    // Buscado FRESCO aqui (não no topo do método): _processYearEnd (dentro de
+    // worldService.processWeek, já rodou acima) faz seu próprio
+    // read-modify-write no MESMO doc 'state' (meta.lastRetirementFighterId).
+    // Buscar antes disso e reusar esta referência sobrescreveria aquela
+    // escrita quando este bloco fizer db.put('gameState', state) abaixo.
+    const state = await this.seasonService.getState();
+
     // Retirement window countdown
     if (fighter.retirementWindow > 0) {
       fighter.retirementWindow--;
@@ -749,9 +756,9 @@ export class GameController {
       await this.notifService.add('warning', '⚠️ Caixa Negativo', 'Suas finanças estão no vermelho. Aceite lutas ou reduza o padrão de vida antes que as contas atrasem.');
     }
 
-    const state = await this.seasonService.commitWeekAdvance(nextWeekState.week, nextWeekState.year);
+    const finalState = await this.seasonService.commitWeekAdvance(nextWeekState.week, nextWeekState.year);
 
-    return { state, now, world, offersCreated, economy, milestonesUnlocked, campResults, sponsorActivity };
+    return { state: finalState, now, world, offersCreated, economy, milestonesUnlocked, campResults, sponsorActivity };
   }
 
   // ===== Simulação de período (fast-forward) =====

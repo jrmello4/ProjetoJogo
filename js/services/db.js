@@ -148,13 +148,21 @@ export class DB {
     });
   }
 
+  // P8.4 — escrita só resolve no commit da transação (tx.oncomplete), não no
+  // sucesso da request. Antes, um abort tardio (quota estourada, erro de
+  // constraint) depois do request.onsuccess já ter resolvido a Promise
+  // deixava o chamador achando que salvou — e a escrita sumia sem erro
+  // nenhum. Leitura (_tx) não precisa disso: nada commita além do que já foi
+  // lido.
   _txw(storeName, fn) {
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(storeName, 'readwrite');
       const store = tx.objectStore(storeName);
       const request = fn(tx, store);
-      request.onsuccess = () => resolve(request.result);
+      let result;
+      request.onsuccess = () => { result = request.result; };
       request.onerror = () => reject(request.error);
+      tx.oncomplete = () => resolve(result);
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(new Error('Transaction aborted'));
     });

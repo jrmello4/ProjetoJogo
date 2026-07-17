@@ -42,7 +42,19 @@ export class Fighter {
     this.organizationId = data.organizationId;
     this.academyId = data.academyId || null; // academia onde o lutador treina hoje
     this.academyJoinedAbsWeek = data.academyJoinedAbsWeek || 0; // carência anti-assédio + base da sinergia
-    this.injury = data.injury || null; // { untilAbsWeek, description }
+    // P2.2: backward compat — old format { untilAbsWeek, description } → new stage format
+    this.injury = data.injury || null;
+    if (this.injury && !this.injury.stage) {
+      this.injury = {
+        stage: 'rest',
+        restUntilAbsWeek: this.injury.untilAbsWeek,
+        rehabEndAbsWeek: 0,
+        description: this.injury.description || 'Lesionado',
+        rehabCost: 0,
+        rehabChosen: false,
+        resumeStatus: this.injury.resumeStatus || 'active',
+      };
+    }
     this.trainingFocus = data.trainingFocus || 'striking'; // foco individual de treino semanal
     this.availableFromAbsWeek = data.availableFromAbsWeek || 0; // suspensão médica pós-luta
     this.lastTrainedAbsWeek = data.lastTrainedAbsWeek || 0; // cooldown semanal do acampamento
@@ -93,6 +105,7 @@ export class Fighter {
     // TETO de evolve(), não o valor atual.
     this.permanentScars = data.permanentScars || [];
     this.injuryCount = data.injuryCount || 0;
+    this.sequelae = data.sequelae || []; // [{ attr, reduction, description, date }] — P10.1
     this.lastInjuryAbsWeek = data.lastInjuryAbsWeek || 0;
 
     // Épico D: configuração do acampamento semanal (persistida, não botão manual)
@@ -141,6 +154,12 @@ export class Fighter {
     this.xp = data.xp || 0;
     this.perkPoints = data.perkPoints || 0;
     this.perks = data.perks || [];
+
+    // P5.3: Fim de carreira com escolhas
+    this.lastFightPending = data.lastFightPending || false;
+    this.lastFightBonus = data.lastFightBonus || 1.0;
+    this.fightTilEnd = data.fightTilEnd || false;
+    this.passiveIncome = data.passiveIncome || 0;
   }
 
   _defaultDNA() {
@@ -369,6 +388,18 @@ export class Fighter {
       ceiling = Math.min(ceiling + 3, 99);
     }
     return clamp(ceiling, 1, 99);
+  }
+
+  // P10.1 — aplica sequela mecânica de lesão: redução permanente no atributo.
+  applySequelae(attr, description) {
+    const reduction = Math.floor(Math.random() * 2) + 1; // 1-3
+    this.attributes[attr] = Math.max(1, (this.attributes[attr] || 50) - reduction);
+    this.sequelae.push({
+      attr,
+      reduction,
+      description,
+      date: new Date().toISOString(),
+    });
   }
 
   // ===== Economia pessoal (§A.2) =====

@@ -505,6 +505,22 @@ class App {
       });
     });
 
+    // P5.3: Fim de carreira — escolha do Último Capítulo
+    document.querySelectorAll('.end-career-choice').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const fighterId = data.fighter?.id;
+        if (!fighterId) return;
+        const result = await this.game.resolveEndCareer(fighterId, btn.dataset.endCareer);
+        if (result.ok) {
+          const choiceLabel = btn.querySelector('.font-bold')?.textContent || result.choice;
+          this.notificationService.add('info', '🕊️ Último Capítulo', `Você escolheu: ${choiceLabel}`);
+        } else {
+          this.notificationService.add('warning', 'Fim de Carreira', result.reason || 'Erro ao processar escolha.');
+        }
+        this.renderDashboard();
+      });
+    });
+
     // Fase 1: Weekly training micro-decision modal
     if (data.weeklyTrainingPrompt?.active) {
       this._showWeeklyTrainingModal(data.fighter);

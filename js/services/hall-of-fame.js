@@ -107,4 +107,41 @@ export class HallOfFame {
 
     return achievements;
   }
+
+  // P5.3: Força a entrada do lutador no Hall da Fama (aposentadoria digna).
+  // Cria e persiste uma entrada mesmo que o lutador não atenda aos critérios
+  // normais de elegibilidade.
+  static async forceInduct(db, fighter, reasons = []) {
+    const entry = {
+      id: `hof-${fighter.id}`,
+      fighterId: fighter.id,
+      name: fighter.name,
+      weightClass: fighter.weightClass,
+      record: { ...fighter.record },
+      totalFights: fighter.totalFights || 0,
+      peakRating: fighter.overallRating,
+      popularity: fighter.popularity,
+      inductionDate: new Date().toISOString(),
+      achievements: [...(HallOfFame._getAchievements(fighter) || []), ...reasons],
+      careerStats: {
+        kos: (fighter.fights || []).filter(f => f.method === 'KO' || f.method === 'TKO'),
+        subs: (fighter.fights || []).filter(f => f.method === 'Submission'),
+        decisions: (fighter.fights || []).filter(f => f.method && f.method.startsWith('Decision')),
+        finishes: (fighter.fights || []).filter(f => f.method && !f.method.startsWith('Decision')).length,
+        finishRate: fighter.totalFights > 0 ? Math.round(((fighter.fights || []).filter(f => f.method && !f.method.startsWith('Decision')).length / fighter.totalFights) * 100) : 0,
+        maxWinStreak: (() => {
+          let max = 0, cur = 0;
+          for (const f of (fighter.fights || [])) { if (f.won) { cur++; max = Math.max(max, cur); } else cur = 0; }
+          return max;
+        })(),
+        titlesWon: fighter.titlesWon || 0,
+        careerEarnings: fighter.careerEarnings || 0,
+        fightNightBonuses: fighter.fightNightBonuses || 0,
+        performanceBonuses: fighter.performanceBonuses || 0,
+        ageAtInduction: fighter.age || 0,
+      },
+    };
+    await db.put('hallOfFame', entry);
+    return entry;
+  }
 }

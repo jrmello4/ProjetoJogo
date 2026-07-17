@@ -1270,7 +1270,47 @@ export const NARRATIVE_EVENTS = {
 };
 
 // ============================================================
+// ============================================================
+// P5.3 — FIM DE CARREIRA COM ESCOLHAS (Último Capítulo)
+// ============================================================
+// Ativado quando retirementWindow <= 12 ou idade >= 37.
+// O jogador escolhe como encerrar (ou prolongar) a carreira.
+export const END_CAREER_CHOICES = {
+  dignified: {
+    label: 'Aposentadoria Digna',
+    icon: '👑',
+    description: 'Legado preservado. Hall da Fama garantido.',
+    retirementDelay: 0,
+  },
+  last_fight: {
+    label: 'Uma Última Luta',
+    icon: '🥊',
+    description: 'Bolsa 2x. Vitória = lenda. Derrota = legado manchado.',
+    retirementDelay: 1, // one more fight
+  },
+  fight_til_end: {
+    label: 'Até o Fim',
+    icon: '🔥',
+    description: 'Ignora a aposentadoria. Declínio acelera, risco de lesão permanente.',
+    retirementDelay: -1, // indefinite, with accelerated decline
+  },
+  become_coach: {
+    label: 'Virar Técnico',
+    icon: '📋',
+    description: 'New Game+ começa com bônus. Seu lutador vira NPC técnico.',
+    retirementDelay: 0,
+  },
+  commentator: {
+    label: 'Comentarista',
+    icon: '🎙️',
+    description: 'Renda passiva de $500/semana. Aposentadoria imediata.',
+    retirementDelay: 0,
+  },
+};
+
+// ============================================================
 // P9.2 — MODOS DESAFIO
+// ============================================================
 // ============================================================
 // Modificam as condições iniciais de uma nova carreira. Só disponíveis
 // após completar pelo menos uma carreira (Hall da Fama tem entrada).

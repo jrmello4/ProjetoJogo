@@ -48,10 +48,12 @@ import {
   WEEKLY_TRAINING_CHOICES,
   WEEKLY_TRAINING_FREQUENCY,
   CHALLENGE_MODES,
+  END_CAREER_CHOICES,
   absWeek,
 } from '../config/game-config.js';
 import { TapeService } from '../services/tape-service.js';
 import { ReadinessService } from '../services/readiness-service.js';
+import { HallOfFame } from '../services/hall-of-fame.js';
 import { LEVEL_CONFIG, MOVES, OPTIONAL_SERVICES, WEEKLY_ACTIVITIES, INJURY_CONFIG, OFFER_CONFIG } from '../config/game-config.js';
 
 const WORLD_MODE = 'career-1-fighter';
@@ -487,6 +489,32 @@ export class GameController {
       }
     }
 
+    // P5.3: Last fight pending — after the fight is resolved, force retirement
+    if (fighter.lastFightPending && fighter.lastFightAbsWeek === now) {
+      // Check if the fighter lost their last fight
+      const lastFight = fighter.fights[0];
+      if (lastFight && !lastFight.won) {
+        // Lost the last fight — popularity penalty and no HoF
+        fighter.updatePopularity(-15);
+        await this.notifService.add('warning', '💔 Última Luta', 'Você perdeu sua despedida. O legado ficou manchado.');
+      } else if (lastFight && lastFight.won) {
+        // Won the last fight — boosted legacy
+        fighter.updatePopularity(10);
+        await this.notifService.add('success', '🏆 Última Luta', 'Vitória na despedida! Lenda do esporte!');
+      }
+      fighter.lastFightPending = false;
+      fighter.lastFightBonus = 1.0;
+      fighter.status = 'retired';
+      fighter.organizationId = null;
+      fighter.academyId = null;
+      if (this.careerLogService) {
+        await this.careerLogService.publish(fighter.id, 'challenge_end', now, 70, {
+          reason: 'last_fight_completed',
+          won: lastFight?.won ?? false,
+        });
+      }
+    }
+
     await this.offerService.expireOld(now);
     const promotions = await this.worldService.getPromotions();
     const offersCreated = fighter.status !== 'retired'
@@ -500,6 +528,12 @@ export class GameController {
     const economy = this._applyWeeklyEconomy(fighter, academy, now);
     // Serviços opcionais (nutricionista, fisioterapeuta, psicólogo)
     this._applyWeeklyServices(fighter);
+
+    // P5.3: Passive income from commentator career
+    if (fighter.passiveIncome > 0 && fighter.status === 'retired') {
+      fighter.addTransaction(now, '🎙️ Comentarista — Renda Passiva', fighter.passiveIncome);
+    }
+
     const sponsorActivity = await this.sponsorService.processWeek(now, fighter);
     await this._applyWeeklyTraining(fighter, academy);
 
@@ -617,6 +651,34 @@ export class GameController {
       }
     }
 
+    // P5.3: Até o Fim — accelerated age decline (2x) + permanent injury risk
+    if (fighter.fightTilEnd && fighter.age >= 33) {
+      // Apply age decline twice (accelerated 2x)
+      fighter._applyAgeDecline(fighter.age);
+      fighter._applyAgeDecline(fighter.age);
+
+      // 30% chance of permanent injury each fight week (when fight happened this week)
+      if (fighter.lastFightAbsWeek === now && Math.random() < 0.30) {
+        const physicalAttrs = ['strength', 'speed', 'cardio', 'durability', 'recovery', 'chin', 'power'];
+        const targetAttr = physicalAttrs[Math.floor(Math.random() * physicalAttrs.length)];
+        const reduction = 3 + Math.floor(Math.random() * 3); // 3-5
+        fighter.attributes[targetAttr] = Math.max(1, (fighter.attributes[targetAttr] || 50) - reduction);
+        await this.notifService.add('warning', '⚡ Lesão Permanente',
+          `Seu corpo não aguenta mais. ${targetAttr} caiu ${reduction} pontos permanentemente.`);
+        if (this.careerLogService) {
+          await this.careerLogService.publish(fighter.id, 'permanent_injury', now, 65, {
+            attr: targetAttr, reduction,
+          });
+        }
+      }
+
+      // Check if record dropped below .500
+      if (fighter.record.wins > 0 && fighter.record.losses > fighter.record.wins) {
+        await this.notifService.add('warning', '⚠️ Legado em Risco',
+          'Seu cartel está negativo. O Hall da Fama não será uma opção se continuar assim.');
+      }
+    }
+
     fighter.checkNumericDiscovery(); // §B.1 — idempotente, roda toda semana
 
     if (this.careerLogService) {
@@ -628,21 +690,49 @@ export class GameController {
       }
     }
 
-    // P9.2: Veterano — retirement window countdown
+    // P5.3: End-of-career choices — trigger prompt before forced retirement
+    // Retirement window countdown
     if (fighter.retirementWindow > 0) {
       fighter.retirementWindow--;
-      if (fighter.retirementWindow <= 0) {
-        fighter.status = 'retired';
-        fighter.organizationId = null;
-        fighter.academyId = null;
-        await this.notifService.add('hall-of-fame', '👴 Aposentadoria Forçada',
-          `Sua idade finalmente cobrou o preço. Aos ${fighter.age} anos, o corpo não aguenta mais o ritmo. Sua carreira chegou ao fim.`);
-        if (this.careerLogService) {
-          await this.careerLogService.publish(fighter.id, 'challenge_end', now, 50, {
-            reason: 'retirement_window_expired',
-            mode: 'Veterano',
-          });
-        }
+    }
+
+    // Show end-of-career prompt when:
+    // 1. Retirement window is low (<= 12 weeks remaining AND not already zeroed)
+    // 2. Fighter is 37+ years old and not already retired
+    const shouldShowPrompt =
+      !state.endCareerPromptShown
+      && fighter.status !== 'retired'
+      && (fighter.retirementWindow <= 12 && fighter.retirementWindow > 0);
+
+    if (shouldShowPrompt) {
+      state.endCareerPromptShown = true;
+      state.endCareerPrompt = true;
+      await this.db.put('gameState', state);
+      await this.notifService.add('headline', '🕊️ Último Capítulo',
+        `Aos ${fighter.age} anos, sua carreira se aproxima do fim. Como você quer encerrar sua jornada?`);
+    }
+
+    // Also trigger at age 37+ when retirement is imminent (veterano mode or natural)
+    if (fighter.age >= 37 && fighter.retirementWindow <= 0 && fighter.status !== 'retired' && !state.endCareerPromptShown) {
+      state.endCareerPromptShown = true;
+      state.endCareerPrompt = true;
+      await this.db.put('gameState', state);
+      await this.notifService.add('headline', '🕊️ Último Capítulo',
+        `Aos ${fighter.age} anos, seu corpo já não responde como antes. Está na hora de decidir seu futuro.`);
+    }
+
+    // Legacy: if retirementWindow expired AND no prompt was shown (e.g. existing save), force retirement
+    if (fighter.retirementWindow <= 0 && fighter.age < 37 && !state.endCareerPromptShown && fighter.status !== 'retired') {
+      // For very old saves or edge cases: force retirement gracefully
+      fighter.status = 'retired';
+      fighter.organizationId = null;
+      fighter.academyId = null;
+      await this.notifService.add('hall-of-fame', '👴 Aposentadoria',
+        `Sua idade finalmente cobrou o preço. Aos ${fighter.age} anos, o corpo não aguenta mais o ritmo.`);
+      if (this.careerLogService) {
+        await this.careerLogService.publish(fighter.id, 'challenge_end', now, 50, {
+          reason: 'retirement_window_expired',
+        });
       }
     }
 
@@ -1955,6 +2045,72 @@ export class GameController {
     };
   }
 
+  // P5.3: Resolve a escolha de fim de carreira do jogador
+  async resolveEndCareer(fighterId, choiceKey) {
+    const fighter = await this.fighterCtrl.getFighter(fighterId);
+    const state = await this.seasonService.getState();
+    const absWeekNow = absWeek(state);
+
+    switch (choiceKey) {
+      case 'dignified':
+        fighter.status = 'retired';
+        fighter.updatePopularity(15);
+        // Force Hall of Fame induction
+        await HallOfFame.forceInduct(this.db, fighter, ['Aposentadoria Digna — Legado Preservado']);
+        await this.notifService.add('success', '👑 Aposentadoria Digna', 'Você pendurou as luvas no auge. A torcida aplaude de pé.');
+        break;
+
+      case 'last_fight':
+        // Allow one more fight, then force retirement
+        fighter.lastFightPending = true;
+        fighter.lastFightBonus = 2.0; // 2x purse
+        await this.notifService.add('info', '🥊 Última Luta', 'Só mais uma. Você sabe que é arriscado, mas a bolsa é tentadora.');
+        break;
+
+      case 'fight_til_end':
+        fighter.fightTilEnd = true;
+        fighter.retirementWindow = 999; // effectively indefinite
+        await this.notifService.add('warning', '🔥 Até o Fim', 'Você vai sair quando QUISER. Mas seu corpo já não é o mesmo.');
+        break;
+
+      case 'become_coach':
+        fighter.status = 'retired';
+        // Store as coach for New Game+ bonus
+        localStorage.setItem('mma_coach_legacy', JSON.stringify({
+          coachName: fighter.name,
+          bonusType: 'attribute_cap',
+          bonusValue: 5,
+          retiredAtAbsWeek: absWeekNow,
+        }));
+        await this.notifService.add('success', '📋 Virou Técnico', 'Uma nova geração precisa de você. Bônus desbloqueado para a próxima carreira!');
+        break;
+
+      case 'commentator':
+        fighter.status = 'retired';
+        fighter.passiveIncome = 500; // $500/week
+        fighter.organizationId = null;
+        fighter.academyId = null;
+        await this.notifService.add('success', '🎙️ Comentarista', 'Sua voz vale ouro. Renda passiva de $500/semana garantida.');
+        break;
+
+      default:
+        return { ok: false, reason: 'Escolha inválida.' };
+    }
+
+    // Publish to career log
+    if (this.careerLogService) {
+      await this.careerLogService.publish(fighter.id, 'end_career_choice', absWeekNow, 90, { choice: choiceKey });
+    }
+
+    // Clear the prompt
+    const state2 = await this.seasonService.getState();
+    state2.endCareerPrompt = false;
+    await this.db.put('gameState', state2);
+    await this.fighterCtrl.updateFighter(fighter);
+
+    return { ok: true, choice: choiceKey };
+  }
+
   // ===== Dashboard =====
   async getDashboard() {
     const fighter = await this.getPlayerFighter();
@@ -2055,6 +2211,7 @@ export class GameController {
       pendingRehab,
       weighInPrompt,
       readiness,
+      endCareerPrompt: state.endCareerPrompt || false,
       state,
       now,
     };

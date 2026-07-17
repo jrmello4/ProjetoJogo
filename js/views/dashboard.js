@@ -1,5 +1,5 @@
 import { formatCurrency, getWeightClassShort, getWeightClassName } from '../utils/helpers.js';
-import { FIGHTING_STYLES, LEVEL_CONFIG, TIER_LABELS, TRAINING_FOCUS_META, TITLE_ROLE, WEEKLY_ACTIVITIES } from '../config/game-config.js';
+import { FIGHTING_STYLES, INJURY_CONFIG, LEVEL_CONFIG, TIER_LABELS, TRAINING_FOCUS_META, TITLE_ROLE, WEEKLY_ACTIVITIES, END_CAREER_CHOICES } from '../config/game-config.js';
 
 const tierBadgeCls = (tier) => (tier === 1 ? 'badge-danger' : tier === 2 ? 'badge-warning' : 'badge-info');
 
@@ -130,7 +130,7 @@ export class DashboardView {
   }
 
   static render(data, weekLabel) {
-    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, rivalryPrompt, narrativePrompt, weighInPrompt, readiness, now } = data;
+    const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, rivalryPrompt, narrativePrompt, weighInPrompt, pendingRehab, readiness, now, endCareerPrompt } = data;
 
     const tierBadge = (tier) => `<span class="badge ${tierBadgeCls(tier)}">${TIER_LABELS[tier]}</span>`;
 
@@ -184,6 +184,28 @@ export class DashboardView {
           </div>
         </div>
       `;
+    }
+
+    // ===== P2.2: Reabilitação de lesão =====
+    let rehabHtml = '';
+    if (pendingRehab) {
+      rehabHtml = `
+        <div class="card mb-4" data-reveal style="border-top-color:var(--danger)">
+          <div class="card-header">
+            <span class="card-title">🏥 Reabilitação de Lesão</span>
+          </div>
+          <p class="text-sm text-muted mb-2">Sua lesão está em fase de reabilitação. Escolha o tipo de tratamento:</p>
+          <div class="flex flex-col gap-2">
+            <button class="btn btn-secondary" data-rehab-choice="free" style="text-align:left">
+              <strong>Fisioterapia gratuita</strong>
+              <span class="text-xs text-muted ml-2">(6 semanas — lenta, mas sem custo)</span>
+            </button>
+            <button class="btn btn-secondary" data-rehab-choice="fast" style="text-align:left">
+              <strong>Fisioterapia rápida</strong>
+              <span class="text-xs text-muted ml-2">(3 semanas — $${INJURY_CONFIG?.REHAB_FAST_COST * INJURY_CONFIG?.REHAB_FAST_WEEKS || 1500})</span>
+            </button>
+          </div>
+        </div>`;
     }
 
     // ===== Redes sociais em semana livre (§D.2) =====
@@ -245,6 +267,28 @@ export class DashboardView {
           </div>
         </div>`;
     }
+
+    // ===== P5.3: Fim de carreira — Último Capítulo =====
+    const endCareerHtml = endCareerPrompt ? `
+      <div class="section-label" data-reveal>🕊️ Último Capítulo</div>
+      <div class="card mb-4" data-reveal style="border-top-color:var(--gold);border-width:2px">
+        <div class="card-header">
+          <span class="card-title">🕊️ Sua Carreira Está Chegando ao Fim</span>
+        </div>
+        <p class="text-sm text-muted mb-3">Aos ${fighter.age} anos, você precisa decidir como quer encerrar sua jornada no MMA. Esta escolha é definitiva.</p>
+        <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.75rem">
+          ${Object.entries(END_CAREER_CHOICES).map(([key, choice]) => `
+            <button class="btn btn-secondary end-career-choice" data-end-career="${key}" style="text-align:left;padding:1rem;height:auto;flex-direction:column;align-items:flex-start;gap:0.5rem;border:1px solid var(--border)">
+              <div style="font-size:1.5rem;line-height:1">${choice.icon}</div>
+              <div>
+                <div class="font-bold" style="font-size:0.95rem">${choice.label}</div>
+                <div class="text-xs text-muted" style="margin-top:0.25rem">${choice.description}</div>
+              </div>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    ` : '';
 
     // ===== Patrocínios =====
     const sponsors = data.sponsors || { active: [], offers: [] };
@@ -516,9 +560,11 @@ export class DashboardView {
 
       ${offersHtml}
       ${weighInHtml}
+      ${rehabHtml}
       ${socialHtml}
       ${rivalryHtml}
       ${narrativeHtml}
+      ${endCareerHtml}
       ${sponsorsHtml}
       ${activityHtml}
       ${bookingsHtml}

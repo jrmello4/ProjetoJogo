@@ -24,6 +24,7 @@ import {
   RIVALRY_CONFIG,
   GAME_PLANS,
   TAPE_CONFIG,
+  INJURY_CONFIG,
   absWeekToDate,
   computeSuspensionWeeks,
 } from '../config/game-config.js';
@@ -526,7 +527,9 @@ export class WorldService {
       if (rivalry) rivalryHypeBonus = rivalry.intensity * RIVALRY_CONFIG.HYPE_PER_INTENSITY * HYPE_PURSE_RATIO;
     }
     const hypeBonus = (fighter.pcHype || 0) * HYPE_PURSE_RATIO + rivalryHypeBonus;
-    const grossPurse = booking.purse + (won ? booking.winBonus : 0) + hypeBonus;
+    // P5.3: Last fight bonus — 2x purse for the final fight
+    const lastFightMult = fighter.lastFightPending ? (fighter.lastFightBonus || 1.0) : 1.0;
+    const grossPurse = Math.round((booking.purse + (won ? booking.winBonus : 0) + hypeBonus) * lastFightMult);
     // Limpa o hype após usar — não acumular para a próxima luta
     fighter.pcHype = 0;
     // Libera a coletiva para a PRÓXIMA luta marcada.
@@ -806,8 +809,8 @@ export class WorldService {
     const won = result.winnerId === fighter.id;
     const weeks = computeSuspensionWeeks(result.method, won);
     const suspendedUntil = absWeekNow + weeks;
-    const injuryUntil = fighter.injury?.untilAbsWeek || 0;
-    fighter.availableFromAbsWeek = Math.max(suspendedUntil, injuryUntil);
+    const injuryRestUntil = fighter.injury?.restUntilAbsWeek || fighter.injury?.untilAbsWeek || 0;
+    fighter.availableFromAbsWeek = Math.max(suspendedUntil, injuryRestUntil);
   }
 
   async _rollInjury(fighter, result, absWeekNow, playerFighterId) {
@@ -823,10 +826,14 @@ export class WorldService {
     const weeks = WORLD_CONFIG.INJURY_WEEKS_MIN +
       Math.floor(Math.random() * (WORLD_CONFIG.INJURY_WEEKS_MAX - WORLD_CONFIG.INJURY_WEEKS_MIN + 1));
 
+    // P2.2: new injury format with stages
     fighter.injury = {
-      untilAbsWeek: absWeekNow + weeks,
+      stage: 'rest',
+      restUntilAbsWeek: absWeekNow + weeks,
+      rehabEndAbsWeek: 0,
       description: `Lesionado por ${weeks} semanas`,
-      // Volta exatamente para onde estava.
+      rehabCost: 0,
+      rehabChosen: false,
       resumeStatus: fighter.status,
     };
     fighter.status = 'injured';
@@ -867,12 +874,45 @@ export class WorldService {
         await this.careerLogService.publish(fighter.id, 'permanent_scar', absWeekNow, 55, { bodyPart: template.bodyPart });
       }
     }
+
+    // P10.1 — Sequelas de KO/TKO ou lesões graves (só para o jogador)
+    if (fighter.id === playerFighterId && !won && isFinish) {
+      const method = result.method || '';
+      if (Math.random() < INJURY_CONFIG.SEVERE_INJURY_CHANCE) {
+        let attr = null;
+        let desc = '';
+        if (method.startsWith('KO')) {
+          attr = 'chin';
+          desc = 'Sequela de nocaute';
+        } else if (method.startsWith('TKO')) {
+          attr = Math.random() < 0.5 ? 'speed' : 'chin';
+          desc = attr === 'speed' ? 'Lesão articular grave' : 'Sequela de TKO';
+        } else if (method === 'Submission') {
+          attr = 'speed';
+          desc = 'Lesão em articulação';
+        }
+        if (attr) {
+          fighter.applySequelae(attr, desc);
+          if (this.careerLogService) {
+            const seq = fighter.sequelae?.[fighter.sequelae.length - 1];
+            await this.careerLogService.publish(fighter.id, 'sequela', absWeekNow, 60, {
+              attr,
+              reduction: seq?.reduction,
+              description: desc,
+            });
+          }
+        }
+      }
+    }
   }
 
   async _recoverInjuries(absWeekNow, playerFighterId) {
     const injured = await this.db.getIndex('fighters', 'status', 'injured');
     for (const data of injured) {
-      if (!data.injury || data.injury.untilAbsWeek > absWeekNow) continue;
+      if (!data.injury) continue;
+      // P2.2: support both old format (untilAbsWeek) and new (restUntilAbsWeek)
+      const healWeek = data.injury.restUntilAbsWeek || data.injury.untilAbsWeek || 0;
+      if (healWeek > absWeekNow) continue;
       const fighter = new Fighter(data);
       fighter.status = fighter.injury.resumeStatus || 'roster';
       fighter.injury = null;

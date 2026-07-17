@@ -1046,7 +1046,7 @@ class App {
 
     const choices = WeeklyTrainingController.getChoices(fighter);
     const choiceCards = choices.map(c => `
-      <div class="card weekly-training-card" data-choice="${c.key}" style="cursor:pointer;padding:1rem;transition:border-color 0.15s">
+      <button type="button" class="card weekly-training-card" data-choice="${c.key}" style="cursor:pointer;padding:1rem;transition:border-color 0.15s;width:100%;text-align:left;font:inherit;color:inherit">
         <h4 style="margin:0 0 0.25rem 0;color:var(--accent)">${c.label}</h4>
         <p class="text-sm" style="color:var(--text-secondary);margin:0 0 0.5rem 0">${c.description}</p>
         <div class="text-xs" style="color:var(--text-muted)">
@@ -1055,7 +1055,7 @@ class App {
           ${c.bondBoost ? ' · +vínculo' : ''}
           · ${Math.round(c.injuryRisk * 100)}% lesão
         </div>
-      </div>
+      </button>
     `).join('');
 
     const modal = document.createElement('div');

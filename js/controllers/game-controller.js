@@ -946,12 +946,9 @@ export class GameController {
     const seasonState = await this.seasonService.getState();
     const now = absWeek(seasonState);
 
-    const plausibleTitleContender = SocialMedia.isPlausibleTitleContender(fighter);
-    const streakActive = (fighter.winStreak || 0) >= 2;
-    const lostRecent = fighter.latestFightResult?.won === false
-      && fighter.lastFightAbsWeek
-      && (now - fighter.lastFightAbsWeek) <= 4;
-    const result = SocialMedia.applyChoice(fighter, choice, { plausibleTitleContender, streakActive, lostRecent });
+    const result = SocialMedia.applyContextualChoice(fighter, choice, {
+      isChampion: fighter.ranking === 1 || (fighter.titlesWon || 0) > 0,
+    });
 
     if (result.provoked) {
       await this.careerLogService.publish(fighter.id, 'provocation', now, SOCIAL_CONFIG.PROVOCATION_MAGNITUDE, {
@@ -974,6 +971,13 @@ export class GameController {
       await this.notifService.add('headline', '🔥 Viral!', 'Seu post explodiu nas redes sociais! Popularidade extra e novos olhos no seu trabalho.');
       if (this.careerLogService) {
         await this.careerLogService.publish(fighter.id, 'viral', now, 65, {});
+      }
+    }
+
+    if (result.backfire) {
+      await this.notifService.add('warning', '💥 Repercussão Negativa', 'Seu post teve uma repercussão negativa inesperada. Popularidade caiu.');
+      if (this.careerLogService) {
+        await this.careerLogService.publish(fighter.id, 'backfire', now, 40, {});
       }
     }
 
@@ -1899,9 +1903,10 @@ export class GameController {
     const socialPrompt = socialState.pending
       ? {
           ...socialState.pending,
-          choices: SocialMedia.getChoices({
+          choices: SocialMedia.getContextualChoices(fighter, {
             hasActiveRival: !!socialState.pending.rivalryId,
             rivalName: socialState.pending.rivalName,
+            careerLog: null, // careerLog pode ser passado se disponível
           }),
         }
       : null;

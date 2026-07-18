@@ -1,7 +1,46 @@
-import { formatCurrency, formatDate, getWeightClassShort, getWeightClassLabel, getNationalityFlag, getAdjacentWeightClasses } from '../utils/helpers.js';
+import { formatCurrency, formatDate, getWeightClassShort, getWeightClassLabel, getNationalityFlag, getAdjacentWeightClasses, e } from '../utils/helpers.js';
 import { FIGHTING_STYLES, MOVES, PERKS } from '../config/game-config.js';
+import { BiographyService } from '../services/biography-service.js';
+import { CrowdService } from '../services/crowd-service.js';
 
 export class FighterProfileView {
+  // Linha do tempo de momentos — texto cru no label; e() só na saída.
+  static _renderMomentsTimeline(moments) {
+    if (!moments?.length) return '';
+    const label = (m) => {
+      const d = m.data || {};
+      switch (m.type) {
+        case 'title_won': return d.defense ? 'Defesa de cinturão' : 'Conquista de título';
+        case 'finish': return `Finalização${d.opponentName ? ` · ${d.opponentName}` : ''}`;
+        case 'upset': return `Zebra${d.opponentName ? ` · ${d.opponentName}` : ''}`;
+        case 'rivalry_born': return `Rivalidade${d.opponentName ? ` · ${d.opponentName}` : ''}`;
+        case 'rival_arc': return d.won ? `Rival subiu · ${d.rivalName || ''}` : `Rival caiu · ${d.rivalName || ''}`;
+        case 'crowd_night': return `Noite da torcida · ${d.chant || ''}`;
+        case 'provocation': return d.targetName ? `Provocou ${d.targetName}` : 'Provocação';
+        case 'viral': return 'Post viral';
+        case 'year_review': return `Retrospectiva ano ${d.yearNumber || ''}`;
+        case 'dna_discovered': return d.traitLabel || 'Traço revelado';
+        default: return String(m.type || 'Momento').replace(/_/g, ' ');
+      }
+    };
+    return `
+      <div class="card mb-4" data-reveal>
+        <div class="card-header">
+          <span class="card-title">🎞️ Momentos marcantes</span>
+        </div>
+        <div class="timeline">
+          ${moments.slice(0, 10).map(m => `
+            <div class="timeline-item">
+              <div class="timeline-date">sem ${m.atAbsWeek ?? '—'} · mag ${m.magnitude ?? 0}</div>
+              <div class="timeline-content">
+                <span class="text-sm font-bold">${e(label(m))}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+  }
+
   // G3: gráfico de carreira — OVR do atleta em cada luta (fighterRating é
   // gravado pela simulação). Lutas antigas de saves anteriores não têm o
   // campo; o gráfico usa só as que têm e some se houver menos de 2.
@@ -46,9 +85,42 @@ export class FighterProfileView {
     `;
   }
 
-  static render(fighter, fightHistory = [], isPlayer = false) {
+  // ctx opcional: { topMoments, rivalryInfo, forceBio }
+  static render(fighter, fightHistory = [], isPlayer = false, ctx = {}) {
     if (!fighter) return '<div class="empty-state"><p>Lutador não encontrado.</p></div>';
     const displayHistory = fightHistory.length > 0 ? fightHistory : (fighter.fights || []);
+
+    const bio = (isPlayer || ctx.forceBio)
+      ? BiographyService.compose(fighter, {
+          topMoments: ctx.topMoments || [],
+          rivalryInfo: ctx.rivalryInfo || null,
+        })
+      : null;
+    const bioHtml = bio ? BiographyService.renderCard(bio) : '';
+    const persona = CrowdService.resolvePersona(fighter);
+    const personaHtml = isPlayer ? `
+      <div class="card mb-4" data-reveal>
+        <div class="card-header">
+          <span class="card-title">${CrowdService.personaIcon(persona)} Persona pública</span>
+          <span class="badge badge-info">${e(CrowdService.personaLabel(persona))}</span>
+        </div>
+        <div class="grid grid-cols-3 gap-3 text-center">
+          <div>
+            <div class="text-xs text-muted">Heat</div>
+            <div class="font-bold">${fighter.narrativeHeat || 0}</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted">Hype narrativo</div>
+            <div class="font-bold">${fighter.narrativeHype || 0}</div>
+          </div>
+          <div>
+            <div class="text-xs text-muted">Popularidade</div>
+            <div class="font-bold">${fighter.popularity || 0}</div>
+          </div>
+        </div>
+        <p class="text-xs text-muted mt-2">Heat alto = vilão que vende. Popularidade alta + pouco heat = herói da torcida.</p>
+      </div>` : '';
+    const momentsHtml = this._renderMomentsTimeline(ctx.topMoments || ctx.recentMoments || []);
 
     const attrBars = (attrs, label, colorClass) => {
       return `
@@ -75,8 +147,8 @@ export class FighterProfileView {
               <div class="timeline-item">
                 <div class="timeline-date">${formatDate(f.date)}</div>
                 <div class="timeline-content">
-                  <span class="badge ${f.won === true ? 'badge-success' : f.won === null ? 'badge-warning' : 'badge-danger'}">${f.result}</span>
-                  <span class="text-sm"> vs ${f.opponent} — ${f.method} (R${f.round})</span>
+                  <span class="badge ${f.won === true ? 'badge-success' : f.won === null ? 'badge-warning' : 'badge-danger'}">${e(f.result)}</span>
+                  <span class="text-sm"> vs ${e(f.opponent)} — ${e(f.method)} (R${f.round})</span>
                 </div>
               </div>
             `).join('')}
@@ -95,7 +167,7 @@ export class FighterProfileView {
       ? `
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Contrato · ${fighter.promotionContract.promotionName}</span>
+            <span class="card-title">Contrato · ${e(fighter.promotionContract.promotionName)}</span>
           </div>
           <div class="grid grid-cols-3 gap-4">
             <div>
@@ -119,7 +191,7 @@ export class FighterProfileView {
           <div class="card-header">
             <span class="card-title">Contrato</span>
           </div>
-          <div class="text-sm text-warning">📋 Contrato com ${fighter.promotionContract.promotionName} expirado — aguardando renovação.</div>
+          <div class="text-sm text-warning">📋 Contrato com ${e(fighter.promotionContract.promotionName)} expirado — aguardando renovação.</div>
         </div>
       `
         : '';
@@ -135,12 +207,16 @@ export class FighterProfileView {
     return `
       <div class="page-header">
         <h2>
-          ${getNationalityFlag(fighter.nationality?.code || '')} ${fighter.name}
+          ${getNationalityFlag(fighter.nationality?.code || '')} ${e(fighter.name)}
           <button class="btn-icon fighter-rename" data-id="${fighter.id}" title="Renomear lutador" aria-label="Renomear lutador">✏️</button>
           ${retireBtn}
         </h2>
-        <p>${fighter.nationality?.name || 'Desconhecido'} · ${fighter.age} anos · ${FIGHTING_STYLES[fighter.style]?.label || fighter.fightingStyle || 'Freestyle'}</p>
+        <p>${e(fighter.nationality?.name || 'Desconhecido')} · ${fighter.age} anos · ${e(FIGHTING_STYLES[fighter.style]?.label || fighter.fightingStyle || 'Freestyle')}</p>
       </div>
+
+      ${bioHtml}
+      ${personaHtml}
+      ${momentsHtml}
 
       <div class="grid grid-cols-4 mb-4">
         <div class="card">
@@ -310,7 +386,7 @@ export class FighterProfileView {
           return `
             <div class="flex gap-2 flex-wrap">
               ${visible.length > 0
-                ? visible.map(t => `<span class="badge badge-info">${t.label}</span>`).join('')
+                ? visible.map(t => `<span class="badge badge-info">${e(t.label)}</span>`).join('')
                 : '<span class="text-xs text-muted">Nenhum trait especial descoberto ainda</span>'
               }
             </div>
@@ -359,7 +435,7 @@ export class FighterProfileView {
           </div>
           ${fighter.sequelae.map(s => `
             <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
-              <span class="text-sm">⚠️ ${s.description}</span>
+              <span class="text-sm">⚠️ ${e(s.description)}</span>
               <span class="text-xs text-danger font-bold">${s.attr} -${s.reduction}</span>
             </div>
           `).join('')}
@@ -390,10 +466,10 @@ export class FighterProfileView {
         return `
         <div class="card mt-4">
           <div class="card-header">
-            <span class="card-title">Estilo de Luta: ${styleDef.label}</span>
+            <span class="card-title">Estilo de Luta: ${e(styleDef.label)}</span>
             ${isPlayer ? '<button class="btn btn-sm btn-secondary style-switch-btn" data-fighter-id="' + fighter.id + '" title="Trocar de estilo (custa $500 e trava 4 semanas)">🔄 Trocar</button>' : ''}
           </div>
-          <div class="text-sm text-muted mb-2">${styleDef.desc}</div>
+          <div class="text-sm text-muted mb-2">${e(styleDef.desc)}</div>
           ${styleDef.bonusAttrs.length > 0 ? `
             <div class="flex gap-2 flex-wrap mb-3">
               ${styleDef.bonusAttrs.map(a => `<span class="badge badge-info">${a}</span>`).join(' ')}
@@ -407,7 +483,7 @@ export class FighterProfileView {
                 const prof = typeof fighter.getMoveProficiency === 'function' ? fighter.getMoveProficiency(moveId) : 0;
                 return `
                   <div class="flex items-center gap-2" style="padding:0.25rem 0;border-bottom:1px solid var(--border)">
-                    <span class="text-sm" style="flex:1">${move?.name || moveId}</span>
+                    <span class="text-sm" style="flex:1">${e(move?.name || moveId)}</span>
                     <div class="progress-bar flex-1" style="height:6px;max-width:80px">
                       <div class="progress-fill ${prof >= 70 ? 'high' : prof >= 40 ? 'medium' : 'low'}" style="width:${prof}%"></div>
                     </div>
@@ -423,7 +499,7 @@ export class FighterProfileView {
               <div class="flex gap-1 flex-wrap">
                 ${poolMoves.filter(m => !equippedSet.has(m)).map(moveId => {
                   const move = MOVES[moveId];
-                  return `<button class="btn btn-sm btn-add-move" data-move-id="${moveId}" style="font-size:0.65rem;padding:2px 6px;background:var(--mat-high);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer">+ ${move?.name || moveId}</button>`;
+                  return `<button class="btn btn-sm btn-add-move" data-move-id="${e(moveId)}" style="font-size:0.65rem;padding:2px 6px;background:var(--mat-high);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer">+ ${e(move?.name || moveId)}</button>`;
                 }).join('')}
               </div>
             </div>
@@ -449,10 +525,10 @@ export class FighterProfileView {
               return `
                 <div class="${classes.join(' ')}" data-perk-id="${id}" style="padding:0.5rem;border:1px solid var(--border);border-radius:6px;background:${owned ? 'var(--bg-highlight)' : 'var(--bg-card)'}">
                   <div class="flex items-center justify-between">
-                    <strong class="text-sm">${perk.name}</strong>
+                    <strong class="text-sm">${e(perk.name)}</strong>
                     ${owned ? '<span class="badge badge-success" style="font-size:0.6rem">Ativo</span>' : ''}
                   </div>
-                  <div class="text-xs text-muted mt-1">${perk.desc}</div>
+                  <div class="text-xs text-muted mt-1">${e(perk.desc)}</div>
                   ${!owned && canLearn && fighter.perkPoints > 0
                     ? `<button class="btn btn-sm btn-success btn-learn-perk mt-2" style="font-size:0.7rem;padding:2px 8px">Aprender</button>`
                     : ''}
@@ -524,7 +600,7 @@ export class FighterProfileView {
               <div class="flex gap-2 flex-wrap">
                 ${options.map(opt => `
                   <button class="btn btn-sm btn-secondary change-weight-class" data-dir="${opt.dir}" data-fighter="${fighter.id}">
-                    ${opt.label}
+                    ${e(opt.label)}
                   </button>
                 `).join('')}
               </div>
@@ -550,8 +626,8 @@ export class FighterProfileView {
             const deltaLabel = delta !== null ? (delta > 0 ? `<span class="text-success">+${delta}</span>` : delta < 0 ? `<span class="text-danger">${delta}</span>` : '') : '';
             return `
               <div class="flex items-center gap-2 mb-1" style="font-size:0.75rem">
-                <span class="badge ${f.won === true ? 'badge-success' : f.won === null ? 'badge-warning' : 'badge-danger'}" style="min-width:1.5rem;font-size:0.55rem">${f.result}</span>
-                <span style="width:5.5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.opponent}</span>
+                <span class="badge ${f.won === true ? 'badge-success' : f.won === null ? 'badge-warning' : 'badge-danger'}" style="min-width:1.5rem;font-size:0.55rem">${e(f.result)}</span>
+                <span style="width:5.5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e(f.opponent)}</span>
                 <div class="progress-bar flex-1" style="height:8px;max-width:120px">
                   <div class="progress-fill ${barColor}" style="width:${pct}%"></div>
                 </div>

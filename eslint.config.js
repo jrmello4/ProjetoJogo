@@ -32,7 +32,8 @@ export default [
         gsap: 'readonly',
         location: 'readonly',
         cancelAnimationFrame: 'readonly',
-        CustomEvent: 'readonly'
+        CustomEvent: 'readonly',
+        MutationObserver: 'readonly'
       }
     },
     rules: {
@@ -44,6 +45,20 @@ export default [
       'no-dupe-keys': 'error',
       'no-unreachable': 'error',
       'no-empty': ['error', { allowEmptyCatch: true }]
+    }
+  },
+  {
+    // server.js e scripts/ rodam em Node puro (não no browser) — precisam
+    // dos globals do Node em vez dos globals de browser acima.
+    files: ['server.js', 'scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        Buffer: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+      }
     }
   }
 ];

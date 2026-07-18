@@ -1,7 +1,10 @@
-import { formatDate, getWeightClassName, formatCurrency } from '../utils/helpers.js';
+import { formatDate, getWeightClassName, formatCurrency, e } from '../utils/helpers.js';
 
-// G5: Hall da Fama enriquecido com estatísticas de carreira
+// G5: Hall da Fama enriquecido com estatísticas de carreira.
+// `biography` opcional por entry (parágrafos gerados na indução ou on-the-fly).
 export class HallOfFameView {
+  static MAX_RENDERED = 100;
+
   static render(entries) {
     if (entries.length === 0) {
       return `
@@ -30,12 +33,15 @@ export class HallOfFameView {
         <p>${sorted.length} lendas imortalizadas</p>
       </div>
 
+      ${sorted.length > HallOfFameView.MAX_RENDERED ? `
+        <p class="text-xs text-muted mb-2">Mostrando as ${HallOfFameView.MAX_RENDERED} lendas de maior destaque (mais cinturões, depois maior pico de OVR) de ${sorted.length} induzidas.</p>
+      ` : ''}
       <div class="hof-gallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1rem">
-        ${sorted.map((entry, i) => `
+        ${sorted.slice(0, HallOfFameView.MAX_RENDERED).map((entry, i) => `
           <div class="card hof-card" data-reveal>
             <div class="card-header">
               <span class="card-title">
-                #${i + 1} · ${entry.name}
+                #${i + 1} · ${e(entry.name)}
                 <span class="badge badge-info" style="font-size:0.55rem">${getWeightClassName(entry.weightClass)}</span>
               </span>
             </div>
@@ -90,10 +96,18 @@ export class HallOfFameView {
                 <div class="text-xs text-muted mb-1">Conquistas</div>
                 <div class="flex gap-1 flex-wrap">
                   ${(entry.achievements || []).map(a =>
-                    `<span class="badge badge-success text-xs">${a}</span>`
+                    `<span class="badge badge-success text-xs">${e(a)}</span>`
                   ).join('')}
                 </div>
               </div>
+
+              ${entry.biography?.paragraphs?.length ? `
+              <div class="mt-3" style="border-top:1px solid var(--border);padding-top:0.75rem">
+                <div class="text-xs text-muted mb-1">📖 ${e(entry.biography.headline || 'Verbete')}</div>
+                ${entry.biography.paragraphs.slice(0, 3).map(p =>
+                  `<p class="text-xs" style="line-height:1.45;margin:0 0 0.4rem 0">${e(p)}</p>`
+                ).join('')}
+              </div>` : ''}
             </div>
             <div class="card-footer text-xs text-muted" style="text-align:center">
               Induzido em ${formatDate(entry.inductionDate)} · ${entry.careerStats?.ageAtInduction || '?'} anos

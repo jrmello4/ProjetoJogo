@@ -1,3 +1,5 @@
+import { BiographyService } from './biography-service.js';
+
 // Hall da Fama — G5 versão enriquecida com estatísticas de carreira.
 // Calcula elegibilidade com base em marcos (vitórias, OVR, ranking) e
 // gera um verbete de carreira completo no momento da indução.
@@ -108,10 +110,15 @@ export class HallOfFame {
     return achievements;
   }
 
-  // P5.3: Força a entrada do lutador no Hall da Fama (aposentadoria digna).
-  // Cria e persiste uma entrada mesmo que o lutador não atenda aos critérios
-  // normais de elegibilidade.
-  static async forceInduct(db, fighter, reasons = []) {
+  // Monta o verbete completo de carreira SEM persistir — usado tanto pela
+  // indução real (buildEntry + put) quanto pelo snapshot da cerimônia de
+  // aposentadoria, que todo lutador ganha mesmo sem entrar no Hall.
+  // ctx opcional: { topMoments, rivalryInfo } — grava biografia viva no verbete
+  static buildEntry(fighter, reasons = [], ctx = {}) {
+    const bio = BiographyService.compose(fighter, {
+      topMoments: ctx.topMoments || [],
+      rivalryInfo: ctx.rivalryInfo || null,
+    });
     const entry = {
       // Mesma convenção de induct()/_processYearEnd (id = fighter.id, sem
       // prefixo): a cerimônia de aposentadoria busca por
@@ -129,6 +136,7 @@ export class HallOfFame {
       popularity: fighter.popularity,
       inductionDate: new Date().toISOString(),
       achievements: [...(HallOfFame._getAchievements(fighter) || []), ...reasons],
+      biography: bio,
       careerStats: {
         kos: (fighter.fights || []).filter(f => f.method === 'KO' || f.method === 'TKO'),
         subs: (fighter.fights || []).filter(f => f.method === 'Submission'),
@@ -147,7 +155,37 @@ export class HallOfFame {
         ageAtInduction: fighter.age || 0,
       },
     };
+    return entry;
+  }
+
+  // P5.3 (corrigido): a indução do jogador agora respeita os MESMOS critérios
+  // dos NPCs (checkEligibility). Antes, qualquer escolha de aposentadoria
+  // força-induzia — o Hall enchia de lutadores 3-8-0. A cerimônia continua
+  // acontecendo pra todo mundo, mas via snapshot (ver career-controller),
+  // não via entrada persistida aqui.
+  static async inductIfEligible(db, fighter, reasons = []) {
+    const eligibility = HallOfFame.checkEligibility(fighter);
+    if (!eligibility.eligible) return null;
+    const existing = await db.get('hallOfFame', fighter.id);
+    if (existing) return existing;
+    const entry = HallOfFame.buildEntry(fighter, [...eligibility.reasons, ...reasons]);
     await db.put('hallOfFame', entry);
     return entry;
+  }
+
+  // Reavalia elegibilidade a partir dos campos do PRÓPRIO verbete — pra
+  // limpar saves poluídos pelo forceInduct antigo. `ranking === 1` não é
+  // recuperável do snapshot; titlesWon > 0 cobre esse caso na prática.
+  static entryIsEligible(entry) {
+    const wins = entry.record?.wins || 0;
+    const ovr = entry.peakRating || 0;
+    const fights = entry.totalFights || 0;
+    const titles = entry.careerStats?.titlesWon || 0;
+    return (
+      wins >= 20 ||
+      (ovr >= 75 && fights >= 30) ||
+      (wins >= 15 && ovr >= 80) ||
+      titles > 0
+    );
   }
 }

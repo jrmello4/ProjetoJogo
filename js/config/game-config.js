@@ -814,6 +814,29 @@ export const SOCIAL_CONFIG = {
   STAY_QUIET_MORALE: 3,
 };
 
+// Podcast narrativo — transforma a semana/career log em episódio de talk-show.
+// O jogador não "usa" o podcast: ele ouve a carreira contada de volta, o que
+// fixa memórias (rival subiu, zebra, título) melhor que qualquer HUD.
+export const PODCAST_CONFIG = {
+  INTERVAL_WEEKS: 4,          // episódio a cada N semanas (a partir da semana N)
+  LOOKBACK_WEEKS: 4,          // janela de momentos recentes
+  MIN_MOMENTS: 1,             // sem momento memorável = sem episódio genérico
+  SHOW_NAME: 'Octógono Talk',
+  HOST: 'Rafa "Mic" Mendes',
+};
+
+// Arcos de rival no mundo vivo — quando o rival luta SEM você, a história
+// continua (vitória dele pressiona; queda dele abre espaço narrativo).
+export const RIVAL_ARC_CONFIG = {
+  INTENSITY_ON_RIVAL_WIN: 1,
+  INTENSITY_ON_RIVAL_TITLE: 2,
+  INTENSITY_ON_RIVAL_LOSS: 0, // não esfria sozinho; decay periódico cuida
+  FORCE_NARRATIVE_MIN_INTENSITY: 3, // abre "Momento da Carreira" se rival quente
+  CAREER_LOG_MAGNITUDE_WIN: 45,
+  CAREER_LOG_MAGNITUDE_LOSS: 35,
+  CAREER_LOG_MAGNITUDE_TITLE: 70,
+};
+
 // Pesagem pré-luta: surge na semana anterior ao evento. Não há uma escolha
 // universalmente certa: o corte controlado custa energia, o normal preserva
 // o estado atual e o agressivo pode render uma ótima reidratação ou cobrar
@@ -1276,11 +1299,23 @@ export const NARRATIVE_EVENTS = {
   ],
   rival_victory: [
     {
-      prompt: 'Seu rival venceu uma luta importante. Como reage?',
+      // {rivalName}, {opponentName}, {method} — preenchidos em processRivalArcs
+      prompt: 'Seu rival {rivalName} venceu {opponentName}. A imprensa já compara vocês dois. Como reage?',
       choices: [
         { text: 'Parabenizar — "Respeito onde merece"', effects: { morale: 2, popularity: 3 } },
         { text: 'Minimizar — "Ele não enfrentou ninguém ainda"', effects: { popularity: 5, heat: 4 } },
         { text: 'Pedir a luta agora — "Marca logo"', effects: { hype: 8, heat: 5, popularity: 2 } },
+        { text: 'Silêncio calculado — postar só um emoji de fogo', effects: { popularity: 2, heat: 2, morale: 1 } },
+      ],
+    },
+  ],
+  rival_loss: [
+    {
+      prompt: 'Seu rival {rivalName} perdeu para {opponentName}. A divisão tremeu. Como joga essa carta?',
+      choices: [
+        { text: 'Estender a mão — "Acontece com os melhores"', effects: { morale: 3, popularity: 4 } },
+        { text: 'Chamar a vez — "Agora sou eu o problema da divisão"', effects: { hype: 8, heat: 5, popularity: 3 } },
+        { text: 'Ignorar — focar no próprio camp', effects: { morale: 4, discipline: 2 } },
       ],
     },
   ],
@@ -1351,6 +1386,28 @@ export const NARRATIVE_EVENTS = {
         { text: 'Pedir revanche imediata', effects: { hype: 8, morale: 3, heat: 3 } },
         { text: 'Reconstruir — subir do zero', effects: { morale: 2, discipline: 5, popularity: 3 } },
         { text: 'Mudar de peso — nova chance', effects: { morale: 3, hype: 5 } },
+      ],
+    },
+  ],
+
+  // Momentos de "história pra contar" — torcida, legado, persona
+  hometown_hero: [
+    {
+      prompt: 'Uma criança com a sua camisa espera do lado de fora da academia. A imprensa filma. O que você faz?',
+      choices: [
+        { text: 'Parar, tirar foto e conversar', effects: { popularity: 5, morale: 4 } },
+        { text: 'Assinar rápido e treinar — foco total', effects: { discipline: 3, popularity: 1 } },
+        { text: 'Postar com a legenda "futuro campeão"', effects: { popularity: 6, hype: 3, heat: 1 } },
+      ],
+    },
+  ],
+  heel_turn: [
+    {
+      prompt: 'O comentarista te chama de "vilão sem carisma". A torcida ri. Como responde?',
+      choices: [
+        { text: 'Abraçar o papel — "eles pagam pra me odiar"', effects: { heat: 8, popularity: 5, morale: 2 } },
+        { text: 'Provar no cage — silêncio e trabalho', effects: { discipline: 4, morale: 3 } },
+        { text: 'Resposta afiada na coletiva', effects: { heat: 5, popularity: 4, hype: 4 } },
       ],
     },
   ],

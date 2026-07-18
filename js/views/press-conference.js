@@ -1,10 +1,11 @@
+import { e } from '../utils/helpers.js';
 export class PressConferenceView {
   static render(scenarios, fighterA, fighterB, event, hasFight = true, alreadyDone = false) {
     if (!hasFight) {
       return `
         <div class="page-header">
           <h2>Conferência de Imprensa</h2>
-          <p>${event.name}</p>
+          <p>${e(event.name)}</p>
         </div>
         <div class="card">
           <div class="empty-state">
@@ -22,7 +23,7 @@ export class PressConferenceView {
       return `
         <div class="page-header">
           <h2>Conferência de Imprensa</h2>
-          <p>${event.name} — Face-off</p>
+          <p>${e(event.name)} — Face-off</p>
         </div>
         <div class="card">
           <div class="empty-state">
@@ -36,18 +37,18 @@ export class PressConferenceView {
     return `
       <div class="page-header">
         <h2>Conferência de Imprensa</h2>
-        <p>${event.name} — Face-off</p>
+        <p>${e(event.name)} — Face-off</p>
       </div>
 
       <div class="card mb-4">
         <div class="flex items-center justify-center gap-4 mb-4">
           <div class="text-center">
-            <div class="font-bold text-lg">${fighterA.name}</div>
+            <div class="font-bold text-lg">${e(fighterA.name)}</div>
             <div class="text-sm text-muted">${fighterA.record.wins}-${fighterA.record.losses}-${fighterA.record.draws}</div>
           </div>
           <div class="text-danger font-bold text-xl">VS</div>
           <div class="text-center">
-            <div class="font-bold text-lg">${fighterB.name}</div>
+            <div class="font-bold text-lg">${e(fighterB.name)}</div>
             <div class="text-sm text-muted">${fighterB.record.wins}-${fighterB.record.losses}-${fighterB.record.draws}</div>
           </div>
         </div>
@@ -59,11 +60,11 @@ export class PressConferenceView {
             <div class="card-header">
               <span class="card-title">Pergunta ${i + 1} de ${scenarios.length}</span>
             </div>
-            <div class="text-lg font-bold mb-3">"${s.question}"</div>
+            <div class="text-lg font-bold mb-3">"${e(s.question)}"</div>
             <div class="flex flex-col gap-2">
               ${s.options.map((opt, j) => `
                 <button class="btn btn-secondary pc-answer" data-question="${i}" data-option="${j}" style="text-align:left">
-                  "${opt.text}"
+                  "${e(opt.text)}"
                   <span class="text-xs text-muted ml-2">(Hype +${opt.effects.hype})</span>
                 </button>
               `).join('')}

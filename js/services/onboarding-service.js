@@ -23,6 +23,17 @@ export class OnboardingService {
     return { done, total: ONBOARDING_STEPS.length };
   }
 
+  // Lista completa com o estado de cada passo — alimenta o tracker visual
+  // do dashboard (ícones + checkmarks), não só a dica ativa.
+  static steps(fighter) {
+    return ONBOARDING_STEPS.map(step => ({
+      id: step.id,
+      label: step.label,
+      hint: step.hint,
+      done: step.done(fighter),
+    }));
+  }
+
   static dismiss(fighter) {
     fighter.onboarding = { ...fighter.onboarding, dismissed: true };
   }

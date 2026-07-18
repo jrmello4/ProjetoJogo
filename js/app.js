@@ -1,5 +1,5 @@
 import { LayoutView } from './views/layout.js';
-import { DashboardView } from './views/dashboard.js';
+import { DashboardView, ONBOARDING_SPOTLIGHT } from './views/dashboard.js';
 import { EventsView } from './views/events.js';
 import { LiveFightHubView } from './views/live-fight-hub.js';
 import { OffersView } from './views/offers.js';
@@ -28,11 +28,15 @@ import { RivalryService } from './services/rivalry-service.js';
 import { SeasonService } from './services/season-service.js';
 import { NotificationService } from './services/notification-service.js';
 import { SaveService } from './services/save-service.js';
+import { CinematicService } from './services/cinematic-service.js';
+import { AudioService } from './services/audio-service.js';
+import { SettingsView } from './views/settings.js';
+import { TutorialCoach } from './services/tutorial-coach.js';
 import { ThreeArena } from './three-arena.js';
 import { ThreeBackground } from './three-background.js';
 import { motion } from './motion/motion-engine.js';
 import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, ARCHETYPES, ORIGINS, absWeekToLabel, SYNERGY_CONFIG, FIGHTING_STYLES, PERKS, CHALLENGE_MODES } from './config/game-config.js';
-import { formatCurrency, getAdjacentWeightClasses, clamp } from './utils/helpers.js';
+import { formatCurrency, getAdjacentWeightClasses, clamp, sanitizePlayerName, e } from './utils/helpers.js';
 import { CAMP_CONFIG, HYPE_PURSE_RATIO, absWeek } from './config/game-config.js';
 
 // Depois de publicar no itch.io, cole a URL da página do jogo aqui pra ela
@@ -63,6 +67,7 @@ class App {
 
   async init() {
     try { motion.init(); } catch(e) { console.warn('Motion init failed:', e); }
+    AudioService.init();
     LayoutView.initNavigation();
     let playerFighter;
     try {
@@ -83,7 +88,13 @@ class App {
     }
     this.rivalryService = new RivalryService(this.game.db, this.game.careerLogService);
 
-    this.threeBackground = new ThreeBackground('mainContent');
+    // Decorativo — uma falha de WebGL aqui está no caminho síncrono do boot
+    // e não pode impedir o resto do app de carregar.
+    try {
+      this.threeBackground = new ThreeBackground('mainContent');
+    } catch (err) {
+      console.warn('ThreeBackground falhou ao iniciar (WebGL indisponível?):', err);
+    }
 
     window.addEventListener('navigate', (e) => {
       this.navigateTo(e.detail.view);
@@ -97,7 +108,22 @@ class App {
     });
 
     if (!playerFighter) {
-      this._showCharacterCreation();
+      // Primeiro lançamento, sem jogador ainda — a pior tela possível pra
+      // travar é esta (spinner de boot pra sempre, sem erro nenhum), então
+      // aqui ganha o mesmo tratamento do resto do boot.
+      try {
+        await this._showCharacterCreation();
+      } catch (err) {
+        console.error('Falha ao mostrar criação de personagem:', err);
+        document.getElementById('mainContent').innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:center;min-height:60vh;flex-direction:column;gap:1rem;">
+            <h2 style="color:var(--accent)">Erro ao carregar criação de personagem</h2>
+            <p style="color:var(--text-secondary);text-align:center;max-width:500px;">
+              Algo deu errado montando esta tela. Tente recarregar — se persistir, clique em "Resetar Dados" no menu lateral.
+            </p>
+            <button class="btn btn-primary" onclick="location.reload()">Tentar Novamente</button>
+          </div>`;
+      }
       return;
     }
 
@@ -147,7 +173,7 @@ class App {
           <div class="difficulty-grid">
             ${Object.entries(ARCHETYPES).map(([key, a]) => `
               <button type="button" class="difficulty-option ${key === 'generalist' ? 'selected' : ''}" data-archetype="${key}">
-                <div class="difficulty-name">${a.label}</div>
+                <div class="difficulty-name">${e(a.label)}</div>
               </button>
             `).join('')}
           </div>
@@ -158,7 +184,7 @@ class App {
           <div class="difficulty-grid" style="grid-template-columns:repeat(3,1fr)">
             ${Object.entries(ORIGINS).map(([key, o], i) => `
               <button type="button" class="difficulty-option ${i === 0 ? 'selected' : ''}" data-origin="${key}">
-                <div class="difficulty-name">${o.label}</div>
+                <div class="difficulty-name">${e(o.label)}</div>
               </button>
             `).join('')}
           </div>
@@ -169,9 +195,9 @@ class App {
           <div class="difficulty-grid">
             ${DIFFICULTIES.map(d => `
               <button type="button" class="difficulty-option ${d.id === 'normal' ? 'selected' : ''}" data-difficulty="${d.id}">
-                <div class="difficulty-name">${d.name}</div>
+                <div class="difficulty-name">${e(d.name)}</div>
                 <div class="difficulty-cash">${formatCurrency(d.cash)}</div>
-                <div class="text-xs text-muted mt-2">${d.desc}</div>
+                <div class="text-xs text-muted mt-2">${e(d.desc)}</div>
               </button>
             `).join('')}
           </div>
@@ -182,8 +208,8 @@ class App {
           <div class="difficulty-grid">
             ${academies.map((a, i) => `
               <button type="button" class="difficulty-option ${i === 0 ? 'selected' : ''}" data-academy="${a.id}">
-                <div class="difficulty-name">${a.name}</div>
-                <div class="text-xs text-muted mt-2">${a.philosophy} · ${formatCurrency(a.weeklyFee)}/sem</div>
+                <div class="difficulty-name">${e(a.name)}</div>
+                <div class="text-xs text-muted mt-2">${e(a.philosophy)} · ${formatCurrency(a.weeklyFee)}/sem</div>
               </button>
             `).join('')}
           </div>
@@ -194,7 +220,7 @@ class App {
           <div class="difficulty-grid">
             ${managers.map((m, i) => `
               <button type="button" class="difficulty-option ${i === 0 ? 'selected' : ''}" data-manager="${m.id}">
-                <div class="difficulty-name">${m.name}</div>
+                <div class="difficulty-name">${e(m.name)}</div>
                 <div class="text-xs text-muted mt-2">${MANAGER_STYLE_LABELS[m.style] || m.style} · corte ${Math.round(m.cut * 100)}%</div>
               </button>
             `).join('')}
@@ -208,8 +234,8 @@ class App {
               const locked = !hasCompletedCareer;
               return `
                 <button type="button" class="difficulty-option challenge-option ${locked ? 'challenge-locked' : ''}" data-challenge="${key}" ${locked ? 'disabled' : ''}>
-                  <div class="difficulty-name">${m.icon} ${m.name}</div>
-                  <div class="text-xs text-muted mt-2">${m.description}</div>
+                  <div class="difficulty-name">${m.icon} ${e(m.name)}</div>
+                  <div class="text-xs text-muted mt-2">${e(m.description)}</div>
                   ${locked ? `<div class="text-xs mt-1" style="color:var(--warning)">🔒 ${m.requirements}</div>` : ''}
                 </button>
               `;
@@ -269,7 +295,7 @@ class App {
     });
 
     modal.querySelector('#characterCreationStartBtn').addEventListener('click', async () => {
-      const name = modal.querySelector('#charName').value.trim() || 'Lutador Anônimo';
+      const name = sanitizePlayerName(modal.querySelector('#charName').value);
       const weightClass = modal.querySelector('#charWeightClass').value;
       const archetype = modal.querySelector('[data-archetype].selected')?.dataset.archetype || 'generalist';
       const origin = modal.querySelector('[data-origin].selected')?.dataset.origin || null;
@@ -289,130 +315,127 @@ class App {
   }
 
   // ===== Tutorial guiado para novos jogadores =====
-  _showTutorial() {
+  // Coach-marks espaciais (TutorialCoach) em vez de modal solto — cada
+  // parada aponta pro elemento real na tela, não só descreve em abstrato.
+  async _showTutorial() {
     if (localStorage.getItem('tutorialDone')) return;
 
-    const steps = [
+    await TutorialCoach.run([
       {
-        emoji: '📊',
-        title: 'Dashboard',
-        text: 'Aqui você vê o resumo da sua carreira: próxima luta, finanças e notificações. Fique de olho nas ofertas!',
+        selector: '.poster',
+        title: '📊 Seu cartaz de luta',
+        text: 'Aqui fica o resumo da sua carreira: próxima luta marcada — ou, se não tiver nenhuma, as ofertas esperando resposta.',
       },
       {
-        emoji: '📩',
-        title: 'Ofertas de Luta',
-        text: 'No menu "Ofertas" você recebe propostas das promoções. Aceite as certas para subir de tier e disputar cinturões.',
+        selector: '.nav-link[data-view="offers"]',
+        title: '📩 Ofertas de Luta',
+        text: 'Promoções te chamam aqui. Aceite as certas pra subir de tier e disputar cinturões.',
       },
       {
-        emoji: '🏋️',
-        title: 'Acampamento',
-        text: 'Antes de cada luta, configure o acampamento. Escolha a intensidade e o foco — isso define seu desempenho no octógono.',
+        selector: '.nav-link[data-view="training"]',
+        title: '🏋️ Acampamento',
+        text: 'Antes de cada luta, configure intensidade e foco do treino aqui — isso define seu desempenho no octógono.',
       },
       {
-        emoji: '⏩',
-        title: 'Avançar Semana',
-        text: 'Use o botão "Avançar Semana" para progredir. Cada semana traz treino, ofertas, eventos e notícias do mundo do MMA.',
+        selector: '#weekAdvanceBtn',
+        title: '⏩ Avançar Semana',
+        text: 'Cada clique processa uma semana inteira: treino, ofertas, eventos e notícias do mundo do MMA.',
       },
-    ];
+    ]);
 
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    overlay.id = 'tutorialOverlay';
-    overlay.style.cssText = 'z-index:9999;background:rgba(8,8,10,0.85);display:flex;align-items:center;justify-content:center';
-
-    let currentStep = 0;
-
-    function renderStep(i) {
-      const step = steps[i];
-      const total = steps.length;
-      return `
-        <div class="modal" style="max-width:480px;text-align:center">
-          <div style="font-size:3rem;margin-bottom:0.75rem">${step.emoji}</div>
-          <h3 style="margin-bottom:0.5rem">${step.title}</h3>
-          <p class="text-sm" style="color:var(--text-secondary);line-height:1.6;margin-bottom:1.5rem">${step.text}</p>
-          <div style="display:flex;gap:0.5rem;justify-content:center;margin-bottom:1.25rem">
-            ${Array.from({ length: total }, (_, j) =>
-              `<span style="width:8px;height:8px;border-radius:50%;background:${j === i ? 'var(--belt)' : 'var(--border)'};display:inline-block"></span>`
-            ).join('')}
-          </div>
-          <div class="modal-actions" style="flex-direction:column;gap:0.5rem">
-            ${i < total - 1
-              ? `<button class="btn btn-primary w-full tutorial-next" style="width:100%">Próximo — ${steps[i + 1].title}</button>
-                 <button class="btn btn-sm btn-secondary tutorial-skip" style="width:100%">Pular tutorial</button>`
-              : `<button class="btn btn-primary w-full tutorial-finish" style="width:100%">✅ Entendi! Vou começar</button>`}
-          </div>
-        </div>
-      `;
-    }
-
-    overlay.innerHTML = renderStep(0);
-    document.body.appendChild(overlay);
-
-    overlay.addEventListener('click', (e) => {
-      const nextBtn = e.target.closest('.tutorial-next');
-      const skipBtn = e.target.closest('.tutorial-skip');
-      const finishBtn = e.target.closest('.tutorial-finish');
-
-      if (nextBtn) {
-        currentStep++;
-        overlay.innerHTML = renderStep(currentStep);
-      } else if (skipBtn || finishBtn) {
-        localStorage.setItem('tutorialDone', '1');
-        overlay.remove();
-      }
-    });
+    localStorage.setItem('tutorialDone', '1');
   }
 
   async navigateTo(view) {
     this.previousView = this.currentView;
     this.currentView = view;
 
-    switch (view) {
-      case 'dashboard':
-        await this.renderDashboard();
-        break;
-      case 'offers':
-        await this.renderOffers();
-        break;
-      case 'events':
-        await this.renderEvents();
-        break;
-      case 'training':
-        await this.renderTrainingCamp();
-        break;
-      case 'academy':
-        await this.renderAcademy();
-        break;
-      case 'rivalries':
-        await this.renderRivalries();
-        break;
-      case 'rankings':
-        await this.renderRankings();
-        break;
-      case 'finance':
-        await this.renderFinance();
-        break;
-      case 'hall-of-fame':
-        await this.renderHallOfFame();
-        break;
-      case 'retirement':
-        await this.renderRetirementCeremony();
-        break;
-      case 'notifications':
-        await this.renderNotifications();
-        break;
-      case 'calendar':
-        await this.renderCalendarView();
-        break;
-      case 'press-conference':
-        await this.renderPressConference();
-        break;
-      default:
-        await this.renderDashboard();
+    try {
+      switch (view) {
+        case 'dashboard':
+          await this.renderDashboard();
+          break;
+        case 'offers':
+          await this.renderOffers();
+          break;
+        case 'events':
+          await this.renderEvents();
+          break;
+        case 'training':
+          await this.renderTrainingCamp();
+          break;
+        case 'academy':
+          await this.renderAcademy();
+          break;
+        case 'rivalries':
+          await this.renderRivalries();
+          break;
+        case 'rankings':
+          await this.renderRankings();
+          break;
+        case 'finance':
+          await this.renderFinance();
+          break;
+        case 'hall-of-fame':
+          await this.renderHallOfFame();
+          break;
+        case 'retirement':
+          await this.renderRetirementCeremony();
+          break;
+        case 'settings':
+          await this.renderSettings();
+          break;
+        case 'notifications':
+          await this.renderNotifications();
+          break;
+        case 'calendar':
+          await this.renderCalendarView();
+          break;
+        case 'press-conference':
+          await this.renderPressConference();
+          break;
+        default:
+          await this.renderDashboard();
+      }
+    } catch (err) {
+      // Sem isto, qualquer exceção num render (dado inesperado num save
+      // antigo, campo ausente) travava a SPA na tela anterior sem aviso —
+      // clique não fazia nada, sem pista de que algo quebrou. Agora sempre
+      // sobra um caminho de volta.
+      console.error(`Falha ao renderizar "${view}":`, err);
+      document.getElementById('mainContent').innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:center;min-height:50vh;flex-direction:column;gap:1rem;text-align:center">
+          <h2 style="color:var(--accent)">Esta tela não carregou</h2>
+          <p style="color:var(--text-secondary);max-width:440px">
+            Algo deu errado ao montar "${view}". Seu progresso está salvo — isto afeta só a exibição desta tela.
+          </p>
+          <button class="btn btn-primary" id="navErrorBackBtn">Voltar ao Dashboard</button>
+        </div>`;
+      document.getElementById('navErrorBackBtn')?.addEventListener('click', () => this.navigateTo('dashboard'));
     }
   }
 
   // ===== Dashboard =====
+  // Dots vermelhos na sidebar — sinalizam conteúdo esperando ação sem o
+  // jogador precisar entrar na página pra descobrir.
+  async _updateNavBadges(pendingOffersCount) {
+    const setDot = (view, show) => {
+      const link = document.querySelector(`.nav-link[data-view="${view}"]`);
+      if (!link) return;
+      const existing = link.querySelector('.nav-dot');
+      if (show && !existing) {
+        const dot = document.createElement('span');
+        dot.className = 'nav-dot';
+        link.appendChild(dot);
+      } else if (!show && existing) {
+        existing.remove();
+      }
+    };
+    setDot('offers', pendingOffersCount > 0);
+    const unread = await this.notificationService.getUnreadCount();
+    setDot('notifications', unread > 0);
+  }
+
   async renderDashboard() {
     const data = await this.game.getDashboard();
     const weekLabel = absWeekToLabel(data.now);
@@ -420,6 +443,7 @@ class App {
     await LayoutView.render(html);
 
     this.initThreeArena();
+    this._updateNavBadges(data.pendingOffers?.length || 0);
 
     document.getElementById('weekAdvanceBtn')?.addEventListener('click', () => this.advanceWeek());
     document.getElementById('saveLoadBtn')?.addEventListener('click', () => this.handleSaveLoad());
@@ -428,6 +452,11 @@ class App {
     document.querySelector('[data-onboarding-dismiss]')?.addEventListener('click', async () => {
       await this.game.dismissOnboarding();
       this.renderDashboard();
+    });
+
+    document.querySelector('[data-onboarding-spotlight]')?.addEventListener('click', (e) => {
+      const spot = ONBOARDING_SPOTLIGHT[e.currentTarget.dataset.onboardingSpotlight];
+      if (spot) TutorialCoach.spotlightOnce(spot.selector, spot);
     });
 
     document.querySelectorAll('[data-sponsor-accept]').forEach(btn => {
@@ -548,7 +577,15 @@ class App {
     oldCanvases.forEach(c => c.remove());
 
     requestAnimationFrame(() => {
-      this.threeArena = new ThreeArena('octagonArena');
+      // WebGL pode falhar em hardware/driver incomum (VM, GPU sem suporte,
+      // contexto perdido) — o octógono 3D é decorativo, uma falha aqui não
+      // pode derrubar o resto da tela nem sujar o console com erro não
+      // tratado.
+      try {
+        this.threeArena = new ThreeArena('octagonArena');
+      } catch (err) {
+        console.warn('ThreeArena falhou ao iniciar (WebGL indisponível?):', err);
+      }
       motion.refresh();
     });
   }
@@ -557,7 +594,28 @@ class App {
   async advanceWeek() {
     const btn = document.getElementById('weekAdvanceBtn');
     if (btn) btn.disabled = true;
+    AudioService.play('whoosh');
 
+    try {
+      await this._advanceWeekInner();
+    } catch (err) {
+      // A ação mais executada do jogo inteiro, sem nenhuma rede de segurança
+      // antes disto: qualquer exceção em processWeek() (bug de dado após
+      // meses de carreira acumulada, edge case em qualquer um dos ~1600
+      // linhas de world-service) deixava o botão desabilitado pra sempre,
+      // sem aviso — único jeito de sair era recarregar a página.
+      console.error('Falha ao avançar semana:', err);
+      const retryBtn = document.getElementById('weekAdvanceBtn');
+      if (retryBtn) retryBtn.disabled = false;
+      await this.notificationService.add(
+        'danger',
+        'Falha ao avançar semana',
+        'Algo deu errado processando a semana. Seu progresso da semana anterior está salvo — tente novamente.'
+      );
+    }
+  }
+
+  async _advanceWeekInner() {
     // §C.2 — sinergia técnico-atleta. Snapshot da Academia/coachSynergy ANTES
     // da luta: as sugestões de córner ao vivo usam esse valor o tempo todo
     // (a sinergia só muda DEPOIS da luta resolvida, ver _applyCoachSynergyChange).
@@ -674,12 +732,33 @@ class App {
         const fA = await this.game.fighterCtrl.getFighter(playerResult.fighterAId);
         const fB = await this.game.fighterCtrl.getFighter(playerResult.fighterBId);
         if (fA && fB) {
+          // Torcida da noite — gravada no settle da luta
+          try {
+            const cr = await this.game.db.get('gameState', 'crowdReaction');
+            if (cr?.reaction?.chant) playerResult._crowdChant = cr.reaction.chant;
+          } catch { /* ok */ }
           const html = LiveFightHubView.render(fA, fB, playerResult);
           await LayoutView.render(html);
+          // Cinemática de marco: agendada aqui, disparada quando o resumo
+          // final do live hub aparece (finish() em _playLiveHub).
+          this._pendingCinematic = null;
+          this._lastFightWon = playerResult.isDraw ? null : !!playerResult._won;
+          if (playerResult._won && playerResult.isTitleFight) {
+            const id = playerResult.titleRetained
+              ? 'TitleDefense'
+              : (featured.event?.tier === 1 ? 'WorldChampion' : 'BeltWin');
+            this._pendingCinematic = {
+              id,
+              text: {
+                title: fA.name,
+                subtitle: `${fA.record.wins}-${fA.record.losses}-${fA.record.draws}`,
+              },
+            };
+          }
           this._playLiveHub(featured.results, featured.playerFighterIds, fA, fB);
           document.getElementById('hubBackBtn')?.addEventListener('click', () => this.renderDashboard());
           document.getElementById('shareFightBtn')?.addEventListener('click', () => {
-            const fText = `${playerResult._won ? '🏆' : '😔'} ${fA.name} ${playerResult._won ? 'venceu' : 'perdeu'} por ${playerResult.method} no R${playerResult.round}!`;
+            const fText = `${playerResult._won ? '🏆' : '😔'} ${e(fA.name)} ${playerResult._won ? 'venceu' : 'perdeu'} por ${e(playerResult.method)} no R${playerResult.round}!`;
             const shareText = `${fText}\n💰 Bolsa: $${(playerResult._purse || 0).toLocaleString()} | Líquido: $${(playerResult._netPurse || 0).toLocaleString()}\n📊 Recorde: ${fA.record.wins}-${fA.record.losses}-${fA.record.draws}${SHARE_URL ? `\n\nJogue MMA Manager: ${SHARE_URL}` : ''}`;
             if (navigator.share) {
               navigator.share({ title: 'MMA Manager', text: shareText });
@@ -761,7 +840,7 @@ class App {
           <div class="flex gap-2" style="flex-wrap:wrap">
             <button class="btn btn-sm btn-primary sim-focus-option" data-focus="">Manter escolha atual</button>
             ${Object.entries(TRAINING_FOCUS_META).map(([key, meta]) => `
-              <button class="btn btn-sm btn-secondary sim-focus-option" data-focus="${key}">${meta.icon} ${meta.label}</button>
+              <button class="btn btn-sm btn-secondary sim-focus-option" data-focus="${key}">${meta.icon} ${e(meta.label)}</button>
             `).join('')}
           </div>
         </div>
@@ -771,7 +850,7 @@ class App {
           <div class="difficulty-grid" style="grid-template-columns:repeat(2,1fr)">
             ${SIMULATE_PERIOD_PRESETS.map(p => `
               <button type="button" class="difficulty-option" data-weeks="${p.weeks}">
-                <div class="difficulty-name">${p.label}</div>
+                <div class="difficulty-name">${e(p.label)}</div>
                 <div class="difficulty-cash">${p.weeks} semanas</div>
               </button>
             `).join('')}
@@ -987,7 +1066,7 @@ class App {
     if (existing) existing.remove();
 
     const beltsHtml = belts.map(b =>
-      `<li><strong>${b.weightClass}</strong> · ${b.promotionName}</li>`
+      `<li><strong>${b.weightClass}</strong> · ${e(b.promotionName)}</li>`
     ).join('');
 
     const isPlural = belts.length > 1;
@@ -1021,7 +1100,7 @@ class App {
       const result = await this.game.signContractWithVacate(fighterId, promoId, now);
       if (result.fighter) {
         this.notificationService.add('success', 'Contrato Assinado!',
-          `${result.fighter.name} abdicou do${isPlural ? 's' : ''} cintur\u00E3o${isPlural ? '\u00F5es' : ''} e agora \u00E9 exclusivo do ${promoName}.`);
+          `${e(result.fighter.name)} abdicou do${isPlural ? 's' : ''} cintur\u00E3o${isPlural ? '\u00F5es' : ''} e agora \u00E9 exclusivo do ${promoName}.`);
       }
       this.renderOffers();
     });
@@ -1047,8 +1126,8 @@ class App {
     const choices = WeeklyTrainingController.getChoices(fighter);
     const choiceCards = choices.map(c => `
       <button type="button" class="card weekly-training-card" data-choice="${c.key}" style="cursor:pointer;padding:1rem;transition:border-color 0.15s;width:100%;text-align:left;font:inherit;color:inherit">
-        <h4 style="margin:0 0 0.25rem 0;color:var(--accent)">${c.label}</h4>
-        <p class="text-sm" style="color:var(--text-secondary);margin:0 0 0.5rem 0">${c.description}</p>
+        <h4 style="margin:0 0 0.25rem 0;color:var(--accent)">${e(c.label)}</h4>
+        <p class="text-sm" style="color:var(--text-secondary);margin:0 0 0.5rem 0">${e(c.description)}</p>
         <div class="text-xs" style="color:var(--text-muted)">
           ${c.fatigueGain > 0 ? `+${c.fatigueGain} fadiga` : c.fatigueGain < 0 ? `${c.fatigueGain} fadiga` : ''}
           ${c.moraleEffect !== 0 ? ` · ${c.moraleEffect > 0 ? '+' : ''}${c.moraleEffect} moral` : ''}
@@ -1209,6 +1288,21 @@ class App {
       if (statusText) statusText.textContent = 'Luta encerrada';
       if (skipBtn) skipBtn.style.display = 'none';
 
+      // Marco de título? Toca a cinemática por cima do resumo — o resumo já
+      // está montado embaixo quando ela termina ou é pulada. O sting de
+      // vitória/derrota só toca quando NÃO há cinemática (que tem seu
+      // próprio som de impacto).
+      if (this._pendingCinematic) {
+        const c = this._pendingCinematic;
+        this._pendingCinematic = null;
+        CinematicService.play(c.id, c.text);
+      } else if (this._lastFightWon === true) {
+        AudioService.play('success');
+      } else if (this._lastFightWon === false) {
+        AudioService.play('fail');
+      }
+      this._lastFightWon = undefined;
+
       if (summary) {
         summary.style.display = 'block';
         tl.to('#hubResultIcon', { opacity: 1, scale: 1, duration: 0.4, ease: 'back.out(2)' }, 0)
@@ -1246,11 +1340,14 @@ class App {
       beat.style.display = 'flex';
 
       if (beatType === 'knockdown') {
+        AudioService.play('thud');
         gsap.to(faceOff || document.getElementById('liveHubRounds'), {
           x: '+=6', duration: 0.04, repeat: 4, yoyo: true, ease: 'power1.inOut',
         });
         if (threeFaceOff?.onKnockdown) threeFaceOff.onKnockdown();
       } else if (beatType === 'finish') {
+        AudioService.play('thud');
+        AudioService.play('bell');
         gsap.to(faceOff || document.getElementById('liveHubRounds'), {
           x: '+=10', duration: 0.05, repeat: 6, yoyo: true, ease: 'power1.inOut',
         });
@@ -1274,6 +1371,7 @@ class App {
 
     gsap.delayedCall(0.8, () => {
       if (!cancelled) {
+        AudioService.play('bell');
         rounds[0].style.display = 'block';
         if (statusText) statusText.textContent = `Round 1 de ${rounds.length}`;
       }
@@ -1329,7 +1427,25 @@ class App {
     const playerFighter = await this.game.getPlayerFighter();
     const isPlayer = playerFighter?.id === fighter.id;
 
-    const html = FighterProfileView.render(fighter, fighter.fights, isPlayer);
+    // Biografia viva — só pro jogador: careerLog + rival mais quente.
+    let profileCtx = {};
+    if (isPlayer && this.game.careerLogService) {
+      const topMoments = await this.game.careerLogService.topByMagnitude(fighter.id, 6);
+      let rivalryInfo = null;
+      if (this.rivalryService) {
+        const rivalries = await this.rivalryService.getRivalries(fighter.id);
+        if (rivalries.length > 0) {
+          const top = rivalries.reduce((a, b) => (b.intensity > a.intensity ? b : a));
+          const otherId = top.fighterAId === fighter.id ? top.fighterBId : top.fighterAId;
+          const fromFights = fighter.fights.find(f => f.opponentId === otherId)?.opponent;
+          const otherFighter = fromFights ? null : await this.game.fighterCtrl.getFighter(otherId);
+          rivalryInfo = { rivalry: top, opponentName: fromFights || otherFighter?.name || 'Adversário desconhecido' };
+        }
+      }
+      profileCtx = { topMoments, rivalryInfo };
+    }
+
+    const html = FighterProfileView.render(fighter, fighter.fights, isPlayer, profileCtx);
     await LayoutView.render(html);
 
     document.querySelectorAll('.fighter-back').forEach(btn => {
@@ -1370,16 +1486,17 @@ class App {
         const f = await this.game.fighterCtrl.getFighter(fId);
         if (!f) return;
 
-        const newName = prompt('Novo nome do lutador:', f.name);
-        if (!newName || newName.trim().length === 0) return;
-        if (newName.length > 30) {
-          this.notificationService.add('warning', 'Renomear', 'O nome deve ter no máximo 30 caracteres.');
+        const raw = prompt('Novo nome do lutador:', f.name);
+        if (raw == null) return;
+        const newName = sanitizePlayerName(raw, { fallback: '' });
+        if (!newName) {
+          this.notificationService.add('warning', 'Renomear', 'Nome inválido. Use letras e números, sem HTML.');
           return;
         }
 
-        f.name = newName.trim();
+        f.name = newName;
         await this.game.fighterCtrl.updateFighter(f);
-        this.notificationService.add('success', 'Renomear', `Lutador renomeado para ${newName.trim()}.`);
+        this.notificationService.add('success', 'Renomear', `Lutador renomeado para ${newName}.`);
         this.showFighterProfile(fighterId);
       });
     });
@@ -1390,11 +1507,11 @@ class App {
     document.querySelectorAll('.fighter-retire').forEach(btn => {
       btn.addEventListener('click', async () => {
         const fId = btn.dataset.id;
-        const confirmed = confirm(`Tem certeza que quer aposentar ${fighter.name}? Esta ação não pode ser desfeita — a carreira atual termina aqui.`);
+        const confirmed = confirm(`Tem certeza que quer aposentar ${e(fighter.name)}? Esta ação não pode ser desfeita — a carreira atual termina aqui.`);
         if (!confirmed) return;
 
         await this.game.resolveEndCareer(fId, 'dignified');
-        this.notificationService.add('success', '👑 Aposentadoria Digna', `${fighter.name} pendurou as luvas.`);
+        this.notificationService.add('success', '👑 Aposentadoria Digna', `${e(fighter.name)} pendurou as luvas.`);
         this.navigateTo('retirement');
       });
     });
@@ -1603,7 +1720,7 @@ class App {
       btn.addEventListener('click', async () => {
         const result = await this.game.switchAcademy(btn.dataset.academy);
         if (result.ok) {
-          this.notificationService.add('success', 'Academia Trocada', `Agora você treina em ${result.academy.name}.`);
+          this.notificationService.add('success', 'Academia Trocada', `Agora você treina em ${e(result.academy.name)}.`);
         } else {
           this.notificationService.add('warning', 'Troca Falhou', result.reason);
         }
@@ -1624,7 +1741,7 @@ class App {
         }
         const result = await this.game.hireManager(btn.dataset.manager);
         if (result.ok) {
-          this.notificationService.add('success', 'Novo Empresário', `${result.manager.name} agora cuida da sua carreira.`);
+          this.notificationService.add('success', 'Novo Empresário', `${e(result.manager.name)} agora cuida da sua carreira.`);
         } else {
           this.notificationService.add('warning', 'Contratação Falhou', result.reason);
         }
@@ -1678,7 +1795,18 @@ class App {
 
   // ===== Hall of Fame =====
   async renderHallOfFame() {
-    const entries = await this.game.db.getAll('hallOfFame');
+    let entries = await this.game.db.getAll('hallOfFame');
+
+    // Limpeza de saves poluídos pelo forceInduct antigo, que induzia qualquer
+    // aposentado do jogador sem checar critério nenhum. Reavalia cada verbete
+    // pelos próprios números e remove quem nunca deveria ter entrado — a
+    // cerimônia desses lutadores continua acessível via snapshot no gameState.
+    const bogus = entries.filter(e => !HallOfFame.entryIsEligible(e));
+    if (bogus.length > 0) {
+      for (const e of bogus) await this.game.db.delete('hallOfFame', e.id);
+      entries = entries.filter(e => HallOfFame.entryIsEligible(e));
+    }
+
     const html = HallOfFameView.render(entries);
     await LayoutView.render(html);
 
@@ -1703,7 +1831,13 @@ class App {
       return;
     }
 
-    const entry = await this.game.db.get('hallOfFame', fighterId);
+    // Snapshot da cerimônia (todo aposentado tem) tem prioridade; entrada do
+    // Hall da Fama é fallback pra saves antigos, feitos antes do snapshot
+    // existir. Aposentado sem currículo NÃO está mais no Hall — sem o
+    // snapshot ele não teria cerimônia nenhuma.
+    const ceremonySnapshot = gameState?.meta?.retirementCeremonyEntry;
+    const entry = (ceremonySnapshot?.fighterId === fighterId ? ceremonySnapshot : null)
+      || await this.game.db.get('hallOfFame', fighterId);
     if (!entry) {
       await this.renderHallOfFame();
       return;
@@ -1738,6 +1872,17 @@ class App {
     });
     await LayoutView.render(html);
 
+    // Cinemática de despedida — só na primeira visita desta sessão; revisitar
+    // a página (ou navegar de volta do Hall) não repete o vídeo.
+    this._retirementCinematicsShown ||= new Set();
+    if (!this._retirementCinematicsShown.has(fighterId)) {
+      this._retirementCinematicsShown.add(fighterId);
+      CinematicService.play('Retirement', {
+        title: entry.name,
+        subtitle: `${entry.record.wins}-${entry.record.losses}-${entry.record.draws} · ${entry.careerStats?.titlesWon || 0} cinturão(ões)`,
+      });
+    }
+
     document.getElementById('viewFullCareerBtn')?.addEventListener('click', () => {
       this.navigateTo('hall-of-fame');
     });
@@ -1755,6 +1900,79 @@ class App {
     document.getElementById('startNewCareerBtn')?.addEventListener('click', async () => {
       await this.game.fighterCtrl.setPlayerFighterId(null);
       this._showCharacterCreation();
+    });
+  }
+
+  // ===== Configurações =====
+  async renderSettings() {
+    await LayoutView.render(SettingsView.render());
+
+    const volume = document.getElementById('settingsVolume');
+    const volumeLabel = document.getElementById('settingsVolumeLabel');
+    volume?.addEventListener('input', () => {
+      AudioService.setVolume(volume.value / 100);
+      if (volumeLabel) volumeLabel.textContent = `${volume.value}%`;
+    });
+    volume?.addEventListener('change', () => AudioService.play('click'));
+
+    const ambientToggle = document.getElementById('settingsAmbient');
+    document.getElementById('settingsMute')?.addEventListener('change', (e) => {
+      AudioService.setMuted(e.target.checked);
+      if (volume) volume.disabled = e.target.checked;
+      if (ambientToggle) ambientToggle.disabled = e.target.checked;
+      if (!e.target.checked) AudioService.play('success');
+    });
+
+    ambientToggle?.addEventListener('change', (e) => {
+      AudioService.setAmbientEnabled(e.target.checked);
+    });
+
+    document.getElementById('settingsTestSound')?.addEventListener('click', () => {
+      AudioService.play('bell');
+    });
+
+    document.getElementById('settingsReduceMotion')?.addEventListener('change', (e) => {
+      localStorage.setItem('reduceMotion', String(e.target.checked));
+      // Lenis/ScrollTrigger já estão vivos com o estado antigo — recarregar
+      // é o único jeito limpo de aplicar sem estados fantasmas.
+      location.reload();
+    });
+
+    document.querySelectorAll('[data-set-theme]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const next = btn.dataset.setTheme;
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('theme', next);
+        this.renderSettings();
+      });
+    });
+
+    document.getElementById('settingsSaveLoad')?.addEventListener('click', () => this.handleSaveLoad());
+
+    document.getElementById('settingsExport')?.addEventListener('click', async () => {
+      const json = await this.saveService.exportSave();
+      const blob = new Blob([typeof json === 'string' ? json : JSON.stringify(json)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `mma-manager-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      this.notificationService.add('success', 'Backup Exportado', 'Arquivo JSON baixado com o mundo inteiro.');
+    });
+
+    const importFile = document.getElementById('settingsImportFile');
+    document.getElementById('settingsImport')?.addEventListener('click', () => importFile?.click());
+    importFile?.addEventListener('change', async () => {
+      const file = importFile.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        await this.saveService.importSave(text);
+        this.notificationService.add('success', 'Backup Importado', 'Recarregando o mundo...');
+        setTimeout(() => location.reload(), 800);
+      } catch (err) {
+        this.notificationService.add('warning', 'Importação Falhou', String(err?.message || err));
+      }
     });
   }
 
@@ -1786,8 +2004,12 @@ class App {
     document.querySelectorAll('.slot-save-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const slot = parseInt(btn.dataset.slot, 10);
-        await this.saveService.saveSave(slot);
-        this.notificationService.add('success', 'Save', `Jogo salvo no slot ${slot}!`);
+        try {
+          await this.saveService.saveSave(slot);
+          this.notificationService.add('success', 'Save', `Jogo salvo no slot ${slot}!`);
+        } catch (err) {
+          this.notificationService.add('danger', 'Falha ao salvar', String(err.message || err));
+        }
         this.handleSaveLoad();
       });
     });
@@ -1795,17 +2017,26 @@ class App {
     document.querySelectorAll('.slot-load-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const slot = parseInt(btn.dataset.slot, 10);
-        await this.saveService.loadSave(slot);
-        this.notificationService.add('success', 'Load', `Jogo carregado do slot ${slot}!`);
-        window.location.reload();
+        try {
+          await this.saveService.loadSave(slot);
+          this.notificationService.add('success', 'Load', `Jogo carregado do slot ${slot}!`);
+          window.location.reload();
+        } catch (err) {
+          this.notificationService.add('danger', 'Falha ao carregar', String(err.message || err));
+          this.handleSaveLoad();
+        }
       });
     });
 
     document.querySelectorAll('.slot-delete-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const slot = parseInt(btn.dataset.slot, 10);
-        await this.saveService.deleteSave(slot);
-        this.notificationService.add('info', 'Delete', `Save do slot ${slot} deletado.`);
+        try {
+          await this.saveService.deleteSave(slot);
+          this.notificationService.add('info', 'Delete', `Save do slot ${slot} deletado.`);
+        } catch (err) {
+          this.notificationService.add('danger', 'Falha ao deletar', String(err.message || err));
+        }
         this.handleSaveLoad();
       });
     });
@@ -1883,7 +2114,7 @@ class App {
             );
             if (rivalry) {
               this.notificationService.add('info', 'Rivalidade',
-                `A provocação na coletiva acirrou a rivalidade com ${fighterB.name}! (Intensidade: ${rivalry.intensityLabel})`);
+                `A provocação na coletiva acirrou a rivalidade com ${e(fighterB.name)}! (Intensidade: ${e(rivalry.intensityLabel)})`);
             }
           }
 

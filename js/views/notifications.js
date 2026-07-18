@@ -1,4 +1,4 @@
-import { formatDateShort } from '../utils/helpers.js';
+import { formatDateShort, escapeHtml, e } from '../utils/helpers.js';
 import { ICON_MAP } from '../services/notification-service.js';
 
 const CATEGORIES = {
@@ -22,6 +22,8 @@ const _TYPE_CATEGORY = {
 };
 
 export class NotificationsView {
+  static MAX_RENDERED = 150;
+
   static render(notifications, unreadCount, activeCategory = 'all') {
     if (!notifications || notifications.length === 0) {
       return `
@@ -81,7 +83,7 @@ export class NotificationsView {
       <div class="flex gap-1 mb-3" style="flex-wrap:wrap">
         ${Object.entries(CATEGORIES).map(([key, cat]) => `
           <button class="btn btn-sm ${activeCategory === key ? 'btn-primary' : 'btn-secondary'} notif-cat-btn" data-cat="${key}">
-            ${cat.label}
+            ${e(cat.label)}
             <span class="badge" style="margin-left:4px;font-size:0.6rem">${categoryCounts[key] || 0}</span>
           </button>
         `).join('')}
@@ -89,21 +91,26 @@ export class NotificationsView {
 
       <div class="card">
         ${filtered.length === 0 ? '<div class="text-muted text-sm p-3">Nenhuma notificação nesta categoria.</div>' : ''}
-        ${filtered.map(n => `
+        ${filtered.slice(0, NotificationsView.MAX_RENDERED).map(n => `
           <div class="notif-item ${n.read ? 'notif-read' : 'notif-unread'} ${n.type === 'hall-of-fame' ? 'nav-link' : ''}" style="padding:0.75rem 0;border-bottom:1px solid var(--border)" ${n.type === 'hall-of-fame' ? 'data-view="retirement"' : ''}>
             <div class="flex items-start justify-between">
               <div class="flex items-start gap-2" style="flex:1">
                 <span style="font-size:1.2rem">${NotificationsView.iconFor(n.type)}</span>
                 <div>
-                  <div class="font-bold text-sm">${n.title}</div>
-                  <div class="text-xs text-muted">${n.message}</div>
+                  <div class="font-bold text-sm">${escapeHtml(n.title)}</div>
+                  <div class="text-xs text-muted">${escapeHtml(n.message)}</div>
                   <div class="text-xs text-muted" style="margin-top:0.25rem">${formatDateShort(n.timestamp)}</div>
                 </div>
               </div>
-              ${!n.read ? `<button class="btn btn-sm btn-secondary notif-mark-read" data-id="${n.id}" style="margin-left:0.5rem">✓</button>` : ''}
+              ${!n.read ? `<button class="btn btn-sm btn-secondary notif-mark-read" data-id="${escapeHtml(n.id)}" style="margin-left:0.5rem">✓</button>` : ''}
             </div>
           </div>
         `).join('')}
+        ${filtered.length > NotificationsView.MAX_RENDERED ? `
+          <div class="text-xs text-muted text-center" style="padding:0.75rem">
+            Mostrando as ${NotificationsView.MAX_RENDERED} mais recentes de ${filtered.length}. Marque como lidas pra liberar espaço.
+          </div>
+        ` : ''}
       </div>
     `;
   }
@@ -126,17 +133,23 @@ export class NotificationsView {
               <span class="card-title" style="font-size:0.85rem">Slot ${s.slot}</span>
               ${s.slot === currentSlot ? '<span class="badge badge-warning" style="font-size:0.5rem">ATUAL</span>' : ''}
             </div>
-            ${s.exists ? `
+            ${s.exists && s.corrupted ? `
               <div style="padding:0.5rem">
-                <div class="text-xs font-bold">${s.fighterName}</div>
+                <p class="text-danger text-xs mt-1">Corrompido — não dá pra carregar</p>
+                <div class="flex gap-1 mt-2">
+                  <button class="btn btn-sm btn-primary slot-save-btn" data-slot="${s.slot}" style="font-size:0.6rem">Sobrescrever</button>
+                  <button class="btn btn-sm btn-danger slot-delete-btn" data-slot="${s.slot}" style="font-size:0.6rem">Apagar</button>
+                </div>
+              </div>` : s.exists ? `
+              <div style="padding:0.5rem">
+                <div class="text-xs font-bold">${escapeHtml(s.fighterName)}</div>
                 <div class="text-xs text-muted">Sem ${s.week} · Ano ${s.year}</div>
                 <div class="text-xs text-muted">${s.rosterSize} lutadores</div>
-                ${!s.corrupted ? `
-                  <div class="flex gap-1 mt-2">
-                    <button class="btn btn-sm btn-primary slot-save-btn" data-slot="${s.slot}" style="font-size:0.6rem">Salvar</button>
-                    <button class="btn btn-sm btn-secondary slot-load-btn" data-slot="${s.slot}" style="font-size:0.6rem">Carregar</button>
-                    <button class="btn btn-sm btn-danger slot-delete-btn" data-slot="${s.slot}" style="font-size:0.6rem">X</button>
-                  </div>` : '<p class="text-danger text-xs mt-1">Corrompido</p>'}
+                <div class="flex gap-1 mt-2">
+                  <button class="btn btn-sm btn-primary slot-save-btn" data-slot="${s.slot}" style="font-size:0.6rem">Salvar</button>
+                  <button class="btn btn-sm btn-secondary slot-load-btn" data-slot="${s.slot}" style="font-size:0.6rem">Carregar</button>
+                  <button class="btn btn-sm btn-danger slot-delete-btn" data-slot="${s.slot}" style="font-size:0.6rem">X</button>
+                </div>
               </div>` : `
               <div style="padding:0.5rem">
                 <div class="text-xs text-muted">Vazio</div>

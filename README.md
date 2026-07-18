@@ -35,6 +35,14 @@ O mundo é simulado por baixo: promoções controladas pela IA realizam os próp
 | **Patrocínios com cláusula de imagem** | Marca "limpa" paga bem mas cancela o contrato se você virar vilão demais; marca "vilão" exige que você mantenha o hype |
 | **Redes sociais** | Provocar, pedir title shot ou ficar quieto — mesmo em semana livre, sua persona pública precede você em cada evento |
 | **Rivalidades com origem** | Nascida de provocação (grudge), decisão polêmica (robbery) ou puro choque de ranking (competitive) — cada tipo muda o tom da imprensa e a pressão de uma revanche |
+| **Arcos de rival no mundo** | Seu rival luta sem você no card: vitória dele vira manchete, esquenta a rivalidade e pode abrir um Momento da Carreira com nomes reais |
+| **Octógono Talk (podcast)** | A cada 4 semanas, um episódio de talk-show reconta o career log e os arcos da semana — memória, não minigame |
+| **Biografia viva** | Perfil, Hall da Fama e aposentadoria geram prosa só com fatos da carreira (rival, zebra, título, sequela) |
+| **Torcida viva** | Persona face/heel (heat + popularidade), energia da arena, vaias/gritos e cartas de fãs após cada luta sua |
+| **Comparação na mídia** | Card no dashboard: você vs rival mais quente (cartel, OVR, pop, confronto direto) |
+| **Retrospectiva anual** | Fim de cada ano de jogo: documentário de temporada a partir do career log |
+| **Biografias de campeões** | Cinturões no ranking mostram um verbete curto do dono do ouro — o mundo tem rostos |
+| **Linha do tempo** | Perfil lista momentos marcantes (título, rival, torcida, viral…) |
 | **Legado & documentário** | Na aposentadoria, sua carreira vira um documentário em capítulos — montado só com o que você viveu, sem roteiro escrito |
 | **Simular período** | 1 mês a 1 ano em automático, com resumo agregado |
 

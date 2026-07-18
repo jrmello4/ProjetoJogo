@@ -1,5 +1,6 @@
-import { formatDate, getWeightClassName, formatCurrency } from '../utils/helpers.js';
+import { formatDate, getWeightClassName, formatCurrency, e } from '../utils/helpers.js';
 import { absWeekToDate } from '../config/game-config.js';
+import { BiographyService } from '../services/biography-service.js';
 
 // §B.3 — Legado & documentário de carreira. Substitui a cerimônia genérica
 // por um documentário em capítulos (Ascensão/Auge/Declínio/Legado) montado
@@ -42,6 +43,11 @@ const MOMENT_ICONS = {
   academy_switch: '🏋️',
   manager_switch: '🤝',
   rivalry_born: '⚔️',
+  rival_arc: '🌑',
+  viral: '🔥',
+  narrative_choice: '📰',
+  crowd_night: '🏟️',
+  year_review: '🎬',
   weapon_revealed: '🧰',
   figured_out: '📖',
   reinvention: '🔄',
@@ -63,6 +69,7 @@ function humanizeType(type) {
 // de fato no código hoje ('finish', 'provocation') — qualquer tipo novo que
 // outro sistema publique cai no fallback genérico, que nunca inventa nada:
 // só lista os campos reais de `data`.
+// Texto cru — o caller aplica e() uma única vez ao inserir no HTML.
 function describeMoment(entry) {
   const d = entry.data || {};
   switch (entry.type) {
@@ -88,8 +95,20 @@ function describeMoment(entry) {
       return `Trocou de empresário${d.managerName ? ` para ${d.managerName}` : ''}`;
     case 'rivalry_born':
       return `Nasceu uma rivalidade${d.opponentName ? ` com ${d.opponentName}` : ''}`;
-    // O Livro Sobre Você — os três momentos que dão um segundo ato à carreira:
-    // ser decifrado, mostrar algo novo, e voltar outro lutador.
+    case 'rival_arc':
+      return d.won
+        ? `Seu rival ${d.rivalName || ''} venceu${d.opponentName ? ` ${d.opponentName}` : ''} — a sombra cresceu`
+        : `Seu rival ${d.rivalName || ''} caiu${d.opponentName ? ` para ${d.opponentName}` : ''}`;
+    case 'viral':
+      return 'Um post explodiu nas redes e redefiniu a persona pública';
+    case 'narrative_choice':
+      return d.choice ? `Escolha de bastidores: ${d.choice}` : 'Uma decisão de bastidores marcou a semana';
+    case 'crowd_night':
+      return d.chant
+        ? `A torcida gritou "${d.chant}" (energia ${d.energy ?? '?'})`
+        : 'Uma noite em que a arena não esqueceu o seu nome';
+    case 'year_review':
+      return d.teaser || `Retrospectiva do ano ${d.yearNumber || ''}`;
     case 'weapon_revealed':
       return `Mostrou ${d.plan || 'uma arma nova'} pela primeira vez — e ninguém estava esperando`;
     case 'figured_out':
@@ -98,7 +117,6 @@ function describeMoment(entry) {
       return 'Reinventou-se depois de ser decifrado — voltou outro lutador';
     case 'bait_success':
       return `Iscou o adversário${d.plan ? `, que entrou preparado para ${d.plan}` : ''}`;
-    // A sala de treino viva — o que o tatame cobra fora da luta.
     case 'weapon_seen_coming':
       return `Mostrou ${d.plan || 'a arma nova'} para quem já a tinha visto nascer no treino${d.opponentName ? ` — ${d.opponentName}` : ''}`;
     case 'fought_friend':
@@ -206,9 +224,24 @@ export class RetirementCeremonyView {
     const scars = fighter?.permanentScars || [];
     const legado = computeLegado(fighter);
 
+    // Biografia viva (prioriza a gravada no verbete; senão compõe na hora).
+    const liveBio = entry.biography?.paragraphs?.length
+      ? entry.biography
+      : BiographyService.compose(fighter || {
+          name: entry.name,
+          record: entry.record,
+          totalFights: entry.totalFights,
+          titlesWon: stats.titlesWon,
+          popularity: entry.popularity,
+          overallRating: entry.peakRating,
+          status: 'retired',
+          fights: fighter?.fights || [],
+        }, { topMoments, rivalryInfo });
+
     // Frase de abertura — só concatena fatos reais (adversário de estreia,
     // cinturões, recorde final), nunca flavor text solto.
     const heroLine = (() => {
+      if (liveBio?.paragraphs?.[0]) return liveBio.paragraphs[0];
       const parts = [];
       if (ascensao?.firstFight) parts.push(`estreou como profissional contra ${ascensao.firstFight.opponent}`);
       if ((stats.titlesWon || 0) > 0) parts.push(`conquistou ${stats.titlesWon} cinturão${stats.titlesWon > 1 ? 'ões' : ''}`);
@@ -226,14 +259,14 @@ export class RetirementCeremonyView {
           <div class="grid grid-cols-2 gap-4" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">
             <div>
               <div class="text-xs text-muted">Estreia profissional</div>
-              <div class="text-sm font-bold">vs ${ascensao.firstFight.opponent}</div>
-              <div class="text-xs text-muted">${formatDate(ascensao.firstFight.date)} · ${ascensao.firstFight.result} por ${ascensao.firstFight.method}</div>
+              <div class="text-sm font-bold">vs ${e(ascensao.firstFight.opponent)}</div>
+              <div class="text-xs text-muted">${formatDate(ascensao.firstFight.date)} · ${e(ascensao.firstFight.result)} por ${e(ascensao.firstFight.method)}</div>
             </div>
             ${ascensao.firstWin ? `
             <div>
               <div class="text-xs text-muted">Primeira vitória</div>
-              <div class="text-sm font-bold">vs ${ascensao.firstWin.opponent}</div>
-              <div class="text-xs text-muted">${formatDate(ascensao.firstWin.date)} · ${ascensao.firstWin.method} (R${ascensao.firstWin.round})</div>
+              <div class="text-sm font-bold">vs ${e(ascensao.firstWin.opponent)}</div>
+              <div class="text-xs text-muted">${formatDate(ascensao.firstWin.date)} · ${e(ascensao.firstWin.method)} (R${ascensao.firstWin.round})</div>
             </div>` : `
             <div>
               <div class="text-xs text-muted">Primeira vitória</div>
@@ -260,7 +293,7 @@ export class RetirementCeremonyView {
           <div>
             <div class="text-xs text-muted">OVR de pico</div>
             <div class="font-bold text-lg">${auge.peak.fighterRating}</div>
-            <div class="text-xs text-muted">vs ${auge.peak.opponent} · ${formatDate(auge.peak.date)}</div>
+            <div class="text-xs text-muted">vs ${e(auge.peak.opponent)} · ${formatDate(auge.peak.date)}</div>
           </div>` : `
           <div>
             <div class="text-xs text-muted">OVR de pico</div>
@@ -271,7 +304,7 @@ export class RetirementCeremonyView {
           <div>
             <div class="text-xs text-muted">Maior zebra</div>
             <div class="font-bold text-lg">+${auge.upset.gap} pts</div>
-            <div class="text-xs text-muted">venceu ${auge.upset.fight.opponent} (OVR ${auge.upset.fight.opponentRating} vs seu ${auge.upset.fight.fighterRating}) · ${formatDate(auge.upset.fight.date)}</div>
+            <div class="text-xs text-muted">venceu ${e(auge.upset.fight.opponent)} (OVR ${auge.upset.fight.opponentRating} vs seu ${auge.upset.fight.fighterRating}) · ${formatDate(auge.upset.fight.date)}</div>
           </div>` : `
           <div>
             <div class="text-xs text-muted">Maior zebra</div>
@@ -318,7 +351,7 @@ export class RetirementCeremonyView {
               <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
                 <div>
                   <span class="text-sm">🩹 ${s.bodyPart.charAt(0).toUpperCase() + s.bodyPart.slice(1)}</span>
-                  <div class="text-xs text-muted">${weekLabel(s.atAbsWeek, startedAt)}</div>
+                  <div class="text-xs text-muted">${e(weekLabel(s.atAbsWeek, startedAt))}</div>
                 </div>
                 <div class="text-xs text-muted" style="text-align:right">
                   <div>${Object.entries(s.attributeCeilings || {}).map(([k, v]) => `${k} ${v}`).join(' · ')}</div>
@@ -338,8 +371,8 @@ export class RetirementCeremonyView {
     const traitsHtml = (legado.boolTraits.length > 0 || legado.numericTraits.length > 0)
       ? `
         <div class="flex gap-2 flex-wrap">
-          ${legado.boolTraits.map(t => `<span class="badge badge-info">${t.label}</span>`).join('')}
-          ${legado.numericTraits.map(t => `<span class="badge badge-info">${t.label}: ${t.value}</span>`).join('')}
+          ${legado.boolTraits.map(t => `<span class="badge badge-info">${e(t.label)}</span>`).join('')}
+          ${legado.numericTraits.map(t => `<span class="badge badge-info">${e(t.label)}: ${t.value}</span>`).join('')}
         </div>
       `
       : `<div class="text-xs text-muted">Nenhum traço de DNA foi revelado durante esta carreira.</div>`;
@@ -347,7 +380,7 @@ export class RetirementCeremonyView {
     const rivalryHtml = rivalryInfo ? `
       <div class="mt-3" style="border-top:1px solid var(--border);padding-top:0.75rem">
         <div class="text-xs text-muted mb-1">Maior rivalidade</div>
-        <div class="text-sm font-bold">vs ${rivalryInfo.opponentName}</div>
+        <div class="text-sm font-bold">vs ${e(rivalryInfo.opponentName)}</div>
         <div class="text-xs text-muted">${RIVALRY_TYPE_LABELS[rivalryInfo.rivalry.type] || humanizeType(rivalryInfo.rivalry.type)} · intensidade ${rivalryInfo.rivalry.intensity}/10</div>
       </div>
     ` : '';
@@ -358,9 +391,9 @@ export class RetirementCeremonyView {
         <div class="timeline">
           ${topMoments.map(m => `
             <div class="timeline-item">
-              <div class="timeline-date">${weekLabel(m.atAbsWeek, startedAt)}</div>
+              <div class="timeline-date">${e(weekLabel(m.atAbsWeek, startedAt))}</div>
               <div class="timeline-content">
-                <span class="text-sm">${MOMENT_ICONS[m.type] || '📌'} ${describeMoment(m)}</span>
+                <span class="text-sm">${MOMENT_ICONS[m.type] || '📌'} ${e(describeMoment(m))}</span>
               </div>
             </div>
           `).join('')}
@@ -397,12 +430,12 @@ export class RetirementCeremonyView {
     return `
       <div class="page-header">
         <h2>🏆 Aposentadoria</h2>
-        <p>${entry.name} pendurou as luvas</p>
+        <p>${e(entry.name)} pendurou as luvas</p>
       </div>
 
       <div class="card" style="text-align:center;padding:2rem;background:linear-gradient(135deg,var(--mat-high),var(--mat));border:2px solid var(--belt)">
         <div style="font-size:3rem;margin-bottom:0.5rem">🏆</div>
-        <h1 style="font-size:1.75rem;margin-bottom:0.25rem">${entry.name}</h1>
+        <h1 style="font-size:1.75rem;margin-bottom:0.25rem">${e(entry.name)}</h1>
         <p class="text-muted">${getWeightClassName(entry.weightClass)} · ${entry.nationality?.name || 'Nacionalidade desconhecida'} · ${stats.ageAtInduction} anos</p>
 
         <div class="grid grid-cols-3 gap-3" style="max-width:400px;margin:1.5rem auto">
@@ -420,7 +453,7 @@ export class RetirementCeremonyView {
           </div>
         </div>
 
-        <p class="text-muted" style="max-width:500px;margin:1rem auto">${heroLine}</p>
+        <p class="text-muted" style="max-width:500px;margin:1rem auto">${e(heroLine)}</p>
 
         <div style="margin-top:1.5rem">
           <button class="btn btn-primary" id="startNewCareerBtn">🥊 Começar Nova Carreira</button>

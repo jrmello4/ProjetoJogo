@@ -13,7 +13,10 @@ export class MotionEngine {
   constructor() {
     this.lenis = null;
     this.rafId = null;
-    this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Preferência do SO OU toggle manual em Configurações — os dois valem.
+    this.reducedMotion =
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+      localStorage.getItem('reduceMotion') === 'true';
     this.scrollTriggers = [];
   }
 

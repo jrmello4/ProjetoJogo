@@ -7,6 +7,7 @@ import { TapeService } from './tape-service.js';
 import { ReadinessService } from './readiness-service.js';
 import { DataGenerator } from './data-generator.js';
 import { HallOfFame } from './hall-of-fame.js';
+import { CrowdService } from './crowd-service.js';
 import { generateId, getWeightClassName, formatWeeks } from '../utils/helpers.js';
 import {
   ACADEMIES,
@@ -578,17 +579,59 @@ export class WorldService {
       }
     }
 
+    const opponentName = result.fighterBName === fighter.name ? result.fighterAName : result.fighterBName;
+
     if (isDraw) {
       // Empate não conta como vitória nem derrota no cartel.
       await this.notifService.add('info', '🤝 Empate', `Você empatou com ${result.fighterBName} (${result.method}) no ${promo.nextEventName()}. Bolsa líquida: $${netPurse.toLocaleString()}.`);
     } else if (won) {
       const isFinish = result.method && !result.method.startsWith('Decision');
-      await this.notifService.add('success', '🏆 Vitória!', `Você venceu ${result.winnerId === result.fighterAId ? result.fighterBName : result.fighterAName} por ${result.method} no ${promo.nextEventName()}. Bolsa líquida: $${netPurse.toLocaleString()}.${hypeBonus > 0 ? ` ($${hypeBonus.toLocaleString()} de bônus de hype)` : ''}`);
+      await this.notifService.add('success', '🏆 Vitória!', `Você venceu ${opponentName} por ${result.method} no ${promo.nextEventName()}. Bolsa líquida: $${netPurse.toLocaleString()}.${hypeBonus > 0 ? ` ($${hypeBonus.toLocaleString()} de bônus de hype)` : ''}`);
       if (this.careerLogService && isFinish) {
-        await this.careerLogService.publish(fighter.id, 'finish', absWeekNow, promo.tier === 1 ? 70 : 45, { opponentName: result.fighterBName === fighter.name ? result.fighterAName : result.fighterBName, method: result.method, promo: promo.short });
+        await this.careerLogService.publish(fighter.id, 'finish', absWeekNow, promo.tier === 1 ? 70 : 45, { opponentName, method: result.method, promo: promo.short });
       }
     } else {
       await this.notifService.add('warning', 'Derrota', `Você foi derrotado por ${result.winnerName} (${result.method}). Bolsa líquida: $${netPurse.toLocaleString()}.`);
+    }
+
+    // Torcida viva — persona + energia da arena + cartas de fãs (história, não HUD frio)
+    const crowdReaction = CrowdService.reactToFight({
+      fighter,
+      opponentName,
+      won,
+      isDraw,
+      method: result.method,
+      rivalryIntensity: rivalry?.intensity || 0,
+      isTitleFight: !!booking.isTitleFight,
+    });
+    if (crowdReaction.popDelta) fighter.updatePopularity(crowdReaction.popDelta);
+    if (crowdReaction.moraleDelta) fighter.applyMoraleChange(crowdReaction.moraleDelta);
+    fighter.publicPersona = crowdReaction.persona;
+    const fanMail = CrowdService.generateFanMail({
+      fighter,
+      opponentName,
+      won,
+      isDraw,
+      method: result.method,
+      rivalryIntensity: rivalry?.intensity || 0,
+    });
+    await this.db.put('gameState', {
+      id: 'crowdReaction',
+      absWeek: absWeekNow,
+      reaction: crowdReaction,
+      fanMail,
+      opponentName,
+    });
+    if (crowdReaction.lines?.[0]) {
+      await this.notifService.add('headline', `🏟️ ${crowdReaction.chant}`, crowdReaction.lines[0]);
+    }
+    if (this.careerLogService && crowdReaction.energy >= 75) {
+      await this.careerLogService.publish(fighter.id, 'crowd_night', absWeekNow, 40 + Math.floor(crowdReaction.energy / 5), {
+        chant: crowdReaction.chant,
+        energy: crowdReaction.energy,
+        persona: crowdReaction.persona,
+        opponentName,
+      });
     }
 
     await this._settleTape(fighter, result, promo, absWeekNow, won, isDraw);

@@ -1,4 +1,4 @@
-export function formatWeeks(weeks) {
+﻿export function formatWeeks(weeks) {
   return `${weeks} semana${weeks === 1 ? '' : 's'}`;
 }
 
@@ -12,18 +12,75 @@ export function formatCurrency(value) {
 }
 
 export function formatDate(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return '—';
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
     month: 'long',
     year: 'numeric',
-  }).format(new Date(date));
+  }).format(d);
 }
 
 export function formatDateShort(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return '—';
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
     month: 'short',
-  }).format(new Date(date));
+  }).format(d);
+}
+
+// Escapa texto antes de interpolar em HTML (views usam innerHTML em massa).
+// Nome do jogador, mensagens de notificação e career log podem carregar
+// strings arbitrárias — sem isto, `<img onerror=...>` no rename vira XSS.
+export function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** Atalho curto pra views (`${e(fighter.name)}`). */
+export const e = escapeHtml;
+
+/**
+ * Template tag que escapa TODO valor interpolado.
+ * HTML fixo fica nas strings; dados dinâmicos vão nos ${}.
+ *   html`<div>${fighter.name}</div>`  → seguro
+ * Não use se o valor JÁ for HTML confiável (marque com html.raw).
+ */
+export function html(strings, ...values) {
+  let out = '';
+  for (let i = 0; i < strings.length; i++) {
+    out += strings[i];
+    if (i < values.length) {
+      const v = values[i];
+      out += v && v.__html === true ? String(v.value ?? '') : escapeHtml(v);
+    }
+  }
+  return out;
+}
+html.raw = (value) => ({ __html: true, value });
+
+// Nome de lutador controlado pelo jogador: só letras/números/espaço/hífen/apóstrofo.
+// Remove tags (e o miolo de <script>…</script>), control chars e corta.
+export function sanitizePlayerName(raw, { maxLen = 30, fallback = 'Lutador Anônimo' } = {}) {
+  let s = String(raw ?? '')
+    // Remoção intencional de caracteres de controle do input — não um regex acidentalmente perigoso.
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]*>/g, '')
+    // allowlist: letras unicode, números, espaço, hífen, apóstrofo, ponto
+    .replace(/[^\p{L}\p{N}\s\-'.]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!s) return fallback;
+  if (s.length > maxLen) s = s.slice(0, maxLen).trim();
+  return s || fallback;
 }
 
 // Escolhe o item de maior valor em `keyFn`, sorteando entre empatados. Sem

@@ -97,7 +97,7 @@ async function main() {
 
   // 4) Varredura de perks — cada um sozinho, mesma base, pra achar
   // combinação isolada que já vira exploit sem precisar de atributo melhor.
-  const perksToTest = [
+  const _perksToTest = [
     'powerMultiplier', // nomes de perk reais variam; ver PERKS em game-config —
   ];
   console.log('\n4) Perks individuais (ver lista real em js/config/game-config.js PERKS):');

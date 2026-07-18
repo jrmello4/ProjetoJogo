@@ -1,4 +1,4 @@
-import { formatCurrency, formatDate, formatDateShort, getWeightClassName } from '../utils/helpers.js';
+import { formatCurrency, formatDate, formatDateShort, getWeightClassName, e } from '../utils/helpers.js';
 import { TIER_LABELS, CORNER_INSTRUCTIONS, MILESTONE_LABELS } from '../config/game-config.js';
 
 // Visão do mundo: calendário das promoções de IA e resultados dos eventos.
@@ -25,13 +25,13 @@ export class EventsView {
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
                     ${tierBadge(p.tier)}
-                    <span class="font-bold">${p.nextEventName ? p.nextEventName() : p.name || 'Evento'}</span>
-                    <span class="text-xs text-muted">${p.name}</span>
+                    <span class="font-bold">${e(p.nextEventName ? p.nextEventName() : p.name || 'Evento')}</span>
+                    <span class="text-xs text-muted">${e(p.name)}</span>
                   </div>
                   <span class="badge ${weeksOut <= 0 ? 'badge-danger' : 'badge-warning'}">${weeksOut <= 0 ? 'esta semana' : `em ${weeksOut} sem`}</span>
                 </div>
                 ${eventBookings.map(b => `
-                  <div class="text-xs mt-1" style="color:var(--gold)">🥊 Seu atleta no card: vs ${b.opponentName} — bolsa ${formatCurrency(b.purse)}</div>
+                  <div class="text-xs mt-1" style="color:var(--gold)">🥊 Seu atleta no card: vs ${e(b.opponentName)} — bolsa ${formatCurrency(b.purse)}</div>
                 `).join('')}
               </div>
             `;
@@ -58,16 +58,16 @@ export class EventsView {
             </tr>
           </thead>
           <tbody>
-            ${pastEvents.map(e => {
-              const main = e.results?.[0];
+            ${pastEvents.map(ev => {
+              const main = ev.results?.[0];
               return `
                 <tr>
-                  <td class="font-bold">${e.name}</td>
-                  <td class="text-xs">${e.promotionName || '—'}</td>
-                  <td>${formatDateShort(e.date)}</td>
-                  <td>${e.totalFights}</td>
-                  <td class="text-xs">${main ? (main.isDraw ? `Empate (${main.method})` : `${main.winnerName} venceu por ${main.method}`) : '—'}</td>
-                  <td><button class="btn btn-sm btn-secondary event-details" data-id="${e.id}">Ver card</button></td>
+                  <td class="font-bold">${e(ev.name)}</td>
+                  <td class="text-xs">${e(ev.promotionName || '—')}</td>
+                  <td>${formatDateShort(ev.date)}</td>
+                  <td>${ev.totalFights}</td>
+                  <td class="text-xs">${main ? (main.isDraw ? `Empate (${e(main.method)})` : `${e(main.winnerName)} venceu por ${e(main.method)}`) : '—'}</td>
+                  <td><button class="btn btn-sm btn-secondary event-details" data-id="${ev.id}">Ver card</button></td>
                 </tr>
               `;
             }).join('')}
@@ -129,8 +129,8 @@ export class EventsView {
 
           <div class="live-method ${finish ? 'live-method--finish' : ''}">
             ${r.isDraw
-              ? `<strong>Empate</strong> — <strong>${r.method}</strong>`
-              : `<strong>${r.winnerName}</strong> vence por <strong>${r.method}</strong> no round ${r.round}`}
+              ? `<strong>Empate</strong> — <strong>${e(r.method)}</strong>`
+              : `<strong>${r.winnerName}</strong> vence por <strong>${e(r.method)}</strong> no round ${r.round}`}
           </div>
 
           <table class="tale-of-tape">
@@ -145,7 +145,7 @@ export class EventsView {
 
     return `
       <div class="page-header">
-        <h2>${event.name}</h2>
+        <h2>${e(event.name)}</h2>
         <p>${formatDate(event.date)} — transmissão do evento</p>
       </div>
 
@@ -170,8 +170,8 @@ export class EventsView {
   static renderSimulation(event, results, playerFighterIds = new Set()) {
     return `
       <div class="page-header">
-        <h2>${event.name}</h2>
-        <p>${event.promotionName || ''} — Resultados de ${formatDate(event.date)}</p>
+        <h2>${e(event.name)}</h2>
+        <p>${e(event.promotionName || '')} — Resultados de ${formatDate(event.date)}</p>
       </div>
 
       <div class="mb-4">
@@ -183,7 +183,7 @@ export class EventsView {
               <div>
                 <span class="badge ${r.card === 'main' ? 'badge-info' : 'badge-warning'}">${r.card === 'main' ? 'Main Card' : 'Prelim'}</span>
                 ${isPlayer ? '<span class="badge badge-success" style="font-size:0.6rem;margin-left:0.25rem">SUA ACADEMIA</span>' : ''}
-                <span class="text-xs text-muted ml-2">${r.method} · R${r.round}</span>
+                <span class="text-xs text-muted ml-2">${e(r.method)} · R${r.round}</span>
                 ${r.isDraw ? '<span class="badge badge-warning" style="font-size:0.6rem;margin-left:0.25rem">EMPATE</span>' : ''}
               </div>
               <span class="text-xs text-muted">Clique para detalhes ▼</span>
@@ -285,12 +285,12 @@ export class EventsView {
       <div class="card live-fight live-fight--shown">
         <div class="live-vs-card">
           <div class="live-corner live-corner--red">
-            <div class="live-corner-name">${fighter.name}</div>
+            <div class="live-corner-name">${e(fighter.name)}</div>
             <div class="live-corner-record">Sua Academia · ${fighter.record.wins}-${fighter.record.losses}-${fighter.record.draws}</div>
           </div>
           <span class="live-vs">VS</span>
           <div class="live-corner live-corner--blue">
-            <div class="live-corner-name">${opponent.name}</div>
+            <div class="live-corner-name">${e(opponent.name)}</div>
             <div class="live-corner-record">${opponent.record.wins}-${opponent.record.losses}-${opponent.record.draws}</div>
           </div>
         </div>
@@ -356,8 +356,8 @@ export class EventsView {
           <button class="card corner-choice${key === suggested ? ' corner-choice--suggested' : ''}" data-instruction="${key}">
             ${key === suggested ? '<div class="corner-choice-tag">Sugestão do técnico</div>' : ''}
             <div class="corner-choice-icon">${meta.icon}</div>
-            <div class="corner-choice-label">${meta.label}</div>
-            <div class="corner-choice-desc text-xs text-muted">${meta.desc}</div>
+            <div class="corner-choice-label">${e(meta.label)}</div>
+            <div class="corner-choice-desc text-xs text-muted">${e(meta.desc)}</div>
           </button>
         `).join('')}
         <button class="card corner-choice corner-choice--instinct" data-instruction="instinct">
@@ -381,7 +381,7 @@ export class EventsView {
           <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
             <div>
               <span class="badge ${f.won === true ? 'badge-success' : f.won === null ? 'badge-warning' : 'badge-danger'}">${f.won === true ? 'VITÓRIA' : f.won === null ? 'EMPATE' : 'DERROTA'}</span>
-              <span class="text-xs text-muted"> vs ${f.opponentName} · ${f.method} · ${f.promoName}</span>
+              <span class="text-xs text-muted"> vs ${e(f.opponentName)} · ${e(f.method)} · ${e(f.promoName)}</span>
             </div>
           </div>
         `).join('');

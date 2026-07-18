@@ -1,18 +1,22 @@
 // Live Fight Hub — experiência dramática de luta ao vivo.
 // Usa GSAP para animações (screen shake, fade, scale, stagger)
 // e ThreeFaceOff para o palco 3D entre os rounds.
+import { escapeHtml } from '../utils/helpers.js';
+
 export class LiveFightHubView {
   static render(fighterA, fighterB, result) {
     const rounds = result.rounds || [];
     const isWin = !result.isDraw && result.winnerId === fighterA.id;
     const isKo = result.method?.startsWith('KO') || result.method?.startsWith('TKO');
     const isSub = result.method === 'Submission';
+    const nameA = escapeHtml(fighterA.name);
+    const nameB = escapeHtml(fighterB.name);
 
     return `
       <div class="page-header" style="text-align:center;border:none">
         <div id="hubFaceOff" class="faceoff-container" style="height:200px"></div>
-        <h2 id="hubFightTitle" style="opacity:0">⚔️ ${fighterA.name} vs ${fighterB.name}</h2>
-        <p id="hubFightSubtitle" class="text-muted" style="opacity:0">${result.method || 'Decisão'} · ${result.round ? `R${result.round}` : rounds.length > 0 ? `${rounds.length} rounds` : ''}</p>
+        <h2 id="hubFightTitle" style="opacity:0">⚔️ ${nameA} vs ${nameB}</h2>
+        <p id="hubFightSubtitle" class="text-muted" style="opacity:0">${escapeHtml(result.method || 'Decisão')} · ${result.round ? `R${result.round}` : rounds.length > 0 ? `${rounds.length} rounds` : ''}</p>
       </div>
 
       <div id="liveHubStatus" class="card" style="text-align:center;padding:0.75rem;margin-bottom:1rem;opacity:0">
@@ -25,10 +29,10 @@ export class LiveFightHubView {
       <div id="liveHubSummary" class="card" style="display:none;text-align:center;padding:1.5rem;background:linear-gradient(135deg,var(--mat-high),var(--mat))">
         <div id="hubResultIcon" style="font-size:3rem;opacity:0">${result.isDraw ? '🤝' : isWin ? '🏆' : '😔'}</div>
         <h2 id="hubResultText" class="${result.isDraw ? '' : isWin ? 'text-success' : 'text-danger'}" style="margin:0.5rem 0;opacity:0">
-          ${result.isDraw ? 'EMPATE!' : isWin ? `${fighterA.name} VENCEU!` : `${fighterB.name} VENCEU!`}
+          ${result.isDraw ? 'EMPATE!' : isWin ? `${nameA} VENCEU!` : `${nameB} VENCEU!`}
         </h2>
         <p id="hubResultMethod" class="text-muted" style="opacity:0">
-          ${result.method}${result.round ? ` no R${result.round}` : ''}
+          ${escapeHtml(result.method || '')}${result.round ? ` no R${result.round}` : ''}
           ${isKo ? ' 💥' : isSub ? ' 🔒' : ''}
         </p>
         ${result.scorecards ? `
@@ -64,6 +68,12 @@ export class LiveFightHubView {
         ${!isWin && !result.isDraw && isKo ? `
           <div id="hubDamageWarning" class="text-xs" style="color:var(--red-ink);margin-bottom:0.75rem;opacity:0">
             ⚠️ Dano acumulado: resistência e durabilidade do lutador foram afetadas.
+          </div>
+        ` : ''}
+
+        ${result._crowdChant ? `
+          <div id="hubCrowdChant" class="text-sm font-bold" style="margin:0.75rem 0;opacity:0;letter-spacing:0.03em">
+            🏟️ "${escapeHtml(result._crowdChant)}"
           </div>
         ` : ''}
 

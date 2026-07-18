@@ -1,6 +1,13 @@
 import { Rivalry } from '../models/rivalry.js';
 import { SocialMedia } from './social-media.js';
-import { SOCIAL_CONFIG, EXPECTATION_CONFIG, absWeek } from '../config/game-config.js';
+import { CareerLogService } from '../services/career-log-service.js';
+import {
+  SOCIAL_CONFIG,
+  EXPECTATION_CONFIG,
+  RIVAL_ARC_CONFIG,
+  NARRATIVE_EVENTS,
+  absWeek,
+} from '../config/game-config.js';
 import { pickTopRandom } from '../utils/helpers.js';
 
 // Narrativa semanal: redes sociais, callouts, headlines, expectativas,
@@ -17,6 +24,123 @@ export class NarrativeController {
     this.socialMediaService = socialMediaService;
     this.seasonService = seasonService;
     this.worldService = worldService;
+  }
+
+  // ===== Arcos de rival no mundo vivo =====
+  // Quando o rival luta na semana (sem você no cage), a história não para.
+  // Retorna stories[] pro podcast e, se a rivalidade estiver quente, abre
+  // um Momento da Carreira com nomes reais (não o prompt genérico).
+  async processRivalArcs(now, fighter) {
+    const stories = [];
+    if (!fighter || fighter.status === 'retired' || !this.rivalryService) return stories;
+
+    const rivalries = await this.rivalryService.getRivalries(fighter.id);
+    let openedNarrative = false;
+
+    for (const rivalry of rivalries) {
+      const rivalId = rivalry.fighterAId === fighter.id ? rivalry.fighterBId : rivalry.fighterAId;
+      const rival = await this.fighterCtrl.getFighter(rivalId);
+      if (!rival || rival.lastFightAbsWeek !== now) continue;
+
+      const last = rival.fights?.[0];
+      if (!last) continue;
+
+      const rivalWon = last.won === true;
+      const rivalLost = last.won === false;
+      if (!rivalWon && !rivalLost) continue; // empate: ainda notícia, mas sem forçar arco
+
+      const isTitleMoment = !!(last.isTitleFight || (rivalWon && (rival.titlesWon || 0) > 0 && last.method));
+      // isTitleFight nem sempre grava no fights[] — usa heurística de ranking #1 / método + pop
+      const looksLikeTitle = rivalWon && rival.ranking === 1 && (last.method || '').length > 0;
+
+      let magnitude = rivalWon
+        ? RIVAL_ARC_CONFIG.CAREER_LOG_MAGNITUDE_WIN
+        : RIVAL_ARC_CONFIG.CAREER_LOG_MAGNITUDE_LOSS;
+      let intensityGain = rivalWon
+        ? RIVAL_ARC_CONFIG.INTENSITY_ON_RIVAL_WIN
+        : RIVAL_ARC_CONFIG.INTENSITY_ON_RIVAL_LOSS;
+
+      if (rivalWon && (looksLikeTitle || isTitleMoment)) {
+        magnitude = RIVAL_ARC_CONFIG.CAREER_LOG_MAGNITUDE_TITLE;
+        intensityGain = Math.max(intensityGain, RIVAL_ARC_CONFIG.INTENSITY_ON_RIVAL_TITLE);
+      }
+
+      const r = new Rivalry(rivalry);
+      if (intensityGain > 0) {
+        r.increaseIntensity(intensityGain);
+        r.addEvent(
+          'rival_arc',
+          rivalWon
+            ? `${rival.name} venceu ${last.opponent} por ${last.method} — a sombra cresceu`
+            : `${rival.name} perdeu para ${last.opponent} por ${last.method}`
+        );
+        await this.db.put('rivalries', r);
+      }
+
+      const headline = rivalWon
+        ? (looksLikeTitle || isTitleMoment
+          ? `⚔️ ${rival.name} venceu ${last.opponent} e a divisão inteira olhou pro seu nome.`
+          : `⚔️ Seu rival ${rival.name} venceu ${last.opponent} por ${last.method}. A comparação é inevitável.`)
+        : `📉 ${rival.name} caiu para ${last.opponent} (${last.method}). A porta da divisão rangeu.`;
+
+      await this.notifService.add(
+        rivalWon ? 'warning' : 'headline',
+        rivalWon ? 'Rival em Ascensão' : 'Rival Tropeçou',
+        headline
+      );
+
+      if (this.careerLogService) {
+        await this.careerLogService.publish(fighter.id, 'rival_arc', now, magnitude, {
+          rivalName: rival.name,
+          rivalId: rival.id,
+          opponentName: last.opponent,
+          method: last.method,
+          won: rivalWon,
+          rivalryType: r.type,
+        });
+      }
+
+      stories.push({
+        rivalName: rival.name,
+        won: rivalWon,
+        summary: rivalWon
+          ? `${rival.name} vencendo ${last.opponent}`
+          : `${rival.name} caindo para ${last.opponent}`,
+        intensity: r.intensity,
+      });
+
+      // Abre prompt narrativo com nomes reais (uma vez por semana, o mais intenso).
+      if (
+        !openedNarrative &&
+        r.intensity >= RIVAL_ARC_CONFIG.FORCE_NARRATIVE_MIN_INTENSITY
+      ) {
+        let existing;
+        try { existing = await this.db.get('gameState', 'narrative-prompt'); } catch { /* ok */ }
+        if (!existing) {
+          const poolKey = rivalWon ? 'rival_victory' : 'rival_loss';
+          const template = (NARRATIVE_EVENTS[poolKey] || [])[0];
+          const filled = CareerLogService.fillEventTemplate(template, {
+            rivalName: rival.name,
+            opponentName: last.opponent || 'o adversário',
+            method: last.method || 'decisão',
+          });
+          if (filled) {
+            const choices = filled.choices.map((c, i) => ({ ...c, key: `n_${i}` }));
+            await this.db.put('gameState', {
+              id: 'narrative-prompt',
+              prompt: filled.prompt,
+              choices,
+              createdAbsWeek: now,
+              source: 'rival_arc',
+            });
+            await this.notifService.add('headline', '📰 Momento da Carreira', filled.prompt);
+            openedNarrative = true;
+          }
+        }
+      }
+    }
+
+    return stories;
   }
 
   // ===== Redes sociais em semana livre (§D.2) =====
@@ -92,6 +216,8 @@ export class NarrativeController {
     if (!callouters.length) return;
 
     const caller = callouters[Math.floor(Math.random() * callouters.length)];
+    const last = fighter.fights?.[0];
+    const persona = fighter.publicPersona || (fighter.narrativeHeat >= 8 ? 'heel' : 'neutral');
     const calloutPhrases = [
       `${caller.name} te provocou: "Eu enfrento qualquer um, inclusive ele."`,
       `${caller.name} disse em entrevista que você "não está pronto para o próximo nível."`,
@@ -99,6 +225,26 @@ export class NarrativeController {
       `${caller.name} criticou sua última atuação: "Eu teria finalizado no primeiro round."`,
       `${caller.name} mandou um salve: "Para de fugir e aceita uma luta."`,
     ];
+    if (last?.won === false && last.opponent) {
+      calloutPhrases.push(
+        `${caller.name} espeta: "Depois de cair pro ${last.opponent}, ${fighter.name} ainda se acha top?"`
+      );
+    }
+    if (last?.won === true && last.method && !String(last.method).startsWith('Decision')) {
+      calloutPhrases.push(
+        `${caller.name} responde à finalização: "Bonito. Agora faz isso comigo."`
+      );
+    }
+    if (persona === 'heel' || (fighter.narrativeHeat || 0) >= 8) {
+      calloutPhrases.push(
+        `${caller.name} na coletiva: "A torcida odeia ele — eu quero ser o cara que cala o vilão."`
+      );
+    }
+    if ((fighter.titlesWon || 0) > 0) {
+      calloutPhrases.push(
+        `${caller.name} mira o ouro: "Cinturão ou não, ${fighter.name} me deve uma noite."`
+      );
+    }
 
     const phrase = calloutPhrases[Math.floor(Math.random() * calloutPhrases.length)];
     await this.notifService.add('headline', 'Callout', phrase);

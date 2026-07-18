@@ -86,7 +86,19 @@ export class SaveService {
   async saveSave(slotIndex) {
     const idx = slotIndex || this.currentSlot;
     const json = await this.exportSave();
-    localStorage.setItem(this.slotKey(idx), json);
+    try {
+      localStorage.setItem(this.slotKey(idx), json);
+    } catch {
+      // localStorage tem cota bem menor que IndexedDB (5-10MB típico entre
+      // navegadores) — uma carreira longa (muitas lutas/eventos/NPCs
+      // acumulados) já passa de 11MB num estado moderado nos nossos testes.
+      // Sem isto, o clique em "Salvar" falhava calado: nenhum toast, nenhum
+      // erro, o jogador só via o slot continuar vazio.
+      const mb = (new Blob([json]).size / 1024 / 1024).toFixed(1);
+      throw new Error(
+        `Save muito grande pro navegador guardar aqui (${mb} MB). Use "Exportar backup" nas Configurações — baixa um arquivo sem limite de tamanho.`
+      );
+    }
     this.setSlot(idx);
     return true;
   }

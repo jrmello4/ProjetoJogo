@@ -41,6 +41,7 @@
   </button>
 
   <div class="app-container">
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <div class="brand-mark">
@@ -133,6 +134,12 @@
               <span>Notificações</span>
             </a>
           </li>
+          <li class="nav-item">
+            <a class="nav-link" data-view="settings" href="#" role="button">
+              <span class="rive-slot" data-rive="hall"></span>
+              <span>Configurações</span>
+            </a>
+          </li>
         </ul>
       </nav>
 
@@ -144,6 +151,7 @@
         <button class="theme-toggle theme-toggle--danger" id="resetDbBtn" type="button" title="Limpar dados e recomeçar">
           <span>Resetar Dados</span>
         </button>
+        <button class="shortcuts-hint" id="shortcutsHintBtn" type="button">Espaço avança semana · ? atalhos</button>
       </div>
     </aside>
 
@@ -182,7 +190,7 @@
     </div>
   </noscript>
 
-  <input type="file" id="saveFileInput" accept=".json" style="display: none;">
+  <input type="file" id="saveFileInput" accept=".json" aria-label="Importar arquivo de save" style="display: none;">
   <script>
     document.getElementById('saveFileInput').addEventListener('change', (e) => {
       const file = e.target.files[0];

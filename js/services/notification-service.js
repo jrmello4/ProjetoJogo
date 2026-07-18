@@ -44,6 +44,10 @@ export class NotificationService {
   }
 
   async getUnread() {
+    // Nota: `read` é boolean em JS — IndexedDB não aceita boolean como chave
+    // de índice válida (getAll(false) lança DataError), então o índice
+    // 'read' criado no schema não pode ser usado assim. getAll()+filter
+    // continua sendo o caminho correto aqui.
     const all = await this.getAll();
     return all.filter(n => !n.read).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   }

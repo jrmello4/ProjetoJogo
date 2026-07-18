@@ -1,3 +1,4 @@
+import { e } from '../utils/helpers.js';
 export function renderCalendar(calendarData) {
   if (!calendarData) {
     return `<div class="card"><div class="card-body"><p class="text-center text-muted">Nenhum dado disponível.</p></div></div>`;
@@ -5,20 +6,20 @@ export function renderCalendar(calendarData) {
 
   const { entries, upcomingFight } = calendarData;
 
-  const entriesHtml = entries.map(e => {
+  const entriesHtml = entries.map(entry => {
     const classes = [
       'calendar-entry',
-      e.isCurrentWeek ? 'calendar-entry--current' : '',
-      e.isPastWeek ? 'calendar-entry--past' : '',
-      e.isFightWeek ? 'calendar-entry--fight' : '',
-      `calendar-entry--${e.weekType}`,
+      entry.isCurrentWeek ? 'calendar-entry--current' : '',
+      entry.isPastWeek ? 'calendar-entry--past' : '',
+      entry.isFightWeek ? 'calendar-entry--fight' : '',
+      `calendar-entry--${entry.weekType}`,
     ].filter(Boolean).join(' ');
 
     return `
       <div class="${classes}">
-        <div class="calendar-entry-week">${e.label}</div>
-        <div class="calendar-entry-icon">${e.icon}</div>
-        <div class="calendar-entry-detail">${e.details || '&nbsp;'}</div>
+        <div class="calendar-entry-week">${e(entry.label)}</div>
+        <div class="calendar-entry-icon">${entry.icon || ''}</div>
+        <div class="calendar-entry-detail">${entry.details ? e(entry.details) : '&nbsp;'}</div>
       </div>`;
   }).join('');
 
@@ -30,7 +31,7 @@ export function renderCalendar(calendarData) {
     ${upcomingFight ? `
       <div class="card" style="border-left:4px solid var(--danger);margin-bottom:1.5rem">
         <div class="card-body">
-          <strong>🥊 Próxima Luta:</strong> ${upcomingFight.opponentName} · ${upcomingFight.promotionName}
+          <strong>🥊 Próxima Luta:</strong> ${e(upcomingFight.opponentName)} · ${e(upcomingFight.promotionName)}
           ${upcomingFight.isTitleFight ? ' 🏆 Disputa de Cinturão' : ''}
         </div>
       </div>

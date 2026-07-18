@@ -1,4 +1,4 @@
-import { formatCurrency, getWeightClassShort, getWeightClassName, renderAttrRange } from '../utils/helpers.js';
+import { formatCurrency, getWeightClassShort, getWeightClassName, renderAttrRange, e } from '../utils/helpers.js';
 import { TIER_LABELS, NEGOTIATION_CONFIG, TITLE_ROLE, GAME_PLANS, CARD_POSITION } from '../config/game-config.js';
 import { OFFER_STATUS } from '../models/fight-offer.js';
 
@@ -36,11 +36,11 @@ export class OffersView {
       const style = p.value < 0
         ? 'color:var(--danger)'
         : zero ? 'color:var(--text-muted)' : 'color:var(--success)';
-      return `<span class="text-xs" style="${style}">${p.label}: ${sign}${p.value}${p.key === 'camp' ? `/${p.max}` : ''}</span>`;
+      return `<span class="text-xs" style="${style}">${e(p.label)}: ${sign}${p.value}${p.key === 'camp' ? `/${p.max}` : ''}</span>`;
     };
 
     const oppHtml = rd.opponentKnown
-      ? `Prontidão dele: <strong>~${rd.opponent}%</strong> (${rd.opponentLabel})`
+      ? `Prontidão dele: <strong>~${e(rd.opponent)}%</strong> (${e(rd.opponentLabel)})`
       : `Prontidão dele: <strong>?</strong> — estude-o para descobrir`;
 
     return `
@@ -118,13 +118,13 @@ export class OffersView {
       : '<div class="text-xs text-muted">Sem informação sobre como ele luta. Estude-o antes de escolher o plano.</div>';
 
     const dna = d.dna && d.dna.length > 0
-      ? `<div class="dossier-reads mt-2">${d.dna.map(t => `<span class="badge badge-warning">${t.label}</span>`).join('')}</div>`
+      ? `<div class="dossier-reads mt-2">${d.dna.map(t => `<span class="badge badge-warning">${e(t.label)}</span>`).join('')}</div>`
       : '';
 
     return `
       <div class="dossier">
         <div class="dossier-header">
-          <span class="dossier-title">Dossiê · ${offer.opponentName}</span>
+          <span class="dossier-title">Dossiê · ${e(offer.opponentName)}</span>
           <div class="flex items-center gap-2">
             <span class="badge ${d.level >= 2 ? 'badge-success' : d.level === 1 ? 'badge-warning' : 'badge-danger'}">${d.levelLabel}</span>
             ${studyBtn}
@@ -165,8 +165,8 @@ export class OffersView {
           ${Object.entries(GAME_PLANS).map(([key, plan]) => `
             <button class="plan-option ${current === key ? 'plan-option--active' : ''}" data-offer="${offer.id}" data-plan="${key}">
               <span class="plan-icon">${plan.icon}</span>
-              <span class="plan-label">${plan.label}</span>
-              <span class="plan-desc">${plan.desc}</span>
+              <span class="plan-label">${e(plan.label)}</span>
+              <span class="plan-desc">${e(plan.desc)}</span>
               ${verdictOf(plan)}
             </button>
           `).join('')}
@@ -209,7 +209,7 @@ export class OffersView {
     if (!t) return '';
     return `
       <div class="mt-2 p-2" style="border-left:3px solid var(--danger);background:color-mix(in srgb, var(--danger) 8%, transparent);border-radius:4px">
-        <p class="text-sm"><strong>🥋 ${t.name} treina com você.</strong> <span class="text-muted">${t.bondLabel}.</span></p>
+        <p class="text-sm"><strong>🥋 ${e(t.name)} treina com você.</strong> <span class="text-muted">${e(t.bondLabel)}.</span></p>
         <p class="text-xs text-muted mt-1">
           Aceitar acaba com o vínculo — e ele conhece o seu jogo por dentro, não pela fita.
           Recusar mantém o parceiro e devolve a luta para a promoção.
@@ -246,7 +246,7 @@ export class OffersView {
               <div class="flex items-center justify-between mb-2">
                 <div class="flex items-center gap-2">
                   ${tierBadge(o.tier)}
-                  <span class="font-bold">${o.promotionName}</span>
+                  <span class="font-bold">${e(o.promotionName)}</span>
                   <span class="badge ${CARD_POSITION[o.cardPosition]?.badge || 'badge-secondary'}">${CARD_POSITION[o.cardPosition]?.shortLabel || 'Prelim'}</span>
                   ${o.isShortNotice ? '<span class="badge badge-warning" style="margin-left:0.25rem">🔥 Short Notice</span>' : ''}
                   ${o.isSuperFight ? '<span class="badge badge-danger" style="margin-left:0.25rem">⭐ Super Fight</span>' : ''}
@@ -257,13 +257,13 @@ export class OffersView {
 
               <div class="live-vs-card mb-2">
                 <div class="live-corner live-corner--red">
-                  <div class="live-corner-name">${fighter ? fighter.name : '—'}</div>
+                  <div class="live-corner-name">${fighter ? e(fighter.name) : '—'}</div>
                   <div class="live-corner-record">${fighter ? `${fighter.record.wins}-${fighter.record.losses}-${fighter.record.draws} · OVR ${fighter.overallRating}` : ''}</div>
                 </div>
                 <span class="live-vs">VS</span>
                 <div class="live-corner live-corner--blue">
-                  <div class="live-corner-name">${o.opponentName}${rivalries[o.id] ? ` <span class="badge badge-danger" style="font-size:0.6rem">⚔️ RIVAL · ${rivalries[o.id].label}</span>` : ''}</div>
-                  <div class="live-corner-record">${o.opponentRecord ? `${o.opponentRecord.wins}-${o.opponentRecord.losses}-${o.opponentRecord.draws}` : ''} · OVR ${o.opponentOverall ?? '?'} · ${o.opponentStyle || ''}</div>
+                  <div class="live-corner-name">${e(o.opponentName)}${rivalries[o.id] ? ` <span class="badge badge-danger" style="font-size:0.6rem">⚔️ RIVAL · ${rivalries[o.id].label}</span>` : ''}</div>
+                  <div class="live-corner-record">${o.opponentRecord ? `${o.opponentRecord.wins}-${o.opponentRecord.losses}-${o.opponentRecord.draws}` : ''} · OVR ${o.opponentOverall ?? '?'} · ${e(o.opponentStyle || '')}</div>
                 </div>
               </div>
               ${rivalries[o.id] ? `<div class="text-xs mt-1" style="color:var(--danger)">⚔️ Ele te leu melhor — rivalidade ${rivalries[o.id].label.toLowerCase()} deixa seu jogo mais previsível pra ele, mas a bolsa também sobe.</div>` : ''}
@@ -328,17 +328,17 @@ export class OffersView {
           <thead>
             <tr>
               <th style="text-align:left;padding:0.5rem;font-size:0.7rem;color:var(--text-muted);text-transform:uppercase"></th>
-              ${pending.map(o => `<th style="padding:0.5rem;text-align:center;min-width:150px;border-bottom:1px solid var(--border)">${o.opponentName}</th>`).join('')}
+              ${pending.map(o => `<th style="padding:0.5rem;text-align:center;min-width:150px;border-bottom:1px solid var(--border)">${e(o.opponentName)}</th>`).join('')}
             </tr>
           </thead>
           <tbody>
             <tr>
               <td class="text-xs text-muted" style="padding:0.5rem">Promoção</td>
-              ${pending.map(o => `<td style="text-align:center;padding:0.5rem">${tierBadge(o.tier)} <span class="text-xs">${o.promotionName}</span></td>`).join('')}
+              ${pending.map(o => `<td style="text-align:center;padding:0.5rem">${tierBadge(o.tier)} <span class="text-xs">${e(o.promotionName)}</span></td>`).join('')}
             </tr>
             <tr>
               <td class="text-xs text-muted" style="padding:0.5rem">Adversário</td>
-              ${pending.map(o => `<td style="text-align:center;padding:0.5rem;font-size:0.8rem">${o.opponentRecord ? `${o.opponentRecord.wins}-${o.opponentRecord.losses}-${o.opponentRecord.draws}` : '—'} · OVR ${o.opponentOverall ?? '?'}${o.opponentStyle ? `<br>${o.opponentStyle}` : ''}</td>`).join('')}
+              ${pending.map(o => `<td style="text-align:center;padding:0.5rem;font-size:0.8rem">${o.opponentRecord ? `${o.opponentRecord.wins}-${o.opponentRecord.losses}-${o.opponentRecord.draws}` : '—'} · OVR ${o.opponentOverall ?? '?'}${o.opponentStyle ? `<br>${e(o.opponentStyle)}` : ''}</td>`).join('')}
             </tr>
             <tr>
               <td class="text-xs text-muted" style="padding:0.5rem">Bolsa</td>
@@ -397,8 +397,8 @@ export class OffersView {
           <div class="card mb-2 ${o.isTitleFight ? 'offer-card--title' : ''}" data-reveal>
             <div class="flex items-center justify-between mb-3">
               <div>
-                <div class="text-sm font-bold">${o.isTitleFight ? '<span class="belt-mark">🏆</span> ' : ''}${fighter ? fighter.name : '—'} vs ${o.opponentName}${o.isReencounter ? ' <span class="badge badge-danger" style="font-size:0.65rem">⚔️ REENCONTRO</span>' : ''}${o.isShortNotice ? ' <span class="badge badge-warning" style="font-size:0.65rem">🔥 Short Notice</span>' : ''}${o.isSuperFight ? ' <span class="badge badge-danger" style="font-size:0.65rem">⭐ Super Fight</span>' : ''}${o.opponentWeightBully ? ' <span class="badge badge-warning" style="font-size:0.65rem">⚠️ Corta Peso Pesado</span>' : ''}${rivalries[o.id] ? ` <span class="badge badge-danger" style="font-size:0.65rem">⚔️ RIVAL · ${rivalries[o.id].label}</span>` : ''}</div>
-                <div class="text-xs text-muted">${o.promotionName} · ${formatCurrency(o.purse)} + ${formatCurrency(o.winBonus)} por vitória</div>
+                <div class="text-sm font-bold">${o.isTitleFight ? '<span class="belt-mark">🏆</span> ' : ''}${fighter ? e(fighter.name) : '—'} vs ${e(o.opponentName)}${o.isReencounter ? ' <span class="badge badge-danger" style="font-size:0.65rem">⚔️ REENCONTRO</span>' : ''}${o.isShortNotice ? ' <span class="badge badge-warning" style="font-size:0.65rem">🔥 Short Notice</span>' : ''}${o.isSuperFight ? ' <span class="badge badge-danger" style="font-size:0.65rem">⭐ Super Fight</span>' : ''}${o.opponentWeightBully ? ' <span class="badge badge-warning" style="font-size:0.65rem">⚠️ Corta Peso Pesado</span>' : ''}${rivalries[o.id] ? ` <span class="badge badge-danger" style="font-size:0.65rem">⚔️ RIVAL · ${e(rivalries[o.id].label)}</span>` : ''}</div>
+                <div class="text-xs text-muted">${e(o.promotionName)} · ${formatCurrency(o.purse)} + ${formatCurrency(o.winBonus)} por vitória</div>
               </div>
               <span class="badge ${weeksOut <= 1 ? 'badge-danger' : 'badge-warning'}">${weeksOut <= 0 ? 'Esta semana!' : `em ${weeksOut} sem`}</span>
             </div>
@@ -418,8 +418,8 @@ export class OffersView {
           const st = STATUS_LABELS[o.status] || { label: o.status, cls: 'badge-info' };
           return `
             <div class="flex items-center justify-between" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
-              <div class="text-sm">${o.opponentName} <span class="text-xs text-muted">· ${o.promotionName} · ${formatCurrency(o.purse)}</span></div>
-              <span class="badge ${st.cls}">${st.label}</span>
+              <div class="text-sm">${e(o.opponentName)} <span class="text-xs text-muted">· ${e(o.promotionName)} · ${formatCurrency(o.purse)}</span></div>
+              <span class="badge ${st.cls}">${e(st.label)}</span>
             </div>
           `;
         }).join('')}
@@ -435,7 +435,7 @@ export class OffersView {
           <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-2">
               ${tierBadge(cp.tier)}
-              <span class="font-bold">${cp.promotionName}</span>
+              <span class="font-bold">${e(cp.promotionName)}</span>
             </div>
             <span class="badge badge-info">${cp.fightsTotal} lutas</span>
           </div>
@@ -454,7 +454,7 @@ export class OffersView {
             </div>
           </div>
           <div class="flex gap-2">
-            <button class="btn btn-sm btn-success contract-accept" data-fighter="${cp.fighterId}" data-promo="${cp.promotionId}" data-promo-name="${cp.promotionName}">Aceitar Contrato</button>
+            <button class="btn btn-sm btn-success contract-accept" data-fighter="${cp.fighterId}" data-promo="${cp.promotionId}" data-promo-name="${e(cp.promotionName)}">Aceitar Contrato</button>
             <button class="btn btn-sm btn-secondary contract-decline" data-fighter="${cp.fighterId}">Recusar</button>
           </div>
         </div>

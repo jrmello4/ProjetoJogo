@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "lint": "eslint js/",
+    "lint": "eslint js/ server.js scripts/",
     "test": "vitest run",
-    "balance": "node scripts/balance-harness.mjs"
+    "balance": "node scripts/balance-harness.mjs",
+    "sim:narrative": "node scripts/narrative-sim.mjs"
   },
   "devDependencies": {
     "eslint": "^9.39.0",

@@ -1,4 +1,4 @@
-import { formatCurrency } from '../utils/helpers.js';
+import { formatCurrency, e } from '../utils/helpers.js';
 import { absWeekToLabel, LIFESTYLE_TIERS, OPTIONAL_SERVICES } from '../config/game-config.js';
 
 // Finanças pessoais (§A.2/§E.1/§PRD): caixa, despesas detalhadas,
@@ -33,7 +33,7 @@ export class FinanceView {
       : fighter.ledger.slice(0, 20).map(t => `
           <div class="cost-row">
             <span>
-              <span class="font-bold">${t.label}</span>
+              <span class="font-bold">${e(t.label)}</span>
               <span class="text-xs text-muted ml-2">${absWeekToLabel(t.absWeek)}</span>
             </span>
             <span class="font-bold ${t.amount >= 0 ? 'text-success' : 'text-danger'}">${t.amount >= 0 ? '+' : ''}${formatCurrency(t.amount)}</span>
@@ -42,7 +42,7 @@ export class FinanceView {
 
     const lifestyleOptions = Object.entries(LIFESTYLE_TIERS).map(([key, tier]) => `
       <button class="btn btn-sm ${key === fighter.lifestyleTier ? 'btn-primary' : 'btn-secondary'} lifestyle-set" data-tier="${key}">
-        ${tier.label} — ${formatCurrency(tier.weeklyCost)}/sem
+        ${e(tier.label)} — ${formatCurrency(tier.weeklyCost)}/sem
       </button>
     `).join('');
 
@@ -52,8 +52,8 @@ export class FinanceView {
       return `
         <div class="cost-row" style="border-bottom:1px solid var(--border);padding:0.5rem 0">
           <div style="flex:1">
-            <div class="font-bold text-sm">${svc.label}</div>
-            <div class="text-xs text-muted">${svc.desc}</div>
+            <div class="font-bold text-sm">${e(svc.label)}</div>
+            <div class="text-xs text-muted">${e(svc.desc)}</div>
           </div>
           <button class="btn btn-sm ${active ? 'btn-primary' : 'btn-secondary'} toggle-service" data-service="${key}" style="margin-left:0.5rem">
             ${active ? 'Ativo' : 'Contratar'} — ${formatCurrency(svc.weeklyCost)}/sem
@@ -89,16 +89,16 @@ export class FinanceView {
         <div>
           <div class="card mb-4" data-reveal>
             <div class="card-header"><span class="card-title">Despesas Semanais</span></div>
-            ${academyFee > 0 ? `<div class="cost-row"><span>Mensalidade — ${academy.name}</span><span class="font-bold text-danger">−${formatCurrency(academyFee)}</span></div>` : ''}
-            <div class="cost-row"><span>Aluguel (${lifestyle.label})</span><span class="font-bold text-danger">−${formatCurrency(rent)}</span></div>
-            <div class="cost-row"><span>Alimentação (${lifestyle.label})</span><span class="font-bold text-danger">−${formatCurrency(food)}</span></div>
-            <div class="cost-row"><span>Transporte (${lifestyle.label})</span><span class="font-bold text-danger">−${formatCurrency(transport)}</span></div>
-            <div class="cost-row"><span>Lazer (${lifestyle.label})</span><span class="font-bold text-danger">−${formatCurrency(leisure)}</span></div>
+            ${academyFee > 0 ? `<div class="cost-row"><span>Mensalidade — ${e(academy.name)}</span><span class="font-bold text-danger">−${formatCurrency(academyFee)}</span></div>` : ''}
+            <div class="cost-row"><span>Aluguel (${e(lifestyle.label)})</span><span class="font-bold text-danger">−${formatCurrency(rent)}</span></div>
+            <div class="cost-row"><span>Alimentação (${e(lifestyle.label)})</span><span class="font-bold text-danger">−${formatCurrency(food)}</span></div>
+            <div class="cost-row"><span>Transporte (${e(lifestyle.label)})</span><span class="font-bold text-danger">−${formatCurrency(transport)}</span></div>
+            <div class="cost-row"><span>Lazer (${e(lifestyle.label)})</span><span class="font-bold text-danger">−${formatCurrency(leisure)}</span></div>
             ${totalServices > 0 ? `<div class="cost-row"><span>Serviços contratados</span><span class="font-bold text-danger">−${formatCurrency(totalServices)}</span></div>` : ''}
             <div class="cost-row" style="border-top:2px solid var(--border);margin-top:0.25rem;padding-top:0.25rem">
               <span class="font-bold">Total</span><span class="font-bold text-danger">−${formatCurrency(fixedOutflow)}</span>
             </div>
-            ${manager ? `<div class="cost-row"><span>Empresário (${manager.name}) — corte por bolsa</span><span class="font-bold">${Math.round(manager.cut * 100)}%</span></div>` : ''}
+            ${manager ? `<div class="cost-row"><span>Empresário (${e(manager.name)}) — corte por bolsa</span><span class="font-bold">${Math.round(manager.cut * 100)}%</span></div>` : ''}
           </div>
 
           <div class="card mb-4" data-reveal>

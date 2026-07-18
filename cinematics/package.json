@@ -1,0 +1,17 @@
+{
+  "name": "mma-manager-cinematics",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio",
+    "render:all": "node render-all.mjs"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.245",
+    "@remotion/zod-types": "4.0.245",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "remotion": "4.0.245",
+    "zod": "3.22.3"
+  }
+}

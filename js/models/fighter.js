@@ -169,6 +169,12 @@ export class Fighter {
     this.lastFightBonus = data.lastFightBonus || 1.0;
     this.fightTilEnd = data.fightTilEnd || false;
     this.passiveIncome = data.passiveIncome || 0;
+
+    // Persona pública / torcida — heat (vilão) e hype narrativo. Sem estes
+    // campos no construtor, escolhas de imprensa sumiam no próximo load.
+    this.narrativeHeat = data.narrativeHeat || 0;
+    this.narrativeHype = data.narrativeHype || 0;
+    this.publicPersona = data.publicPersona || 'neutral'; // face | heel | neutral
   }
 
   _defaultDNA() {

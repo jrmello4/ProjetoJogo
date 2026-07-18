@@ -1,4 +1,4 @@
-import { formatCurrency, getWeightClassShort } from '../utils/helpers.js';
+import { formatCurrency, getWeightClassShort, e } from '../utils/helpers.js';
 import { CAMP_CONFIG, GAME_PLANS, MOVES, TAPE_CONFIG } from '../config/game-config.js';
 import { TrainingPartnersService } from '../services/training-partners-service.js';
 
@@ -84,7 +84,7 @@ export class TrainingCampView {
             const bond = TrainingPartnersService.bondOf(fighter, p.id);
             const weeks = fighter.sparredWith?.[p.id] || 0;
             return `<option value="${p.id}" ${cfg.sparringPartnerId === p.id ? 'selected' : ''}>
-              ${p.name} · OVR ${p.overallRating} · ${TrainingPartnersService.bondLabel(bond)}${weeks > 0 ? ` · ${weeks} sem juntos` : ''}
+              ${e(p.name)} · OVR ${p.overallRating} · ${TrainingPartnersService.bondLabel(bond)}${weeks > 0 ? ` · ${weeks} sem juntos` : ''}
             </option>`;
           }).join('')}
         </select>
@@ -105,7 +105,7 @@ export class TrainingCampView {
     const profOptsHtml = (fighter.moveset || []).map(moveId => {
       const move = MOVES[moveId];
       const prof = getProf(moveId);
-      return `<option value="${moveId}">${move?.name || moveId} (${Math.round(prof)}%)</option>`;
+      return `<option value="${e(moveId)}">${e(move?.name || moveId)} (${Math.round(prof)}%)</option>`;
     }).join('');
     const profFocusHtml = (fighter.moveset && fighter.moveset.length > 0)
       ? `<div class="form-group">
@@ -129,7 +129,7 @@ export class TrainingCampView {
       <div class="card camp-card" data-fighter-id="${fighter.id}" style="${!hasFight ? 'opacity:0.6' : ''}">
         <div class="card-header">
           <span class="card-title">
-            ${fighter.name}
+            ${e(fighter.name)}
             <span class="badge badge-info" style="font-size:0.6rem;margin-left:0.5rem">${getWeightClassShort(fighter.weightClass)}</span>
             ${injured ? '<span class="badge badge-danger" style="font-size:0.6rem;margin-left:0.25rem">LESIONADO</span>' : ''}
           </span>
@@ -152,7 +152,7 @@ export class TrainingCampView {
           <div class="card-body" style="padding:1rem">
             <div class="flex items-center justify-between mb-3">
               <span class="badge ${weeksUntilFight <= 2 ? 'badge-danger' : weeksUntilFight <= 6 ? 'badge-warning' : 'badge-info'}">
-                Luta em ${weeksUntilFight} sem${weeksUntilFight === 1 ? '' : 's'} vs ${booking.opponentName}
+                Luta em ${weeksUntilFight} sem${weeksUntilFight === 1 ? '' : 's'} vs ${e(booking.opponentName)}
               </span>
               <span class="text-sm text-muted">Bolsa: ${formatCurrency(booking.purse)}</span>
             </div>
@@ -246,7 +246,7 @@ export class TrainingCampView {
     return `
       <div class="card mb-2" style="padding:1rem">
         <div class="flex items-center justify-between mb-2">
-          <span class="font-bold">${fighter.name}</span>
+          <span class="font-bold">${e(fighter.name)}</span>
           <span class="text-xs text-muted">Semana de camp concluída</span>
         </div>
         ${statusHtml}

@@ -915,3 +915,390 @@
   .live-dot { animation: none; }
   .live-fight { opacity: 1; transform: none; }
 }
+
+/* ==========================================================================
+   Cinemáticas de marco (CinematicService) — overlay fullscreen com vídeo
+   WebM alpha renderizado via Remotion + texto dinâmico por cima.
+   ========================================================================== */
+
+.cinematic-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(4, 5, 9, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+.cinematic-overlay.cinematic-in { opacity: 1; }
+.cinematic-overlay.cinematic-out { opacity: 0; }
+
+.cinematic-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.cinematic-text {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12%;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.cinematic-text.cinematic-text-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cinematic-title {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 95, 'wght' 800;
+  font-size: clamp(1.6rem, 4vw, 3rem);
+  color: #fff;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.8);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cinematic-subtitle {
+  font-family: var(--font-mono);
+  font-size: clamp(0.85rem, 1.6vw, 1.15rem);
+  color: var(--belt);
+  margin-top: 0.4rem;
+  letter-spacing: 0.12em;
+}
+
+.cinematic-skip {
+  position: absolute;
+  bottom: 1.2rem;
+  right: 1.5rem;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cinematic-overlay { display: none; }
+}
+
+/* ==========================================================================
+   Dashboard UX pass — CTA de oferta no poster, tracker de onboarding,
+   hierarquia de botões, dots de navegação, atmosfera de fundo.
+   ========================================================================== */
+
+/* --- Atmosfera: vinheta vermelha sutil atrás de tudo (só tema escuro) --- */
+[data-theme="dark"] body::before,
+:root:not([data-theme="light"]) body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(160, 30, 36, 0.14), transparent 70%),
+    radial-gradient(ellipse 90% 60% at 50% 115%, rgba(160, 30, 36, 0.08), transparent 70%);
+}
+
+/* --- Poster: CTA da melhor oferta pendente --- */
+.poster-headline--dimmed {
+  opacity: 0.35;
+  font-size: 0.75em;
+}
+
+.poster-offer {
+  margin: 0.75rem auto 1rem;
+  max-width: 420px;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(160deg, var(--mat-high), var(--mat));
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg, 10px);
+  cursor: pointer;
+  text-align: left;
+  transition: var(--transition);
+  box-shadow: 0 0 0 1px transparent;
+}
+
+.poster-offer:hover {
+  border-color: var(--red);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.poster-offer-opponent {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.poster-offer-silhouette {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  font-size: 1.5rem;
+  filter: grayscale(1) brightness(0.8);
+  flex-shrink: 0;
+}
+
+.poster-offer-vs {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.poster-offer-name {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 95, 'wght' 700;
+  font-size: 1.25rem;
+  line-height: 1.15;
+}
+
+.poster-offer-meta {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
+}
+
+.poster-offer-terms {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+}
+
+.poster-offer-purse {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--money);
+}
+
+.poster-offer-expiry {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.poster-offer-btn {
+  width: 100%;
+  animation: offerGlow 2.4s ease-in-out infinite;
+}
+
+@keyframes offerGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(160, 30, 36, 0); }
+  50% { box-shadow: 0 0 18px 2px rgba(160, 30, 36, 0.55); }
+}
+
+/* --- Onboarding: tracker horizontal com checkmarks --- */
+.onboarding-steps-row {
+  display: flex;
+  align-items: center;
+  margin: 0.5rem 0 0.85rem;
+}
+
+.onboarding-step {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.onboarding-step:last-child { flex: 0; }
+
+.onboarding-step-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--mat);
+  font-size: 0.9rem;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+
+.onboarding-step.is-done .onboarding-step-icon {
+  border-color: var(--money);
+  background: var(--money);
+  color: #fff;
+  font-weight: 700;
+}
+
+.onboarding-step.is-active .onboarding-step-icon {
+  border-color: var(--gold);
+  box-shadow: 0 0 10px rgba(201, 162, 39, 0.4);
+}
+
+.onboarding-step-line {
+  flex: 1;
+  height: 2px;
+  background: var(--border);
+  margin: 0 0.4rem;
+}
+
+.onboarding-step.is-done .onboarding-step-line { background: var(--money); }
+
+/* --- Stats: dinheiro com verde vibrante --- */
+.stat-value--money { color: var(--money); }
+
+/* --- Botão terciário: só ícone --- */
+/* Nome distinto de .btn-icon (main.css) — aquela classe é pra ícones
+   inline pequenos (rename/close, opacity 0.5), não pra botões de ação
+   dentro de .btn/.btn-secondary. Reusar o mesmo nome esmaecia o botão
+   Salvar sem querer. */
+.btn-only-icon {
+  padding: 0.5rem 0.65rem;
+  min-width: 0;
+  font-size: 1rem;
+}
+
+/* --- Sidebar: link ativo com cor no ícone/label + dot de notificação --- */
+.nav-link.active {
+  color: var(--red-ink);
+}
+
+.nav-link.active .rive-fallback,
+.nav-link.active span:last-of-type {
+  color: inherit;
+}
+
+.nav-dot {
+  position: absolute;
+  top: 50%;
+  right: 0.6rem;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 6px rgba(160, 30, 36, 0.8);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poster-offer-btn { animation: none; }
+}
+
+/* --- Atalhos de teclado --- */
+kbd {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-light);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+.shortcuts-hint {
+  width: 100%;
+  padding: 0.4rem 0.625rem;
+  background: none;
+  border: none;
+  color: var(--ash);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.shortcuts-hint:hover { color: var(--chalk); }
+
+/* ==========================================================================
+   Tutorial Coach — spotlight espacial (TutorialCoach)
+   ========================================================================== */
+
+.tutorial-coach.modal-overlay {
+  /* Sobrescreve o .modal-overlay padrão (centraliza + fundo escuro sólido) —
+     aqui o "fundo escuro" é o próprio buraco recortado, não um retângulo. */
+  background: transparent;
+  display: block;
+  padding: 0;
+}
+
+.tutorial-coach-hole {
+  position: fixed;
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(4, 4, 6, 0.8);
+  border: 2px solid var(--belt);
+  pointer-events: none;
+  transition: top 0.35s var(--ease-out-expo, ease), left 0.35s var(--ease-out-expo, ease),
+              width 0.35s var(--ease-out-expo, ease), height 0.35s var(--ease-out-expo, ease);
+  z-index: 1;
+}
+
+.tutorial-coach-callout {
+  position: fixed;
+  z-index: 2;
+  width: min(320px, calc(100vw - 24px));
+  padding: 1rem 1.15rem;
+  background: var(--mat);
+  border: 1px solid var(--border-light);
+  border-top: 2px solid var(--belt);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  transition: top 0.35s var(--ease-out-expo, ease), left 0.35s var(--ease-out-expo, ease);
+}
+
+.tutorial-coach-dots {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+}
+
+.tutorial-coach-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.tutorial-coach-dot.is-active { background: var(--belt); }
+
+.tutorial-coach-title {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 92, 'wght' 700;
+  font-size: 1.05rem;
+  margin-bottom: 0.35rem;
+}
+
+.tutorial-coach-text {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin-bottom: 0.9rem;
+}
+
+.tutorial-coach-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tutorial-coach-hole,
+  .tutorial-coach-callout { transition: none; }
+}

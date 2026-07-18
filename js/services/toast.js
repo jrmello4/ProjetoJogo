@@ -1,3 +1,6 @@
+import { AudioService } from './audio-service.js';
+import { escapeHtml } from '../utils/helpers.js';
+
 const TYPE_META = {
   success: { icon: '✅', mod: 'toast--success' },
   info: { icon: 'ℹ️', mod: 'toast--info' },
@@ -30,6 +33,11 @@ export class Toast {
     const container = this._container();
     const meta = TYPE_META[type] || TYPE_META.info;
 
+    // Som só nos toasts que merecem atenção — semanal ('week-advance') e
+    // informativos ficam mudos pra não virar fadiga sonora.
+    if (type === 'achievement' || type === 'hall-of-fame') AudioService.play('success');
+    else if (type === 'warning' || type === 'danger' || type === 'injury') AudioService.play('notify');
+
     // Limita a pilha de toasts visíveis
     while (container.children.length >= MAX_VISIBLE) {
       container.firstElementChild.remove();
@@ -37,11 +45,12 @@ export class Toast {
 
     const toast = document.createElement('div');
     toast.className = `toast ${meta.mod}`;
+    // title/message vêm de notif com nomes de lutadores — escapar evita XSS
     toast.innerHTML = `
       <span class="toast-icon">${meta.icon}</span>
       <div class="toast-body">
-        <div class="toast-title">${title}</div>
-        ${message ? `<div class="toast-message">${message}</div>` : ''}
+        <div class="toast-title">${escapeHtml(title)}</div>
+        ${message ? `<div class="toast-message">${escapeHtml(message)}</div>` : ''}
       </div>
       <button class="toast-close" aria-label="Fechar">&times;</button>
     `;

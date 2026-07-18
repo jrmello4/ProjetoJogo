@@ -11,8 +11,9 @@ const MAX_ENTRIES = 300;
 // entry: { fighterId, type, atAbsWeek, magnitude (0-100), data }
 // types: 'title_won' | 'upset' | 'streak' | 'rematch' | 'dna_discovered' |
 //        'permanent_scar' | 'academy_switch' | 'manager_switch' |
-//        'rivalry_born' | 'finish' | 'provocation' | 'viral' |
-//        'weapon_revealed' | 'figured_out' | 'reinvention' | 'bait_success'
+//        'rivalry_born' | 'rival_arc' | 'finish' | 'provocation' | 'viral' |
+//        'narrative_choice' | 'weapon_revealed' | 'figured_out' |
+//        'reinvention' | 'bait_success'
 //
 // fighterId identifica de QUEM é o momento (o lutador do jogador vivendo
 // aquele evento) — obrigatório desde a correção do bug de "Momentos
@@ -68,7 +69,11 @@ export class CareerLogService {
   // atual do lutador (derrota recente, streak, lesão, rival, título,
   // bastidores P5.2).
   // Retorna null se nenhum pool de eventos se aplicar.
-  selectNarrativeEvent(fighter) {
+  //
+  // `ctx` opcional: { hasTrainingPartners, hasActiveRival } — liga pools
+  // que antes existiam no config (moral_dilemma, rival_victory) mas nunca
+  // entravam no sorteio semanal.
+  selectNarrativeEvent(fighter, ctx = {}) {
     const events = [];
 
     // Após derrota recente (últimas 5 lutas)
@@ -125,10 +130,50 @@ export class CareerLogService {
       events.push(...(NARRATIVE_EVENTS.post_title_loss || []));
     }
 
+    // Dilema moral — só faz sentido se existe gente no tatame com quem você
+    // tem vínculo (sparring / bond). Antes o pool existia e nunca era puxado.
+    if (ctx.hasTrainingPartners || Object.keys(fighter.sparredWith || {}).length > 0) {
+      events.push(...(NARRATIVE_EVENTS.moral_dilemma || []));
+    }
+
+    // Rival "no ar" sem luta esta semana — pressão de imprensa genérica.
+    // Arcos concretos (rival lutou hoje) abrem prompt dedicado em processRivalArcs.
+    if (ctx.hasActiveRival) {
+      events.push(...(NARRATIVE_EVENTS.rival_victory || []).map(e => ({
+        ...e,
+        prompt: 'A imprensa não para de comparar você ao seu rival. Como se posiciona?',
+      })));
+    }
+
+    // Herói local — popularidade alta sem heat de vilão
+    if ((fighter.popularity || 0) >= 50 && (fighter.narrativeHeat || 0) < 6) {
+      events.push(...(NARRATIVE_EVENTS.hometown_hero || []));
+    }
+
+    // Pressão de persona — heat alto ou pop alta com derrota recente
+    if ((fighter.narrativeHeat || 0) >= 6 || ((fighter.popularity || 0) >= 55 && lastFightLost)) {
+      events.push(...(NARRATIVE_EVENTS.heel_turn || []));
+    }
+
     if (events.length === 0) return null;
 
     // Escolhe um evento aleatório do pool reunido
     const pool = events[Math.floor(Math.random() * events.length)];
     return pool;
+  }
+
+  /**
+   * Clona um template de NARRATIVE_EVENTS preenchendo {placeholders}.
+   */
+  static fillEventTemplate(template, vars = {}) {
+    if (!template) return null;
+    const fill = (s) => String(s || '').replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? vars[k] : `{${k}}`));
+    return {
+      prompt: fill(template.prompt),
+      choices: (template.choices || []).map(c => ({
+        ...c,
+        text: fill(c.text),
+      })),
+    };
   }
 }

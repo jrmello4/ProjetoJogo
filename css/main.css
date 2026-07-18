@@ -993,6 +993,22 @@ tbody tr:hover td { background: var(--bg-hover); }
   .attr-grid { grid-template-columns: 1fr; }
   .modal-actions { flex-direction: column-reverse; }
   .modal-actions .btn { width: 100%; }
+
+  /* Alvo de toque mínimo (~44px) — 36px de altura era estreito demais pra
+     dedo em tela pequena. */
+  .nav-link { padding: 0.7rem 0.75rem; }
+
+  /* Backdrop que aparece só com o menu aberto: escurece o conteúdo por
+     baixo (sinaliza que é modal) e fecha ao tocar fora — sem isso o
+     dashboard inteiro ficava clicável por baixo do menu aberto. */
+  .sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 4, 6, 0.55);
+    z-index: 150;
+  }
+  body.sidebar-open .sidebar-backdrop { display: block; }
 }
 
 @media (prefers-reduced-motion: reduce) {

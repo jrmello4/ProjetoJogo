@@ -19,9 +19,12 @@ import { ManagerService } from '../services/manager-service.js';
 import { CareerLogService } from '../services/career-log-service.js';
 import { RivalryService } from '../services/rivalry-service.js';
 import { SocialMediaService } from '../services/social-media-service.js';
+import { PodcastService } from '../services/podcast-service.js';
+import { YearReviewService } from '../services/year-review-service.js';
+import { CrowdService } from '../services/crowd-service.js';
 import { SocialMedia } from './social-media.js';
 import { FightOffer } from '../models/fight-offer.js';
-import { generateId, clamp, pickTopRandom } from '../utils/helpers.js';
+import { generateId, clamp, pickTopRandom, sanitizePlayerName } from '../utils/helpers.js';
 import { TrainingCamp } from './training-camp.js';
 import { WeeklyTrainingController } from './weekly-training.js';
 import { FinanceController } from './finance-controller.js';
@@ -79,6 +82,8 @@ export class GameController {
     this.careerLogService = null;
     this.rivalryService = null;
     this.socialMediaService = null;
+    this.podcastService = null;
+    this.yearReviewService = null;
     this.financeCtrl = null;
     this.narrativeCtrl = null;
     this.careerCtrl = null;
@@ -104,6 +109,8 @@ export class GameController {
     this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.contractService, this.rivalryService);
     this.sponsorService = new SponsorService(this.db, this.notifService, this.careerLogService);
     this.socialMediaService = new SocialMediaService(this.db, this.notifService);
+    this.podcastService = new PodcastService(this.db, this.careerLogService, this.notifService);
+    this.yearReviewService = new YearReviewService(this.db, this.careerLogService, this.notifService);
 
     // Sub-controllers extraídos do GameController (P8.2)
     this.financeCtrl = new FinanceController();
@@ -116,6 +123,12 @@ export class GameController {
     } else {
       await this._applyPatches(meta);
     }
+
+    // Housekeeping fora do caminho crítico — nunca era chamado antes, então
+    // o store de notificações crescia pra sempre numa carreira longa (não
+    // trava nada sozinho, mas pesa a lista da tela de Notificações e o save
+    // exportado). Não bloqueia o carregamento do jogo se falhar.
+    this.notifService.clearOld().catch(() => {});
 
     return await this.getPlayerFighter();
   }
@@ -243,7 +256,7 @@ export class GameController {
     }
 
     data.id = generateId();
-    data.name = name || data.name;
+    data.name = sanitizePlayerName(name, { fallback: data.name || 'Lutador Anônimo' });
     data.fightingStyle = orig?.label || arch.label;
     data.status = 'roster';
     data.organizationId = null;
@@ -602,6 +615,12 @@ export class GameController {
     await this.narrativeCtrl.generateHeadlines(now, world, fighter);
     await this.narrativeCtrl.generateCallouts(now, fighter);
 
+    // Mundo vivo: o rival luta sem você — a história continua (manchete,
+    // careerLog, intensidade, e às vezes Momento da Carreira com nomes reais).
+    const rivalStories = fighter.status !== 'retired'
+      ? await this.narrativeCtrl.processRivalArcs(now, fighter)
+      : [];
+
     // §D.2 — só lê `fighter` (id/status), nunca muta nem salva: os efeitos
     // de popularidade/moral só acontecem quando o jogador responde ao
     // prompt (resolveSocialPrompt), bem depois do save único deste método.
@@ -643,11 +662,23 @@ export class GameController {
     }
 
     // Fase 1: Evento narrativo semanal (a cada ~5 semanas)
+    // Se processRivalArcs já abriu um prompt com nomes reais, não sobrescreve.
     if (now % 5 === 0 && fighter.status !== 'retired') {
       let narrativePrompt;
       try { narrativePrompt = await this.db.get('gameState', 'narrative-prompt'); } catch { /* ok */ }
       if (!narrativePrompt) {
-        const narrativeEvent = this.careerLogService.selectNarrativeEvent(fighter);
+        const rivalriesForCtx = await this.rivalryService.getRivalries(fighter.id);
+        let hasTrainingPartners = Object.keys(fighter.sparredWith || {}).length > 0;
+        if (!hasTrainingPartners && this.partnersService) {
+          try {
+            const teammates = await this.partnersService.getTeammates(fighter);
+            hasTrainingPartners = (teammates || []).length > 0;
+          } catch { /* ok */ }
+        }
+        const narrativeEvent = this.careerLogService.selectNarrativeEvent(fighter, {
+          hasActiveRival: rivalriesForCtx.length > 0,
+          hasTrainingPartners,
+        });
         if (narrativeEvent) {
           const choices = narrativeEvent.choices.map((c, i) => ({
             ...c,
@@ -662,6 +693,21 @@ export class GameController {
           await this.notifService.add('headline', '📰 Momento da Carreira', narrativeEvent.prompt);
         }
       }
+    }
+
+    // Podcast — a carreira contada de volta (memória > HUD)
+    if (fighter.status !== 'retired' && this.podcastService) {
+      await this.podcastService.processWeek(now, fighter, { rivalStories });
+    }
+
+    // Torcida: decay de heat/hype + persona pública
+    if (fighter.status !== 'retired') {
+      CrowdService.applyWeeklyDecay(fighter);
+    }
+
+    // Retrospectiva anual (fim de ano de jogo = semana múltipla de 52)
+    if (now > 0 && now % 52 === 0 && fighter.status !== 'retired' && this.yearReviewService) {
+      await this.yearReviewService.processYearEnd(now, fighter);
     }
 
     // P5.3: Até o Fim — accelerated age decline (2x) + permanent injury risk
@@ -990,14 +1036,12 @@ export class GameController {
     return { ok: true, booking, weighIn: booking.weighIn };
   }
 
-  // ===== Rivalidade: resolve a escolha do jogador no prompt semanal =====
   async resolveRivalryInteraction(choice) {
     const fighter = await this.getPlayerFighter();
     if (!fighter) return { ok: false, reason: 'Nenhum lutador ativo.' };
     return this.narrativeCtrl.resolveRivalryInteraction(choice, fighter.id);
   }
 
-  // ===== Evento narrativo: resolve a escolha do jogador =====
   async resolveNarrativeChoice(choiceKey) {
     const fighter = await this.getPlayerFighter();
     if (!fighter) return { ok: false, reason: 'Nenhum lutador ativo.' };
@@ -1561,14 +1605,12 @@ export class GameController {
     }
   }
 
-  // ===== P2.2: Resolve rehab choice =====
   async resolveRehabChoice(choiceKey) {
     const fighter = await this.getPlayerFighter();
-    if (!fighter) return { ok: false, reason: 'Nenhuma escolha de reabilitação pendente.' };
+    if (!fighter) return { ok: false, reason: 'Nenhum lutador ativo.' };
     return this.careerCtrl.resolveRehabChoice(choiceKey, fighter.id);
   }
 
-  // P5.3: Resolve a escolha de fim de carreira do jogador
   async resolveEndCareer(fighterId, choiceKey) {
     return this.careerCtrl.resolveEndCareer(fighterId, choiceKey);
   }
@@ -1631,6 +1673,51 @@ export class GameController {
     let weeklyTrainingPrompt = null;
     try { const wtp = await this.db.get('gameState', 'weeklyTrainingPrompt'); if (wtp?.active) weeklyTrainingPrompt = wtp; } catch { /* ok */ }
 
+    const podcastEpisode = this.podcastService ? await this.podcastService.getLatest() : null;
+    const yearReview = this.yearReviewService ? await this.yearReviewService.getLatest() : null;
+
+    let crowdSnapshot = null;
+    try {
+      const cr = await this.db.get('gameState', 'crowdReaction');
+      if (cr?.reaction && (!fighter || cr.absWeek >= (now - 3))) {
+        crowdSnapshot = { reaction: cr.reaction, fanMail: cr.fanMail || [], opponentName: cr.opponentName };
+      }
+    } catch { /* ok */ }
+
+    // Comparação na mídia: você vs rival mais quente — história, não só OVR
+    let mediaCompare = null;
+    if (fighter && this.rivalryService) {
+      const rivs = await this.rivalryService.getRivalries(fighter.id);
+      if (rivs.length > 0) {
+        const top = rivs.reduce((a, b) => (b.intensity > a.intensity ? b : a));
+        const rid = top.fighterAId === fighter.id ? top.fighterBId : top.fighterAId;
+        const rival = await this.fighterCtrl.getFighter(rid);
+        if (rival) {
+          const h2h = (fighter.fights || []).filter(f => f.opponentId === rival.id);
+          const wins = h2h.filter(f => f.won === true).length;
+          const losses = h2h.filter(f => f.won === false).length;
+          mediaCompare = {
+            rivalName: rival.name,
+            rivalId: rival.id,
+            intensity: top.intensity,
+            type: top.type,
+            yourRecord: `${fighter.record.wins}-${fighter.record.losses}`,
+            rivalRecord: `${rival.record.wins}-${rival.record.losses}`,
+            yourOvr: fighter.overallRating,
+            rivalOvr: rival.overallRating,
+            yourPop: fighter.popularity || 0,
+            rivalPop: rival.popularity || 0,
+            h2h: `${wins}-${losses}`,
+            headline: top.intensity >= 7
+              ? `A divisão só fala em ${fighter.name} vs ${rival.name}`
+              : top.intensity >= 4
+                ? `A imprensa compara: ${fighter.name} e ${rival.name}`
+                : `${rival.name} ainda está no radar`,
+          };
+        }
+      }
+    }
+
     // P2.2: rehab choice pending
     const pendingRehab = fighter?.injury?.stage === 'rehab' && !fighter.injury.rehabChosen;
 
@@ -1670,6 +1757,10 @@ export class GameController {
       rivalryPrompt,
       narrativePrompt,
       weeklyTrainingPrompt,
+      podcastEpisode,
+      yearReview,
+      crowdSnapshot,
+      mediaCompare,
       pendingRehab,
       weighInPrompt,
       readiness,
@@ -1677,7 +1768,11 @@ export class GameController {
       state,
       now,
       onboarding: fighter && OnboardingService.shouldShow(fighter)
-        ? { activeStep: OnboardingService.activeStep(fighter), progress: OnboardingService.progress(fighter) }
+        ? {
+            activeStep: OnboardingService.activeStep(fighter),
+            progress: OnboardingService.progress(fighter),
+            steps: OnboardingService.steps(fighter),
+          }
         : null,
     };
   }

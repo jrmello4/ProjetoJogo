@@ -1,5 +1,6 @@
-import { getWeightClassLabel, getWeightClassName, getNationalityFlag } from '../utils/helpers.js';
+import { getWeightClassLabel, getWeightClassName, getNationalityFlag, e } from '../utils/helpers.js';
 import { TIER_LABELS } from '../config/game-config.js';
+import { BiographyService } from '../services/biography-service.js';
 
 const DIVISION_ORDER = [
   'Heavyweight', 'Light Heavyweight', 'Middleweight', 'Welterweight',
@@ -62,7 +63,7 @@ export class RankingsView {
       ${promos.map(p => `
         <div class="card mb-2 belt-board" data-reveal>
           <div class="card-header">
-            <span class="card-title"><span class="belt-mark-icon"></span> ${p.name}</span>
+            <span class="card-title"><span class="belt-mark-icon"></span> ${e(p.name)}</span>
             <span class="badge ${p.tier === 1 ? 'badge-danger' : p.tier === 2 ? 'badge-warning' : 'badge-info'}">${TIER_LABELS[p.tier]}</span>
           </div>
           <div class="belt-grid">
@@ -77,7 +78,7 @@ export class RankingsView {
     // Quem é o próximo da fila. É esta informação que explica por que a
     // chance de título não chega até você.
     const nextInLine = b.topContender
-      ? `<div class="belt-contender">Desafiante nº1 · ${b.topContender.name}${isMine(b.topContender, playerFighterId) ? ' (você)' : ''}</div>`
+      ? `<div class="belt-contender">Desafiante nº1 · ${e(b.topContender.name)}${isMine(b.topContender, playerFighterId) ? ' (você)' : ''}</div>`
       : '';
 
     // G2: top 5 desafiantes
@@ -88,7 +89,7 @@ export class RankingsView {
           ${b.contenders.slice(0, 5).map((c, i) => `
             <div class="rank-row rank-row-sm" data-fighter-click="${c?.id || ''}">
               <span class="rank-number" style="font-size:0.55rem">#${i + 1}</span>
-              <span class="text-xs" style="flex:1">${c?.name || '—'}${isMine(c, playerFighterId) ? ' (você)' : ''}</span>
+              <span class="text-xs" style="flex:1">${e(c?.name || '—')}${isMine(c, playerFighterId) ? ' (você)' : ''}</span>
               <span class="text-xs text-muted">${c?.record?.wins ?? 0}-${c?.record?.losses ?? 0} · ${c?.overallRating ?? '?'}</span>
             </div>
           `).join('')}
@@ -108,14 +109,32 @@ export class RankingsView {
     }
 
     const mine = b.isPlayerFighter;
+    // Biografia curta do campeão NPC — o mundo tem rostos, não só números
+    let blurb = '';
+    if (!mine && b.champion) {
+      const bio = BiographyService.compose({
+        ...b.champion,
+        titlesWon: Math.max(1, b.champion.titlesWon || 1),
+        status: 'roster',
+        fights: b.champion.fights || [],
+      }, {});
+      const line = (bio.paragraphs || []).find(p => p.includes('Cartel') || p.includes('cinturão') || p.includes('Ergueu'))
+        || bio.paragraphs?.[1]
+        || bio.legacyLine
+        || '';
+      if (line) {
+        blurb = `<div class="text-xs text-muted mt-1" style="line-height:1.35">${e(line)}</div>`;
+      }
+    }
     return `
       <div class="belt-slot ${mine ? 'belt-slot--mine' : ''}" data-fighter-click="${b.champion.id}">
         <div class="belt-division">${getWeightClassName(b.weightClass)}</div>
-        <div class="belt-champion">${b.champion.name}</div>
+        <div class="belt-champion">${e(b.champion.name)}</div>
         <div class="belt-meta">
           ${b.champion.record?.wins ?? 0}-${b.champion.record?.losses ?? 0}-${b.champion.record?.draws ?? 0}
           ${b.defenses > 0 ? ` · ${b.defenses} defesa${b.defenses === 1 ? '' : 's'}` : ''}
         </div>
+        ${blurb}
         ${nextInLine}
         ${contendersList}
         ${mine ? '<span class="badge badge-danger belt-mine-tag">Você</span>' : ''}
@@ -138,7 +157,7 @@ export class RankingsView {
             <div class="rank-row ${isMine(c.fighter, playerFighterId) ? 'rank-row--mine' : ''}" data-fighter-click="${c.fighter.id}">
               <span class="rank-number">#${i + 1}</span>
               <span class="text-sm font-bold" style="flex:1">
-                ${c.fighter?.nationality?.code ? getNationalityFlag(c.fighter.nationality.code) + ' ' : ''}${c.fighter?.name || '—'}
+                ${c.fighter?.nationality?.code ? getNationalityFlag(c.fighter.nationality.code) + ' ' : ''}${e(c.fighter?.name || '—')}
                 ${(c.fighter.titlesWon || 0) > 0 ? '<span class="belt-mark ml-1" title="Já foi campeão"><span class="belt-mark-icon"></span></span>' : ''}
                 ${isMine(c.fighter, playerFighterId) ? '<span class="badge badge-danger ml-2" style="font-size:0.6rem">VOCÊ</span>' : ''}
               </span>

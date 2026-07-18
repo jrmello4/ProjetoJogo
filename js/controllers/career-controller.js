@@ -145,13 +145,15 @@ export class CareerController {
   // chegar lá) — a cerimônia (RetirementCeremonyView) sempre caía pro Hall
   // da Fama comum, nunca abria de verdade.
   async _markRetirementForCeremony(fighter, reasons) {
-    const existing = await this.db.get('hallOfFame', fighter.id);
-    if (!existing) {
-      await HallOfFame.forceInduct(this.db, fighter, reasons);
-    }
+    // Hall da Fama só pra quem MERECE (mesmos critérios dos NPCs). A
+    // cerimônia, todo aposentado tem — via snapshot guardado no gameState,
+    // não via entrada forçada no Hall (o forceInduct antigo enchia o Hall
+    // de lutadores sem currículo).
+    await HallOfFame.inductIfEligible(this.db, fighter, reasons);
     const state = await this.seasonService.getState();
     state.meta = state.meta || {};
     state.meta.lastRetirementFighterId = fighter.id;
+    state.meta.retirementCeremonyEntry = HallOfFame.buildEntry(fighter, reasons);
     await this.db.put('gameState', state);
   }
 

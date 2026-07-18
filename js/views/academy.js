@@ -1,4 +1,4 @@
-import { formatCurrency } from '../utils/helpers.js';
+import { formatCurrency, e } from '../utils/helpers.js';
 
 const PERSONALITY_LABEL = { aggressive: 'Agressivo', cautious: 'Cauteloso', analytical: 'Analítico' };
 const MANAGER_STYLE_LABEL = { aggressive: 'Agressivo', conservative: 'Conservador', loyal: 'Leal' };
@@ -18,10 +18,10 @@ export class AcademyView {
       return `
         <div class="card stat-card stat-card--span-4 ${isCurrent ? 'stat-card--champion' : ''}" data-reveal>
           <div class="card-header">
-            <span class="card-title">${a.name}</span>
+            <span class="card-title">${e(a.name)}</span>
             ${isCurrent ? '<span class="badge badge-success">Sua academia</span>' : ''}
           </div>
-          <div class="text-xs text-muted mb-2">${a.philosophy} · Técnico: ${a.headCoach.name} (${PERSONALITY_LABEL[a.headCoach.personality] || a.headCoach.personality})</div>
+          <div class="text-xs text-muted mb-2">${e(a.philosophy)} · Técnico: ${e(a.headCoach.name)} (${PERSONALITY_LABEL[a.headCoach.personality] || a.headCoach.personality})</div>
           <div class="flex items-center gap-1 mb-2" style="flex-wrap:wrap">${specialtiesHtml}</div>
           <div class="grid grid-cols-2 gap-2 mb-3">
             <div>
@@ -45,7 +45,7 @@ export class AcademyView {
       return `
         <div class="card stat-card stat-card--span-4 ${isCurrent ? 'stat-card--champion' : ''}" data-reveal>
           <div class="card-header">
-            <span class="card-title">${m.name}</span>
+            <span class="card-title">${e(m.name)}</span>
             ${isCurrent ? '<span class="badge badge-success">Seu empresário</span>' : ''}
           </div>
           <div class="text-xs text-muted mb-2">${MANAGER_STYLE_LABEL[m.style] || m.style}</div>

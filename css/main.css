@@ -659,10 +659,13 @@ tbody tr:hover td { background: var(--bg-hover); }
   justify-content: center;
   padding: 1.5rem;
   z-index: 1000;
-  animation: fadeIn 0.2s ease;
+  animation: modalOverlayIn 0.18s var(--ease-out-expo) both;
 }
 
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.modal-overlay.is-closing { animation: modalOverlayOut 0.14s var(--ease-out-expo) both; }
+
+@keyframes modalOverlayIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modalOverlayOut { from { opacity: 1; } to { opacity: 0; } }
 
 .modal {
   background: var(--mat);
@@ -675,7 +678,13 @@ tbody tr:hover td { background: var(--bg-hover); }
   max-height: 88vh;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
+  animation: modalPanelIn 0.18s var(--ease-out-expo) both;
 }
+
+.modal-overlay.is-closing .modal { animation: modalPanelOut 0.14s var(--ease-out-expo) both; }
+
+@keyframes modalPanelIn  { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes modalPanelOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
 
 .modal-header {
   display: flex;
@@ -727,6 +736,278 @@ tbody tr:hover td { background: var(--bg-hover); }
   gap: 0.625rem;
   justify-content: flex-end;
   margin-top: 1.5rem;
+}
+
+/* ==========================================================================
+   Ad slot — placa de patrocinador em pausas naturais (Simular Período,
+   resumo pós-luta). Discreta de propósito: mesma linguagem do
+   .section-label (mono, letter-spacing largo, tom apagado) em vez de
+   qualquer coisa que grite "anúncio". Ver js/services/ad-service.js.
+   ========================================================================== */
+
+.ad-slot {
+  margin-top: 1.25rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--rule);
+  text-align: center;
+}
+
+.ad-slot--fictional {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.ad-slot-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--ash);
+}
+
+.ad-slot-brand {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 100, 'wght' 600;
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* ==========================================================================
+   Editor de aparência + retrato (appearance-editor.js / portrait-service.js)
+   ========================================================================== */
+
+.appearance-editor {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.appearance-preview-wrap {
+  display: flex;
+  gap: 0.875rem;
+  align-items: stretch;
+  width: 100%;
+}
+
+.appearance-preview {
+  flex: 0 0 auto;
+  background: linear-gradient(180deg, #1c1815 0%, #0e0c0b 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.35rem 0.75rem 0;
+  line-height: 0;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.appearance-identity {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.35rem 0;
+}
+
+.appearance-identity-line {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.appearance-identity-line span {
+  display: inline-block;
+  min-width: 3.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ash);
+  margin-right: 0.4rem;
+}
+
+.appearance-tabs {
+  display: flex;
+  gap: 0.25rem;
+  width: 100%;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.35rem;
+  overflow-x: auto;
+}
+
+.appearance-tab {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.4rem 0.25rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--ash);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color var(--anim-fast) ease, color var(--anim-fast) ease, background var(--anim-fast) ease;
+}
+
+.appearance-tab:hover {
+  color: var(--chalk);
+  border-color: var(--border);
+}
+
+.appearance-tab.is-active {
+  color: var(--accent, var(--chalk));
+  border-color: var(--border-light, var(--border));
+  background: color-mix(in srgb, var(--accent, #a01c28) 8%, transparent);
+}
+
+.appearance-tab-icon { font-size: 0.95rem; line-height: 1; }
+
+.appearance-tab-label {
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.appearance-controls {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.1rem;
+  width: 100%;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 0.15rem;
+}
+
+.appearance-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.appearance-actions .btn { flex: 1; min-width: 7rem; }
+
+.appearance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.appearance-label {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ash);
+  white-space: nowrap;
+}
+
+.appearance-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.appearance-value {
+  font-size: 0.75rem;
+  min-width: 96px;
+  max-width: 120px;
+  text-align: center;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appearance-arrow {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--chalk);
+  width: 26px;
+  height: 26px;
+  line-height: 1;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: border-color var(--anim-fast) ease;
+}
+
+.appearance-arrow:hover { border-color: var(--border-light); }
+
+.appearance-swatches {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 70%;
+}
+
+.appearance-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.appearance-swatch.is-active {
+  border-color: var(--chalk);
+  box-shadow: 0 0 0 1px var(--accent, var(--chalk));
+}
+
+/* Retrato solto (perfil, cards) — moldura de cartaz */
+.portrait-frame {
+  background: linear-gradient(180deg, #1c1815 0%, #0e0c0b 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  line-height: 0;
+  overflow: hidden;
+  display: inline-block;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.portrait-frame .portrait {
+  display: block;
+  vertical-align: top;
+}
+
+@media (max-width: 640px) {
+  .appearance-preview-wrap { flex-direction: column; align-items: center; }
+  .appearance-identity { width: 100%; }
+  .appearance-arrow { width: 34px; height: 34px; font-size: 1.05rem; }
+  .appearance-swatch { width: 22px; height: 22px; }
+  .appearance-row { padding: 0.45rem 0; }
+  .appearance-controls { max-height: 260px; }
+  .appearance-tab-label { display: none; }
+}
+
+/* Cosmético "Confete na Vitória" — peças criadas/animadas via GSAP em
+   js/app.js (_fireConfetti). position:fixed pra nunca afetar layout. */
+.confetti-piece {
+  position: fixed;
+  width: 7px;
+  height: 12px;
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 2000;
 }
 
 /* ==========================================================================
@@ -997,6 +1278,12 @@ tbody tr:hover td { background: var(--bg-hover); }
   /* Alvo de toque mínimo (~44px) — 36px de altura era estreito demais pra
      dedo em tela pequena. */
   .nav-link { padding: 0.7rem 0.75rem; }
+
+  /* Botões em geral: .btn-sm chegava a ~27px de altura no mobile —
+     min-height garante área de dedo sem mudar o desenho no desktop. */
+  .btn { min-height: 40px; }
+  .btn-sm { min-height: 36px; }
+  .btn-icon, .modal-close { min-width: 36px; min-height: 36px; }
 
   /* Backdrop que aparece só com o menu aberto: escurece o conteúdo por
      baixo (sinaliza que é modal) e fecha ao tocar fora — sem isso o

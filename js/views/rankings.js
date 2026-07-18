@@ -1,6 +1,7 @@
 import { getWeightClassLabel, getWeightClassName, getNationalityFlag, e } from '../utils/helpers.js';
 import { TIER_LABELS } from '../config/game-config.js';
 import { BiographyService } from '../services/biography-service.js';
+import { PortraitService } from '../services/portrait-service.js';
 
 const DIVISION_ORDER = [
   'Heavyweight', 'Light Heavyweight', 'Middleweight', 'Welterweight',
@@ -156,6 +157,7 @@ export class RankingsView {
           ${top.map((c, i) => `
             <div class="rank-row ${isMine(c.fighter, playerFighterId) ? 'rank-row--mine' : ''}" data-fighter-click="${c.fighter.id}">
               <span class="rank-number">#${i + 1}</span>
+              <span class="portrait-frame rank-portrait">${PortraitService.renderFighter(c.fighter, { size: 28 })}</span>
               <span class="text-sm font-bold" style="flex:1">
                 ${c.fighter?.nationality?.code ? getNationalityFlag(c.fighter.nationality.code) + ' ' : ''}${e(c.fighter?.name || '—')}
                 ${(c.fighter.titlesWon || 0) > 0 ? '<span class="belt-mark ml-1" title="Já foi campeão"><span class="belt-mark-icon"></span></span>' : ''}

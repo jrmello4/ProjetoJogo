@@ -144,6 +144,32 @@
   transition: var(--transition);
 }
 
+/* Retrato pequeno na linha do ranking — recorte circular, só o rosto. */
+.rank-portrait {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.rank-portrait svg { margin-top: 8px; }
+
+/* Retrato nas ofertas — mesmo recorte circular do ranking. */
+.offer-portrait {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.offer-portrait svg { margin-top: 10px; }
+
 .rank-row:hover { background: var(--bg-hover); }
 
 .rank-number {
@@ -818,7 +844,140 @@
 }
 
 /* ==========================================================================
-   Onboarding & period presets
+   Character creation wizard (pre-career) — never reuse .onboarding-step
+   ========================================================================== */
+
+.modal--character-create {
+  display: flex;
+  flex-direction: column;
+  max-height: min(92vh, 900px);
+}
+
+.char-create-progress {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0.75rem 0 0.5rem;
+  align-items: center;
+}
+
+.char-create-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.25rem;
+  background: transparent;
+  border: none;
+  font: inherit;
+  color: var(--ash);
+  cursor: default;
+  min-width: 0;
+}
+
+.char-create-step.is-clickable { cursor: pointer; }
+.char-create-step.is-clickable:hover .char-create-step-num {
+  border-color: var(--text-secondary);
+}
+
+.char-create-step-num {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  background: var(--canvas);
+}
+
+.char-create-step.is-active .char-create-step-num {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.char-create-step.is-done .char-create-step-num {
+  background: var(--money, #2d8a4e);
+  border-color: var(--money, #2d8a4e);
+  color: #fff;
+}
+
+.char-create-step-label {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.char-create-lead {
+  color: var(--text-secondary);
+  margin: 0.5rem 0 0.75rem;
+}
+
+.char-create-body {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding-right: 0.15rem;
+}
+
+.char-create-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  position: sticky;
+  bottom: 0;
+  padding-top: 0.75rem;
+  background: var(--panel, var(--surface, var(--bg)));
+}
+
+.char-create-actions .btn { flex: 1; min-width: 7rem; }
+
+.char-create-error {
+  color: var(--danger, #e04);
+  font-size: 0.875rem;
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--danger, #e04) 40%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--danger, #e04) 8%, transparent);
+}
+
+.char-create-error[hidden] { display: none !important; }
+
+.char-create-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.char-create-chip {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--canvas);
+  color: var(--text-secondary);
+}
+
+@media (max-width: 520px) {
+  .char-create-step-label { display: none; }
+}
+
+/* ==========================================================================
+   Onboarding & period presets (post-career dashboard — separate system)
    ========================================================================== */
 
 .onboarding-steps {
@@ -1052,10 +1211,14 @@
   border-radius: 50%;
   background: var(--bg-hover);
   border: 1px solid var(--border);
-  font-size: 1.5rem;
-  filter: grayscale(1) brightness(0.8);
+  overflow: hidden;
+  /* Retrato do oponente levemente dessaturado — é uma oferta, não o card
+     dele; o rosto informa sem competir com a tipografia do poster. */
+  filter: grayscale(0.5) brightness(0.9);
   flex-shrink: 0;
 }
+
+.poster-offer-silhouette svg { margin-top: 10px; }
 
 .poster-offer-vs {
   font-family: var(--font-mono);
@@ -1261,7 +1424,10 @@ kbd {
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
   transition: top 0.35s var(--ease-out-expo, ease), left 0.35s var(--ease-out-expo, ease);
+  animation: modalPanelIn 0.18s var(--ease-out-expo) both;
 }
+
+.tutorial-coach.modal-overlay.is-closing .tutorial-coach-callout { animation: modalPanelOut 0.14s var(--ease-out-expo) both; }
 
 .tutorial-coach-dots {
   display: flex;

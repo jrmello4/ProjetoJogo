@@ -3,6 +3,7 @@ import { FIGHTING_STYLES, INJURY_CONFIG, LEVEL_CONFIG, TIER_LABELS, TRAINING_FOC
 import { PodcastService } from '../services/podcast-service.js';
 import { YearReviewService } from '../services/year-review-service.js';
 import { CrowdService } from '../services/crowd-service.js';
+import { PortraitService } from '../services/portrait-service.js';
 
 const tierBadgeCls = (tier) => (tier === 1 ? 'badge-danger' : tier === 2 ? 'badge-warning' : 'badge-info');
 
@@ -22,8 +23,9 @@ export class DashboardView {
   // red corner. With no fight on the books, the poster stays and the slot
   // sits empty — which is exactly the feeling we want you to fix.
   static _renderPoster(data, weekLabel) {
-    const { fighter, pendingOffers, bookings, now } = data;
+    const { fighter, pendingOffers, bookings, now, eliteFrame, bestOfferOpponent } = data;
     const booking = bookings[0];
+    const eliteCls = eliteFrame ? ' poster--elite' : '';
 
     const arena = `
       <div class="poster-arena" aria-hidden="true">
@@ -57,7 +59,7 @@ export class DashboardView {
         <div class="poster-offer" data-nav="offers" role="button" tabindex="0">
           ${best.isTitleFight ? `<div class="poster-title-strap"><span class="poster-belt">🏆</span><span>Cinturão em jogo</span><span class="poster-belt">🏆</span></div>` : ''}
           <div class="poster-offer-opponent">
-            <span class="poster-offer-silhouette" aria-hidden="true">🥷</span>
+            <span class="poster-offer-silhouette portrait-frame" aria-hidden="true">${PortraitService.renderFighter(bestOfferOpponent || { id: best.opponentId, name: best.opponentName }, { size: 52 })}</span>
             <div>
               <div class="poster-offer-vs">Oferta: você vs</div>
               <div class="poster-offer-name">${e(best.opponentName)}</div>
@@ -71,7 +73,7 @@ export class DashboardView {
           <button class="btn btn-primary poster-offer-btn" data-nav="offers">Ver oferta</button>
         </div>` : '';
       return `
-        <section class="poster poster--empty">
+        <section class="poster poster--empty${eliteCls}">
           ${arena}
           <div class="poster-body">
             ${status}
@@ -105,7 +107,7 @@ export class DashboardView {
       </div>` : '';
 
     return `
-      <section class="poster ${booking.isTitleFight ? 'poster--title' : ''}">
+      <section class="poster ${booking.isTitleFight ? 'poster--title' : ''}${eliteCls}">
         ${arena}
         <div class="poster-body">
           ${status}
@@ -478,6 +480,7 @@ export class DashboardView {
           ${belts.map(b => `<div class="belt-line">Campeão ${getWeightClassName(b.weightClass)} · ${b.promotionShort}${b.defenses > 0 ? ` · ${b.defenses} defesa${b.defenses === 1 ? '' : 's'}` : ''}</div>`).join('')}
           ${belts.length === 0 && contenderStatus ? `<div class="contender-line">#${contenderStatus.rank} na fila do cinturão · ${contenderStatus.promotionShort}</div>` : ''}
           <div class="flex items-center gap-3 mb-2">
+            <span class="portrait-frame">${PortraitService.renderFighter(fighter, { size: 56, context: 'street' })}</span>
             <span class="stat-value" style="font-size:1.6rem">${fighter.overallRating}</span>
             <div>
               <div class="text-sm font-bold">${fighter.record.wins}-${fighter.record.losses}-${fighter.record.draws}</div>

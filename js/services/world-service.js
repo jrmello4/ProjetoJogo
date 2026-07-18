@@ -8,6 +8,7 @@ import { ReadinessService } from './readiness-service.js';
 import { DataGenerator } from './data-generator.js';
 import { HallOfFame } from './hall-of-fame.js';
 import { CrowdService } from './crowd-service.js';
+import { VisualIdentityService } from './visual-identity-service.js';
 import { generateId, getWeightClassName, formatWeeks } from '../utils/helpers.js';
 import {
   ACADEMIES,
@@ -1219,13 +1220,23 @@ export class WorldService {
         }
       }
 
+      // Identidade visual — unlocks + era; muta appearance só se autoEvolve
+      VisualIdentityService.syncUnlocks(f);
+      const visualTick = VisualIdentityService.yearlyTick(f);
+      if (visualTick?.stage) f.visualStage = visualTick.stage;
+      if (visualTick?.changed && visualTick.appearance) {
+        f.appearance = visualTick.appearance;
+      }
+      if (!f.visualArchetype) {
+        f.visualArchetype = VisualIdentityService.resolveArchetypeId(f);
+      }
+
       // Persiste SEMPRE, aposentando ou não — o f.age++ acima se perde se o
       // save ficar só dentro do branch de aposentadoria.
       await this.fighterCtrl.updateFighter(f);
     }
 
-    const count = WORLD_CONFIG.DRAFT_MIN +
-      Math.floor(Math.random() * (WORLD_CONFIG.DRAFT_MAX - WORLD_CONFIG.DRAFT_MIN + 1));
+    const count = this._annualDraftCount();
     const prospects = [];
     for (let i = 0; i < count; i++) {
       const weightClass = CORE_WEIGHT_CLASSES[Math.floor(Math.random() * CORE_WEIGHT_CLASSES.length)];
@@ -1261,23 +1272,7 @@ export class WorldService {
 
     // Fase 1: teto de populacao — aposenta veteranos IA irrelevantes se excedeu
     const allNow = await this.fighterCtrl.getAllFighters();
-    const activeCount = allNow.filter(f => f.status !== 'retired' && f.status !== 'dead').length;
-    if (activeCount > WORLD_CONFIG.POPULATION_CAP) {
-      const toTrim = activeCount - WORLD_CONFIG.POPULATION_CAP;
-      const candidates = allNow
-        .filter(f => f.id !== playerFighterId && (f.age || 28) >= 32 && f.overallRating < 60)
-        .sort((a, b) => (a.overallRating || 0) - (b.overallRating || 0));
-      let trimmed = 0;
-      for (const c of candidates) {
-        if (trimmed >= toTrim) break;
-        if (c.status !== 'retired') {
-          c.status = 'retired';
-          c.organizationId = null;
-          await this.db.put('fighters', c);
-          trimmed++;
-        }
-      }
-    }
+    await this._trimPopulationIfNeeded(allNow, playerFighterId);
 
     // Fase 1: purga aposentados sem relevância — impede o banco de crescer sem
     // teto ao longo de carreiras longas (cada getAllFighters lê o store inteiro).
@@ -1386,6 +1381,35 @@ export class WorldService {
       relegated++;
     }
     return relegated;
+  }
+
+  // Contagem da safra anual — min/max em WORLD_CONFIG.DRAFT_*.
+  _annualDraftCount(random = Math.random) {
+    return WORLD_CONFIG.DRAFT_MIN +
+      Math.floor(random() * (WORLD_CONFIG.DRAFT_MAX - WORLD_CONFIG.DRAFT_MIN + 1));
+  }
+
+  // Fase 1: se ativos (não retired/dead) > POPULATION_CAP, aposenta os piores
+  // veteranos de IA (age>=32, OVR<60), nunca o jogador. Retorna quantos trimou.
+  async _trimPopulationIfNeeded(allNow, playerFighterId) {
+    const activeCount = allNow.filter(f => f.status !== 'retired' && f.status !== 'dead').length;
+    if (activeCount <= WORLD_CONFIG.POPULATION_CAP) return 0;
+
+    const toTrim = activeCount - WORLD_CONFIG.POPULATION_CAP;
+    const candidates = allNow
+      .filter(f => f.id !== playerFighterId && (f.age || 28) >= 32 && f.overallRating < 60)
+      .sort((a, b) => (a.overallRating || 0) - (b.overallRating || 0));
+    let trimmed = 0;
+    for (const c of candidates) {
+      if (trimmed >= toTrim) break;
+      if (c.status !== 'retired') {
+        c.status = 'retired';
+        c.organizationId = null;
+        await this.db.put('fighters', c);
+        trimmed++;
+      }
+    }
+    return trimmed;
   }
 
   // Fase 1: mantém o store 'fighters' limitado. Aposentados de IA sem relevância

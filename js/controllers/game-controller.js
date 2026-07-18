@@ -18,10 +18,12 @@ import { TrainingPartnersService } from '../services/training-partners-service.j
 import { ManagerService } from '../services/manager-service.js';
 import { CareerLogService } from '../services/career-log-service.js';
 import { RivalryService } from '../services/rivalry-service.js';
+import { StyleService } from '../services/style-service.js';
 import { SocialMediaService } from '../services/social-media-service.js';
 import { PodcastService } from '../services/podcast-service.js';
 import { YearReviewService } from '../services/year-review-service.js';
 import { CrowdService } from '../services/crowd-service.js';
+import { VisualIdentityService } from '../services/visual-identity-service.js';
 import { SocialMedia } from './social-media.js';
 import { FightOffer } from '../models/fight-offer.js';
 import { generateId, clamp, pickTopRandom, sanitizePlayerName } from '../utils/helpers.js';
@@ -234,7 +236,7 @@ export class GameController {
   // Gera o lutador do jogador com viés leve de arquétipo/origem sobre a
   // base do DataGenerator (reaproveita toda a lógica de atributos/DNA/
   // corte de peso já existente — só empurra a semente antes de gerar).
-  async createPlayerFighter({ name, weightClass, archetype, origin, difficultyId, academyId, managerId = null, challengeMode = null }) {
+  async createPlayerFighter({ name, weightClass, archetype, origin, difficultyId, academyId, managerId = null, challengeMode = null, appearance = null }) {
     const difficulty = DIFFICULTIES.find(d => d.id === difficultyId) || DIFFICULTIES[1];
     const arch = ARCHETYPES[archetype] || ARCHETYPES.generalist;
     const orig = ORIGINS[origin] || null;
@@ -258,6 +260,22 @@ export class GameController {
     data.id = generateId();
     data.name = sanitizePlayerName(name, { fallback: data.name || 'Lutador Anônimo' });
     data.fightingStyle = orig?.label || arch.label;
+
+    // A origem escolhida define o estilo MECÂNICO, não só o rótulo — sem
+    // isto data.style ficava o randomStyle() do gerador e o jogador nascia
+    // com estilo (e moveset) de outra arte marcial que não escolheu.
+    if (orig?.styleKey) {
+      data.style = orig.styleKey;
+      data.moveset = StyleService.randomMoveset(orig.styleKey, 6);
+      // Proficiência regenerada pro moveset novo, na mesma média do que o
+      // gerador tinha dado — troca o estilo sem buffar/nerfar o lutador.
+      const oldProfs = Object.values(data.moveProficiency || {});
+      const base = oldProfs.length ? Math.round(oldProfs.reduce((a, b) => a + b, 0) / oldProfs.length) : 40;
+      data.moveProficiency = {};
+      for (const m of data.moveset) {
+        data.moveProficiency[m] = clamp(base + Math.floor(Math.random() * 21) - 10, 10, 100);
+      }
+    }
     data.status = 'roster';
     data.organizationId = null;
     data.academyId = academyId;
@@ -265,6 +283,12 @@ export class GameController {
     data.managerId = managerId;
     data.cash = difficulty.cash;
     data.lifestyleTier = 'modest';
+    data.appearance = appearance;
+    data.visualUnlocks = ['street_simple'];
+    data.visualAutoEvolve = false;
+    data.visualLock = !!appearance;
+    data.wasChampion = false;
+    data.titlesWon = data.titlesWon || 0;
 
     // P9.2: Apply challenge mode modifications before saving
     if (challengeMode && CHALLENGE_MODES[challengeMode]) {
@@ -387,6 +411,13 @@ export class GameController {
       fighter.morale = clamp(fighter.morale - LIFESTYLE_DOWNGRADE_MORALE_PENALTY, 0, 100);
     }
     fighter.lifestyleTier = tier;
+    // Visual: luxo desbloqueia blazer etc.; equipa só se autoEvolve
+    VisualIdentityService.syncUnlocks(fighter);
+    if (fighter.visualAutoEvolve) {
+      VisualIdentityService.applyCareerVisualRewards(fighter, {
+        preferUnlockIds: tier === 'luxurious' ? ['luxury_blazer', 'media_shades'] : ['street_simple'],
+      });
+    }
     fighter.everReachedLifestyle[tier] = true;
     await this.fighterCtrl.updateFighter(fighter);
     return { ok: true };

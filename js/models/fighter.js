@@ -37,6 +37,19 @@ export class Fighter {
     this.hidden = { ...data.hidden };
     this.dna = data.dna || this._defaultDNA();
     this.popularity = data.popularity ?? Math.floor(Math.random() * 30) + 15;
+    // Aparência visual (appearance-config.js). null = deriva do hash do id
+    // (PortraitService / VisualIdentityService) — só o jogador persiste a dele.
+    this.appearance = data.appearance || null;
+    // Identidade visual (visual-identity-config.js): arquétipo + era.
+    // visualLock=true impede blend automático no jogador.
+    // visualAutoEvolve=true permite evolução por eventos/ano.
+    this.visualArchetype = data.visualArchetype || null;
+    this.visualStage = data.visualStage || null;
+    this.visualLock = data.visualLock ?? false;
+    this.visualAutoEvolve = data.visualAutoEvolve ?? false;
+    this.visualUnlocks = Array.isArray(data.visualUnlocks) ? [...data.visualUnlocks] : [];
+    this.wasChampion = data.wasChampion ?? false;
+    this.titlesWon = data.titlesWon ?? data.careerTitles ?? 0;
     this.weightCut = data.weightCut || this._defaultWeightCut();
     this.status = data.status;
     this.organizationId = data.organizationId;

@@ -2,6 +2,8 @@ import { formatCurrency, formatDate, getWeightClassShort, getWeightClassLabel, g
 import { FIGHTING_STYLES, MOVES, PERKS } from '../config/game-config.js';
 import { BiographyService } from '../services/biography-service.js';
 import { CrowdService } from '../services/crowd-service.js';
+import { PortraitService } from '../services/portrait-service.js';
+import { VisualIdentityService } from '../services/visual-identity-service.js';
 
 export class FighterProfileView {
   // Linha do tempo de momentos — texto cru no label; e() só na saída.
@@ -205,14 +207,47 @@ export class FighterProfileView {
       : '';
 
     return `
-      <div class="page-header">
-        <h2>
-          ${getNationalityFlag(fighter.nationality?.code || '')} ${e(fighter.name)}
-          <button class="btn-icon fighter-rename" data-id="${fighter.id}" title="Renomear lutador" aria-label="Renomear lutador">✏️</button>
-          ${retireBtn}
-        </h2>
-        <p>${e(fighter.nationality?.name || 'Desconhecido')} · ${fighter.age} anos · ${e(FIGHTING_STYLES[fighter.style]?.label || fighter.fightingStyle || 'Freestyle')}</p>
+      <div class="page-header" style="display:flex;gap:1.25rem;align-items:flex-start">
+        <span class="portrait-frame">${PortraitService.renderFighter(fighter, { size: 84, context: fighter.status === 'retired' ? 'ceremony' : 'default' })}</span>
+        <div style="flex:1;min-width:0">
+          <h2>
+            ${getNationalityFlag(fighter.nationality?.code || '')} ${e(fighter.name)}
+            <button class="btn-icon fighter-rename" data-id="${fighter.id}" title="Renomear lutador" aria-label="Renomear lutador">✏️</button>
+            ${isPlayer ? `<button class="btn-icon fighter-edit-appearance" data-id="${fighter.id}" title="Editar aparência" aria-label="Editar aparência">🎨</button>` : ''}
+            ${retireBtn}
+          </h2>
+          <p>${e(fighter.nationality?.name || 'Desconhecido')} · ${fighter.age} anos · ${e(FIGHTING_STYLES[fighter.style]?.label || fighter.fightingStyle || 'Freestyle')}</p>
+          ${(() => {
+            const id = VisualIdentityService.describeIdentity(fighter);
+            return `<p class="text-xs text-muted" style="margin-top:0.25rem">${e(id.archetypeLabel)} · ${e(id.stageLabel)} · ${e(id.rarityLabel)}${fighter.visualAutoEvolve ? ' · auto-evolui' : ''}</p>`;
+          })()}
+          ${isPlayer ? `<div class="flex gap-2 mt-2 flex-wrap">
+            <button type="button" class="btn btn-sm btn-secondary fighter-imagine-export" data-id="${fighter.id}">🖼 Exportar concept art</button>
+          </div>` : ''}
+        </div>
       </div>
+
+      ${(() => {
+        const unlocks = VisualIdentityService.listUnlockStatus(fighter);
+        const owned = unlocks.filter(u => u.unlocked);
+        if (!owned.length && !isPlayer) return '';
+        return `
+          <div class="card mb-4" data-reveal>
+            <div class="card-header"><span class="card-title">🎨 Identidade visual</span></div>
+            <div class="text-xs text-muted mb-2">Desbloqueios por conquista (não monétização). Contextos: rua · octógono · coletiva · cerimônia.</div>
+            <div class="flex flex-col gap-1">
+              ${unlocks.map(u => `
+                <div class="flex items-center justify-between gap-2" style="padding:0.35rem 0;border-bottom:1px solid var(--border)">
+                  <div>
+                    <span class="${u.unlocked ? '' : 'text-muted'}">${u.unlocked ? '✓' : '🔒'} ${e(u.label)}</span>
+                    <div class="text-xs text-muted">${e(u.desc)} · ${e(u.rarity)}</div>
+                  </div>
+                  ${isPlayer && u.unlocked ? `<button type="button" class="btn btn-sm btn-secondary fighter-equip-unlock" data-id="${fighter.id}" data-unlock="${u.id}">Equipar</button>` : ''}
+                </div>
+              `).join('')}
+            </div>
+          </div>`;
+      })()}
 
       ${bioHtml}
       ${personaHtml}

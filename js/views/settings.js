@@ -1,12 +1,16 @@
 import { AudioService } from '../services/audio-service.js';
+import { COSMETIC_ITEMS, MONETIZATION_CONFIG } from '../config/game-config.js';
+import { e } from '../utils/helpers.js';
 
-// Tela de Configurações — áudio, movimento, tema e dados do jogo.
-// Estado vive em localStorage (áudio/movimento/tema); dados via SaveService.
+// Tela de Configurações — áudio, movimento, tema, dados e loja do jogo.
+// Estado vive em localStorage (áudio/movimento/tema); dados via SaveService;
+// loja via MonetizationService (IndexedDB, store gameState/monetization).
 export class SettingsView {
-  static render() {
+  static render(monetization = { isSupporter: false, ownedItems: [], equipped: {} }, player = null) {
     const audio = AudioService.settings;
     const reduceMotion = localStorage.getItem('reduceMotion') === 'true';
     const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+    const autoEvolve = !!(player?.visualAutoEvolve);
 
     return `
       <div class="page-header">
@@ -55,6 +59,19 @@ export class SettingsView {
         </div>
       </div>
 
+      <div class="section-label" data-reveal>Identidade visual</div>
+      <div class="card mb-4" data-reveal>
+        <div class="card-header"><span class="card-title">🥊 Evolução da aparência</span></div>
+        <label class="flex items-center gap-2 text-sm" style="cursor:pointer">
+          <input type="checkbox" id="settingsVisualAutoEvolve" ${autoEvolve ? 'checked' : ''} ${player ? '' : 'disabled'}>
+          Evoluir visual com a carreira
+        </label>
+        <p class="text-xs text-muted mt-2">
+          Quando ativo, títulos, popularidade e envelhecimento podem mudar roupa, acessórios e marcas do seu lutador.
+          Edição manual no perfil trava o look até você reativar. ${player ? '' : 'Disponível após criar um lutador.'}
+        </p>
+      </div>
+
       <div class="section-label" data-reveal>Dados</div>
       <div class="card mb-4" data-reveal>
         <div class="card-header"><span class="card-title">💾 Salvamento</span></div>
@@ -66,6 +83,53 @@ export class SettingsView {
         </div>
         <p class="text-xs text-muted mt-2">O backup é um arquivo JSON com o mundo inteiro — guarde antes de experimentar decisões arriscadas.</p>
       </div>
+
+      ${SettingsView._renderStore(monetization)}
     `;
+  }
+
+  static _renderStore(monetization) {
+    const { isSupporter, ownedItems, equipped } = monetization;
+
+    const items = COSMETIC_ITEMS.map(item => {
+      const owned = ownedItems.includes(item.id);
+      const isEquipped = equipped[item.slot] === item.id;
+      const action = !owned
+        ? `<span class="text-xs" style="color:var(--ash)">🔒 Bloqueado</span>`
+        : `<button class="btn btn-sm ${isEquipped ? 'btn-primary' : 'btn-secondary'}" data-cosmetic-slot="${item.slot}" data-cosmetic-item="${isEquipped ? '' : item.id}">${isEquipped ? '✓ Equipado' : 'Equipar'}</button>`;
+      return `
+        <div class="flex items-center justify-between gap-2" style="padding:0.5rem 0;border-bottom:1px solid var(--border)">
+          <div>
+            <span>${item.icon} ${e(item.name)}</span>
+            <div class="text-xs text-muted">${e(item.description)}</div>
+          </div>
+          ${action}
+        </div>`;
+    }).join('');
+
+    const redeemHtml = isSupporter ? `
+      <p class="text-sm mt-3" style="color:var(--money)">✓ Obrigado por apoiar o jogo — todos os cosméticos estão desbloqueados.</p>
+    ` : `
+      <div class="mt-3" style="border-top:1px solid var(--border);padding-top:0.75rem">
+        <p class="text-xs text-muted mb-2">
+          Jogo é grátis e sempre vai ser. Apoiar é opcional — veja como em
+          <a href="${e(MONETIZATION_CONFIG.SUPPORT_URL)}" target="_blank" rel="noopener noreferrer">${e(MONETIZATION_CONFIG.SUPPORT_URL)}</a>,
+          e resgate o código que você recebe aqui embaixo.
+        </p>
+        <div class="flex gap-2">
+          <input type="text" id="supporterCodeInput" class="form-input" style="flex:1" placeholder="Código de apoiador">
+          <button class="btn btn-sm btn-primary" id="supporterCodeRedeem">Resgatar</button>
+        </div>
+        <p class="text-xs mt-2" id="supporterCodeMsg"></p>
+      </div>`;
+
+    return `
+      <div class="section-label" data-reveal>Loja</div>
+      <div class="card mb-4" data-reveal>
+        <div class="card-header"><span class="card-title">🛒 Cosméticos de Apoiador</span></div>
+        <p class="text-xs text-muted mb-2">100% visual — nunca afeta economia, dificuldade ou resultado de luta.</p>
+        <div class="flex flex-col">${items}</div>
+        ${redeemHtml}
+      </div>`;
   }
 }

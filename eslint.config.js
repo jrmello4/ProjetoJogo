@@ -33,7 +33,10 @@ export default [
         location: 'readonly',
         cancelAnimationFrame: 'readonly',
         CustomEvent: 'readonly',
-        MutationObserver: 'readonly'
+        MutationObserver: 'readonly',
+        crypto: 'readonly',
+        TextEncoder: 'readonly',
+        queueMicrotask: 'readonly'
       }
     },
     rules: {

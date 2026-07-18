@@ -5,6 +5,8 @@
 // Uso:
 //   await TutorialCoach.run([{ selector, title, text }, ...])       // tour
 //   TutorialCoach.spotlightOnce(selector, { title, text })          // 1 passo
+import { LayoutView } from '../views/layout.js';
+
 export class TutorialCoach {
   static run(steps) {
     // Checa presença real no DOM, não uma flag manual — o atalho global de
@@ -25,7 +27,7 @@ export class TutorialCoach {
         resolved = true;
         window.removeEventListener('resize', reposition);
         detachObserver.disconnect();
-        if (overlay.isConnected) overlay.remove();
+        if (overlay.isConnected) LayoutView.closeModal(overlay);
         resolve();
       };
 

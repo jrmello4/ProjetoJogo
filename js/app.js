@@ -30,6 +30,11 @@ import { NotificationService } from './services/notification-service.js';
 import { SaveService } from './services/save-service.js';
 import { CinematicService } from './services/cinematic-service.js';
 import { AudioService } from './services/audio-service.js';
+import { AdService } from './services/ad-service.js';
+import { MonetizationService } from './services/monetization-service.js';
+import { PortraitService } from './services/portrait-service.js';
+import { VisualIdentityService } from './services/visual-identity-service.js';
+import { AppearanceEditor } from './views/appearance-editor.js';
 import { SettingsView } from './views/settings.js';
 import { TutorialCoach } from './services/tutorial-coach.js';
 import { ThreeArena } from './three-arena.js';
@@ -37,6 +42,7 @@ import { ThreeBackground } from './three-background.js';
 import { motion } from './motion/motion-engine.js';
 import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, ARCHETYPES, ORIGINS, absWeekToLabel, SYNERGY_CONFIG, FIGHTING_STYLES, PERKS, CHALLENGE_MODES } from './config/game-config.js';
 import { formatCurrency, getAdjacentWeightClasses, clamp, sanitizePlayerName, e } from './utils/helpers.js';
+import { validateCharCreateStep } from './utils/char-create-validate.js';
 import { CAMP_CONFIG, HYPE_PURSE_RATIO, absWeek } from './config/game-config.js';
 
 // Depois de publicar no itch.io, cole a URL da página do jogo aqui pra ela
@@ -61,6 +67,7 @@ class App {
     this.seasonService = new SeasonService(this.game.db);
     this.notificationService = new NotificationService(this.game.db);
     this.saveService = new SaveService(this.game.db);
+    this.monetizationService = new MonetizationService(this.game.db);
     this.threeArena = null;
     this.threeBackground = null;
   }
@@ -130,188 +137,483 @@ class App {
     this.navigateTo('dashboard');
   }
 
-  // ===== Criação de personagem (§A.7) =====
+  // ===== Criação de personagem (§A.7) — wizard multi-step =====
+  // Shell + draft em memória; um único createPlayerFighter no Start.
+  // Não confundir com ONBOARDING_STEPS (pós-carreira no dashboard).
+
+  static get CHAR_CREATE_STEPS() {
+    return [
+      { id: 1, short: 'Identidade', lead: 'Antes do primeiro round, o mundo só vê um rosto e um nome. Quem entra no octógono?' },
+      { id: 2, short: 'Estilo', lead: 'Todo lutador carrega uma escola e um jeito de apertar o gatilho. Qual é o seu?' },
+      { id: 3, short: 'Corner', lead: 'Ninguém sobe sozinho. Escolha onde treina e quem negocia por você.' },
+      { id: 4, short: 'Jornada', lead: 'Última porta antes da carreira. Quanto risco você aguenta — e sob quais regras?' },
+    ];
+  }
+
+  static get CHAR_CREATE_WEIGHT_LABELS() {
+    return {
+      Flyweight: 'Peso Mosca',
+      Bantamweight: 'Peso Galo',
+      Featherweight: 'Peso Pena',
+      Lightweight: 'Peso Leve',
+      Welterweight: 'Peso Meio-Médio',
+      Middleweight: 'Peso Médio',
+      'Light Heavyweight': 'Meio-Pesado',
+      Heavyweight: 'Peso Pesado',
+    };
+  }
+
   async _showCharacterCreation() {
+    // Já aberto (ex.: double-click em Nova Carreira)
+    if (document.getElementById('characterCreationModal')) return;
+
     const academies = await this.game.getAcademies();
     const managers = await this.game.getManagers();
     const hasCompletedCareer = await HallOfFame.hasCompletedCareer(this.game.db);
+    const originKeys = Object.keys(ORIGINS);
+
+    const ctx = { academies, managers, hasCompletedCareer };
+    const session = {
+      step: 1,
+      maxReachedStep: 1,
+      draft: {
+        name: '',
+        appearance: PortraitService.contextualAppearance({
+          age: 22,
+          popularity: 12,
+          totalFights: 0,
+          fightingStyle: 'balanced',
+        }),
+        weightClass: 'Lightweight',
+        archetype: 'generalist',
+        origin: originKeys[0] || 'kickboxing',
+        difficultyId: 'normal',
+        academyId: academies[0]?.id ?? null,
+        managerId: managers[0]?.id ?? null,
+        challengeMode: null,
+      },
+    };
 
     const modal = document.createElement('div');
     modal.className = 'modal-overlay';
     modal.id = 'characterCreationModal';
     modal.innerHTML = `
-      <div class="modal" style="max-width:640px">
+      <div class="modal modal--character-create" style="max-width:640px">
         <div class="modal-header">
-          <h3>Crie seu Lutador</h3>
+          <h3 id="charCreateTitle">Crie seu Lutador</h3>
+          <span class="char-create-step-meta text-xs text-muted" id="charCreateStepMeta" aria-live="polite">Passo 1 de 4</span>
         </div>
-        <p class="text-sm" style="color:var(--text-secondary)">
-          Você não gerencia uma academia — você É o lutador. Do primeiro contrato à aposentadoria,
-          toda decisão de carreira é sua.
-        </p>
+        <nav class="char-create-progress" id="charCreateProgress" aria-label="Progresso da criação"></nav>
+        <p class="char-create-lead text-sm" id="charCreateLead"></p>
+        <div id="charCreateError" class="char-create-error" role="alert" hidden></div>
+        <div class="char-create-body" id="charCreateBody" data-step="1"></div>
+        <div class="modal-actions char-create-actions">
+          <button type="button" class="btn btn-secondary" id="charCreateBack" hidden>Voltar</button>
+          <button type="button" class="btn btn-primary" id="charCreateNext">Próximo</button>
+          <button type="button" class="btn btn-primary" id="characterCreationStartBtn" hidden>Começar carreira</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
 
+    const backBtn = modal.querySelector('#charCreateBack');
+    const nextBtn = modal.querySelector('#charCreateNext');
+    const startBtn = modal.querySelector('#characterCreationStartBtn');
+
+    const goToStep = (target) => {
+      this._syncCharCreateDraft(modal, session, session.step);
+      session.step = target;
+      this._clearCharCreateError(modal);
+      this._renderCharCreateStep(modal, session, ctx);
+      this._bindCharCreateStepControls(modal, session, ctx);
+    };
+
+    backBtn.addEventListener('click', () => {
+      if (session.step <= 1) return;
+      goToStep(session.step - 1);
+    });
+
+    nextBtn.addEventListener('click', () => {
+      this._syncCharCreateDraft(modal, session, session.step);
+      const result = validateCharCreateStep(session.draft, session.step, ctx);
+      if (!result.ok) {
+        this._showCharCreateError(modal, result);
+        return;
+      }
+      this._clearCharCreateError(modal);
+      const next = Math.min(4, session.step + 1);
+      session.step = next;
+      session.maxReachedStep = Math.max(session.maxReachedStep, next);
+      this._renderCharCreateStep(modal, session, ctx);
+      this._bindCharCreateStepControls(modal, session, ctx);
+    });
+
+    startBtn.addEventListener('click', async () => {
+      this._syncCharCreateDraft(modal, session, session.step);
+      // Re-checa unlock HoF fresco no commit (DOM pode estar stale vs progressão)
+      ctx.hasCompletedCareer = await HallOfFame.hasCompletedCareer(this.game.db);
+      const result = validateCharCreateStep(session.draft, 'all', ctx);
+      if (!result.ok) {
+        this._showCharCreateError(modal, result);
+        return;
+      }
+
+      startBtn.disabled = true;
+      backBtn.disabled = true;
+      nextBtn.disabled = true;
+      this._clearCharCreateError(modal);
+
+      try {
+        const name = sanitizePlayerName(session.draft.name, { fallback: '' });
+        await this.game.createPlayerFighter({
+          name,
+          weightClass: session.draft.weightClass,
+          archetype: session.draft.archetype,
+          origin: session.draft.origin,
+          difficultyId: session.draft.difficultyId,
+          academyId: session.draft.academyId,
+          managerId: session.draft.managerId,
+          challengeMode: session.draft.challengeMode || null,
+          appearance: { ...session.draft.appearance },
+        });
+
+        localStorage.setItem('characterCreationDone', '1');
+        LayoutView.closeModal(modal);
+        this.notificationService.add('success', 'Carreira Iniciada', `${name} deu o primeiro passo rumo à elite mundial.`);
+        this.navigateTo('dashboard');
+        setTimeout(() => this._showTutorial(), 600);
+      } catch (err) {
+        console.error('Falha ao criar lutador:', err);
+        this._showCharCreateError(modal, {
+          ok: false,
+          message: 'Não foi possível iniciar a carreira. Tente de novo.',
+        });
+        startBtn.disabled = false;
+        backBtn.disabled = false;
+        nextBtn.disabled = false;
+        this._updateCharCreateNav(modal, session);
+      }
+    });
+
+    // Progresso: jumps só para steps já alcançados
+    modal.querySelector('#charCreateProgress').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('[data-char-step]');
+      if (!btn) return;
+      const target = Number(btn.dataset.charStep);
+      if (!target || target > session.maxReachedStep || target === session.step) return;
+      goToStep(target);
+    });
+
+    this._renderCharCreateStep(modal, session, ctx);
+    this._bindCharCreateStepControls(modal, session, ctx);
+  }
+
+  _showCharCreateError(modal, result) {
+    const el = modal.querySelector('#charCreateError');
+    if (!el) return;
+    el.hidden = false;
+    el.textContent = result.message || 'Verifique os campos.';
+    el.focus?.();
+    const field = result.field;
+    if (field === 'name') modal.querySelector('#charName')?.focus();
+    else if (field === 'weightClass') modal.querySelector('#charWeightClass')?.focus();
+  }
+
+  _clearCharCreateError(modal) {
+    const el = modal.querySelector('#charCreateError');
+    if (!el) return;
+    el.hidden = true;
+    el.textContent = '';
+  }
+
+  _updateCharCreateNav(modal, session) {
+    const backBtn = modal.querySelector('#charCreateBack');
+    const nextBtn = modal.querySelector('#charCreateNext');
+    const startBtn = modal.querySelector('#characterCreationStartBtn');
+    const onLast = session.step >= 4;
+    if (backBtn) {
+      backBtn.hidden = session.step <= 1;
+      backBtn.disabled = false;
+    }
+    if (nextBtn) {
+      nextBtn.hidden = onLast;
+      nextBtn.disabled = false;
+    }
+    if (startBtn) {
+      startBtn.hidden = !onLast;
+      startBtn.disabled = false;
+    }
+  }
+
+  _syncCharCreateDraft(modal, session, step) {
+    const d = session.draft;
+    if (step === 1) {
+      const nameEl = modal.querySelector('#charName');
+      const wcEl = modal.querySelector('#charWeightClass');
+      if (nameEl) d.name = nameEl.value;
+      if (wcEl && !wcEl.disabled) d.weightClass = wcEl.value;
+      else if (wcEl && wcEl.value) d.weightClass = wcEl.value;
+    } else if (step === 2) {
+      const arch = modal.querySelector('[data-archetype].selected')?.dataset.archetype;
+      const origin = modal.querySelector('[data-origin].selected')?.dataset.origin;
+      if (arch) d.archetype = arch;
+      if (origin) d.origin = origin;
+    } else if (step === 3) {
+      const academy = modal.querySelector('[data-academy].selected')?.dataset.academy;
+      const manager = modal.querySelector('[data-manager].selected')?.dataset.manager;
+      if (academy) d.academyId = academy;
+      if (manager) d.managerId = manager;
+    } else if (step === 4) {
+      const diff = modal.querySelector('[data-difficulty].selected')?.dataset.difficulty;
+      const challengeEl = modal.querySelector('[data-challenge].selected');
+      if (diff) d.difficultyId = diff;
+      if (challengeEl) {
+        const raw = challengeEl.dataset.challenge;
+        d.challengeMode = raw ? raw : null;
+      }
+    }
+  }
+
+  _renderCharCreateStep(modal, session, ctx) {
+    const { step, draft, maxReachedStep } = session;
+    const steps = App.CHAR_CREATE_STEPS;
+    const meta = modal.querySelector('#charCreateStepMeta');
+    const lead = modal.querySelector('#charCreateLead');
+    const progress = modal.querySelector('#charCreateProgress');
+    const body = modal.querySelector('#charCreateBody');
+    if (meta) meta.textContent = `Passo ${step} de 4`;
+    if (lead) lead.textContent = steps[step - 1]?.lead || '';
+
+    if (progress) {
+      progress.innerHTML = steps.map((s) => {
+        const done = s.id < step;
+        const active = s.id === step;
+        const clickable = s.id <= maxReachedStep;
+        const cls = [
+          'char-create-step',
+          done ? 'is-done' : '',
+          active ? 'is-active' : '',
+          clickable ? 'is-clickable' : '',
+        ].filter(Boolean).join(' ');
+        return `
+          <button type="button" class="${cls}" data-char-step="${s.id}"
+            ${clickable ? '' : 'disabled'}
+            ${active ? 'aria-current="step"' : ''}
+            aria-label="Passo ${s.id}: ${e(s.short)}">
+            <span class="char-create-step-num">${s.id}</span>
+            <span class="char-create-step-label">${e(s.short)}</span>
+          </button>`;
+      }).join('');
+    }
+
+    if (body) {
+      body.dataset.step = String(step);
+      body.innerHTML = this._charCreateStepHtml(step, draft, ctx);
+      body.scrollTop = 0;
+    }
+
+    this._updateCharCreateNav(modal, session);
+  }
+
+  _charCreateStepHtml(step, draft, ctx) {
+    const { academies, managers, hasCompletedCareer } = ctx;
+    const wcLabels = App.CHAR_CREATE_WEIGHT_LABELS;
+
+    if (step === 1) {
+      const options = Object.entries(wcLabels).map(([value, label]) => {
+        const locked = value === 'Heavyweight' && !hasCompletedCareer;
+        const selected = draft.weightClass === value ? 'selected' : '';
+        const text = locked ? '🔒 Peso Pesado (complete uma carreira)' : label;
+        return `<option value="${value}" ${selected} ${locked ? 'disabled' : ''}>${text}</option>`;
+      }).join('');
+      return `
         <div class="form-group">
-          <label class="form-label">Nome</label>
-          <input type="text" class="form-input" id="charName" maxlength="30" placeholder="Seu nome de lutador">
+          <label class="form-label" for="charName">Nome</label>
+          <input type="text" class="form-input" id="charName" maxlength="30"
+            placeholder="Seu nome de lutador" value="${e(draft.name || '')}" autocomplete="off">
         </div>
-
         <div class="form-group">
-          <label class="form-label">Categoria de Peso</label>
-          <select class="form-select" id="charWeightClass">
-            <option value="Flyweight">Peso Mosca</option>
-            <option value="Bantamweight">Peso Galo</option>
-            <option value="Featherweight">Peso Pena</option>
-            <option value="Lightweight" selected>Peso Leve</option>
-            <option value="Welterweight">Peso Meio-Médio</option>
-            <option value="Middleweight">Peso Médio</option>
-            <option value="Light Heavyweight">Meio-Pesado</option>
-            <option value="Heavyweight" ${hasCompletedCareer ? '' : 'disabled'}>${hasCompletedCareer ? 'Peso Pesado' : '🔒 Peso Pesado (complete uma carreira)'}</option>
-          </select>
+          <label class="form-label">Aparência</label>
+          <div id="charAppearance"></div>
         </div>
+        <div class="form-group">
+          <label class="form-label" for="charWeightClass">Categoria de Peso</label>
+          <select class="form-select" id="charWeightClass">${options}</select>
+        </div>`;
+    }
 
+    if (step === 2) {
+      return `
         <div class="form-group">
           <label class="form-label">Arquétipo Inicial</label>
           <div class="difficulty-grid">
             ${Object.entries(ARCHETYPES).map(([key, a]) => `
-              <button type="button" class="difficulty-option ${key === 'generalist' ? 'selected' : ''}" data-archetype="${key}">
+              <button type="button" class="difficulty-option ${key === draft.archetype ? 'selected' : ''}" data-archetype="${key}">
                 <div class="difficulty-name">${e(a.label)}</div>
               </button>
             `).join('')}
           </div>
         </div>
-
         <div class="form-group">
           <label class="form-label">Origem Esportiva</label>
           <div class="difficulty-grid" style="grid-template-columns:repeat(3,1fr)">
-            ${Object.entries(ORIGINS).map(([key, o], i) => `
-              <button type="button" class="difficulty-option ${i === 0 ? 'selected' : ''}" data-origin="${key}">
+            ${Object.entries(ORIGINS).map(([key, o]) => `
+              <button type="button" class="difficulty-option ${key === draft.origin ? 'selected' : ''}" data-origin="${key}">
                 <div class="difficulty-name">${e(o.label)}</div>
               </button>
             `).join('')}
           </div>
-        </div>
+        </div>`;
+    }
 
-        <div class="form-group">
-          <label class="form-label">Reserva Financeira</label>
-          <div class="difficulty-grid">
-            ${DIFFICULTIES.map(d => `
-              <button type="button" class="difficulty-option ${d.id === 'normal' ? 'selected' : ''}" data-difficulty="${d.id}">
-                <div class="difficulty-name">${e(d.name)}</div>
-                <div class="difficulty-cash">${formatCurrency(d.cash)}</div>
-                <div class="text-xs text-muted mt-2">${e(d.desc)}</div>
-              </button>
-            `).join('')}
-          </div>
-        </div>
-
+    if (step === 3) {
+      return `
         <div class="form-group">
           <label class="form-label">Primeira Academia</label>
           <div class="difficulty-grid">
-            ${academies.map((a, i) => `
-              <button type="button" class="difficulty-option ${i === 0 ? 'selected' : ''}" data-academy="${a.id}">
+            ${academies.map((a) => `
+              <button type="button" class="difficulty-option ${a.id === draft.academyId ? 'selected' : ''}" data-academy="${a.id}">
                 <div class="difficulty-name">${e(a.name)}</div>
                 <div class="text-xs text-muted mt-2">${e(a.philosophy)} · ${formatCurrency(a.weeklyFee)}/sem</div>
               </button>
             `).join('')}
           </div>
         </div>
-
         <div class="form-group">
           <label class="form-label">Primeiro Empresário</label>
           <div class="difficulty-grid">
-            ${managers.map((m, i) => `
-              <button type="button" class="difficulty-option ${i === 0 ? 'selected' : ''}" data-manager="${m.id}">
+            ${managers.map((m) => `
+              <button type="button" class="difficulty-option ${m.id === draft.managerId ? 'selected' : ''}" data-manager="${m.id}">
                 <div class="difficulty-name">${e(m.name)}</div>
                 <div class="text-xs text-muted mt-2">${MANAGER_STYLE_LABELS[m.style] || m.style} · corte ${Math.round(m.cut * 100)}%</div>
               </button>
             `).join('')}
           </div>
-        </div>
+        </div>`;
+    }
 
-        <div class="form-group" id="challengeModeGroup">
-          <label class="form-label">Modo Desafio <span class="text-xs text-muted">(opcional)</span></label>
-          <div class="difficulty-grid" style="grid-template-columns:repeat(3,1fr)">
-            ${Object.entries(CHALLENGE_MODES).map(([key, m]) => {
-              const locked = !hasCompletedCareer;
-              return `
-                <button type="button" class="difficulty-option challenge-option ${locked ? 'challenge-locked' : ''}" data-challenge="${key}" ${locked ? 'disabled' : ''}>
-                  <div class="difficulty-name">${m.icon} ${e(m.name)}</div>
-                  <div class="text-xs text-muted mt-2">${e(m.description)}</div>
-                  ${locked ? `<div class="text-xs mt-1" style="color:var(--warning)">🔒 ${m.requirements}</div>` : ''}
-                </button>
-              `;
-            }).join('')}
-            <button type="button" class="difficulty-option selected" data-challenge="">
-              <div class="difficulty-name">🎯 Normal</div>
-              <div class="text-xs text-muted mt-2">Sem modificações — experiência padrão.</div>
+    // Step 4 — jornada + resumo
+    const challengeSel = draft.challengeMode || '';
+    const summary = this._charCreateSummaryChips(draft, ctx);
+    return `
+      <div class="form-group">
+        <label class="form-label">Reserva Financeira</label>
+        <div class="difficulty-grid">
+          ${DIFFICULTIES.map(d => `
+            <button type="button" class="difficulty-option ${d.id === draft.difficultyId ? 'selected' : ''}" data-difficulty="${d.id}">
+              <div class="difficulty-name">${e(d.name)}</div>
+              <div class="difficulty-cash">${formatCurrency(d.cash)}</div>
+              <div class="text-xs text-muted mt-2">${e(d.desc)}</div>
             </button>
-          </div>
-        </div>
-
-        <div class="modal-actions">
-          <button class="btn btn-primary w-full" id="characterCreationStartBtn">Começar carreira</button>
+          `).join('')}
         </div>
       </div>
-    `;
-    document.body.appendChild(modal);
+      <div class="form-group" id="challengeModeGroup">
+        <label class="form-label">Modo Desafio <span class="text-xs text-muted">(opcional)</span></label>
+        <div class="difficulty-grid" style="grid-template-columns:repeat(3,1fr)">
+          ${Object.entries(CHALLENGE_MODES).map(([key, m]) => {
+            const locked = !hasCompletedCareer;
+            return `
+              <button type="button" class="difficulty-option challenge-option ${locked ? 'challenge-locked' : ''} ${challengeSel === key ? 'selected' : ''}"
+                data-challenge="${key}" ${locked ? 'disabled' : ''}>
+                <div class="difficulty-name">${m.icon} ${e(m.name)}</div>
+                <div class="text-xs text-muted mt-2">${e(m.description)}</div>
+                ${locked ? `<div class="text-xs mt-1" style="color:var(--warning)">🔒 ${e(m.requirements)}</div>` : ''}
+              </button>`;
+          }).join('')}
+          <button type="button" class="difficulty-option ${challengeSel === '' ? 'selected' : ''}" data-challenge="">
+            <div class="difficulty-name">🎯 Normal</div>
+            <div class="text-xs text-muted mt-2">Sem modificações — experiência padrão.</div>
+          </button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Resumo</label>
+        <div class="char-create-summary">${summary}</div>
+      </div>`;
+  }
 
-    modal.querySelectorAll('[data-archetype]').forEach(opt => {
-      opt.addEventListener('click', () => {
-        modal.querySelectorAll('[data-archetype]').forEach(o => o.classList.remove('selected'));
-        opt.classList.add('selected');
-      });
-    });
-    modal.querySelectorAll('[data-origin]').forEach(opt => {
-      opt.addEventListener('click', () => {
-        modal.querySelectorAll('[data-origin]').forEach(o => o.classList.remove('selected'));
-        opt.classList.add('selected');
-      });
-    });
-    modal.querySelectorAll('[data-difficulty]').forEach(opt => {
-      opt.addEventListener('click', () => {
-        modal.querySelectorAll('[data-difficulty]').forEach(o => o.classList.remove('selected'));
-        opt.classList.add('selected');
-      });
-    });
-    modal.querySelectorAll('[data-academy]').forEach(opt => {
-      opt.addEventListener('click', () => {
-        modal.querySelectorAll('[data-academy]').forEach(o => o.classList.remove('selected'));
-        opt.classList.add('selected');
-      });
-    });
-    modal.querySelectorAll('[data-manager]').forEach(opt => {
-      opt.addEventListener('click', () => {
-        modal.querySelectorAll('[data-manager]').forEach(o => o.classList.remove('selected'));
-        opt.classList.add('selected');
-      });
-    });
+  _charCreateSummaryChips(draft, ctx) {
+    const wc = App.CHAR_CREATE_WEIGHT_LABELS[draft.weightClass] || draft.weightClass;
+    const arch = ARCHETYPES[draft.archetype]?.label || draft.archetype;
+    const origin = ORIGINS[draft.origin]?.label || draft.origin;
+    const academy = ctx.academies.find(a => a.id === draft.academyId)?.name || '—';
+    const manager = ctx.managers.find(m => m.id === draft.managerId)?.name || '—';
+    const diff = DIFFICULTIES.find(d => d.id === draft.difficultyId)?.name || draft.difficultyId;
+    const challenge = draft.challengeMode
+      ? (CHALLENGE_MODES[draft.challengeMode]?.name || draft.challengeMode)
+      : 'Normal';
+    const chips = [
+      draft.name || '(sem nome)',
+      wc,
+      arch,
+      origin,
+      academy,
+      manager,
+      diff,
+      challenge,
+    ];
+    return chips.map(c => `<span class="char-create-chip">${e(String(c))}</span>`).join('');
+  }
 
-    // P9.2: Challenge mode selection — bloqueados usam disabled de verdade
-    // (nunca disparam click, nem por mouse nem por teclado), sem checagem manual.
-    modal.querySelectorAll('[data-challenge]:not(:disabled)').forEach(opt => {
-      opt.addEventListener('click', () => {
-        modal.querySelectorAll('[data-challenge]').forEach(o => o.classList.remove('selected'));
+  _bindCharCreateStepControls(modal, session, ctx) {
+    const body = modal.querySelector('#charCreateBody');
+    if (!body) return;
+
+    // Delegation: um listener por mount do body (nodes recriados a cada step)
+    body.onclick = (ev) => {
+      const opt = ev.target.closest(
+        '[data-archetype],[data-origin],[data-difficulty],[data-academy],[data-manager],[data-challenge]'
+      );
+      if (!opt || opt.disabled || !body.contains(opt)) return;
+
+      const attrs = ['archetype', 'origin', 'difficulty', 'academy', 'manager', 'challenge'];
+      for (const attr of attrs) {
+        if (opt.dataset[attr] === undefined) continue;
+        body.querySelectorAll(`[data-${attr}]`).forEach(o => o.classList.remove('selected'));
         opt.classList.add('selected');
+        const val = opt.dataset[attr];
+        if (attr === 'archetype') session.draft.archetype = val;
+        else if (attr === 'origin') session.draft.origin = val;
+        else if (attr === 'difficulty') session.draft.difficultyId = val;
+        else if (attr === 'academy') session.draft.academyId = val;
+        else if (attr === 'manager') session.draft.managerId = val;
+        else if (attr === 'challenge') session.draft.challengeMode = val || null;
+        break;
+      }
+    };
+
+    if (session.step === 1) {
+      const nameEl = body.querySelector('#charName');
+      const wcEl = body.querySelector('#charWeightClass');
+      nameEl?.addEventListener('input', () => {
+        session.draft.name = nameEl.value;
       });
-    });
+      wcEl?.addEventListener('change', () => {
+        session.draft.weightClass = wcEl.value;
+      });
 
-    modal.querySelector('#characterCreationStartBtn').addEventListener('click', async () => {
-      const name = sanitizePlayerName(modal.querySelector('#charName').value);
-      const weightClass = modal.querySelector('#charWeightClass').value;
-      const archetype = modal.querySelector('[data-archetype].selected')?.dataset.archetype || 'generalist';
-      const origin = modal.querySelector('[data-origin].selected')?.dataset.origin || null;
-      const difficultyId = modal.querySelector('[data-difficulty].selected')?.dataset.difficulty || 'normal';
-      const academyId = modal.querySelector('[data-academy].selected')?.dataset.academy || academies[0]?.id;
-      const managerId = modal.querySelector('[data-manager].selected')?.dataset.manager || managers[0]?.id;
-      const challengeMode = modal.querySelector('[data-challenge].selected')?.dataset.challenge || null;
+      const appearanceHost = body.querySelector('#charAppearance');
+      if (appearanceHost) {
+        appearanceHost.innerHTML = AppearanceEditor.render(session.draft.appearance);
+        AppearanceEditor.wire(appearanceHost, session.draft.appearance, {
+          context: {
+            age: 22,
+            popularity: 12,
+            totalFights: 0,
+            fightingStyle: ORIGINS[session.draft.origin]?.styleKey || session.draft.archetype,
+          },
+        });
+      }
 
-      await this.game.createPlayerFighter({ name, weightClass, archetype, origin, difficultyId, academyId, managerId, challengeMode });
-
-      localStorage.setItem('characterCreationDone', '1');
-      modal.remove();
-      this.notificationService.add('success', 'Carreira Iniciada', `${name} deu o primeiro passo rumo à elite mundial.`);
-      this.navigateTo('dashboard');
-      setTimeout(() => this._showTutorial(), 600);
-    });
+      // Foco no nome no primeiro passo
+      queueMicrotask(() => nameEl?.focus());
+    } else {
+      queueMicrotask(() => {
+        const first = body.querySelector('button:not([disabled]), input, select');
+        first?.focus?.();
+      });
+    }
   }
 
   // ===== Tutorial guiado para novos jogadores =====
@@ -438,6 +740,18 @@ class App {
 
   async renderDashboard() {
     const data = await this.game.getDashboard();
+    const monetization = await this.monetizationService.getState();
+    data.eliteFrame = monetization.equipped.posterFrame === 'cos-elite-frame';
+
+    // Retrato do oponente no CTA de oferta precisa do LUTADOR COMPLETO —
+    // uma projeção {id, name} derivava outra cara (idade/estilo/cartel
+    // entram no viés visual), e o mesmo oponente aparecia diferente aqui
+    // e no perfil dele.
+    const bestOffer = [...(data.pendingOffers || [])].sort((a, b) => (b.purse || 0) - (a.purse || 0))[0];
+    data.bestOfferOpponent = bestOffer?.opponentId
+      ? await this.game.fighterCtrl.getFighter(bestOffer.opponentId).catch(() => null)
+      : null;
+
     const weekLabel = absWeekToLabel(data.now);
     const html = DashboardView.render(data, weekLabel);
     await LayoutView.render(html);
@@ -876,7 +1190,7 @@ class App {
     modal.querySelectorAll('.difficulty-option').forEach(opt => {
       opt.addEventListener('click', async () => {
         const weeks = parseInt(opt.dataset.weeks);
-        modal.remove();
+        LayoutView.closeModal(modal);
         await this.runSimulatePeriod(weeks, selectedFocus || null);
       });
     });
@@ -897,7 +1211,9 @@ class App {
         <div class="loading-spinner"></div>
         <p>O tempo está passando — isso pode levar alguns segundos.</p>
       </div>
+      ${AdService.renderSlot('simulate-period', 'simulateAdSlot')}
     `, false);
+    AdService.mount('simulateAdSlot');
 
     const result = await this.game.simulateWeeks(weeks, { trainingFocus });
 
@@ -957,7 +1273,17 @@ class App {
 
     const contractProposals = await this._loadContractProposals(fighter);
 
-    const html = OffersView.render(pending, accepted, history, fighter, now, dossiers, contractProposals, teammates, rivalries, readiness);
+    // Lutadores COMPLETOS dos oponentes — retrato consistente com o perfil
+    // (projeção {id, name} derivaria outra cara; ver comentário no
+    // renderDashboard).
+    const opponents = {};
+    for (const o of [...pending, ...accepted]) {
+      if (o.opponentId && !(o.opponentId in opponents)) {
+        opponents[o.opponentId] = await this.game.fighterCtrl.getFighter(o.opponentId).catch(() => null);
+      }
+    }
+
+    const html = OffersView.render(pending, accepted, history, fighter, now, dossiers, contractProposals, teammates, rivalries, readiness, opponents);
     await LayoutView.render(html);
 
     document.querySelectorAll('.study-opponent').forEach(btn => {
@@ -1096,7 +1422,7 @@ class App {
     document.body.appendChild(modal);
 
     modal.querySelector('#conflictSignNow').addEventListener('click', async () => {
-      modal.remove();
+      LayoutView.closeModal(modal);
       const result = await this.game.signContractWithVacate(fighterId, promoId, now);
       if (result.fighter) {
         this.notificationService.add('success', 'Contrato Assinado!',
@@ -1106,7 +1432,7 @@ class App {
     });
 
     modal.querySelector('#conflictPostpone').addEventListener('click', async () => {
-      modal.remove();
+      LayoutView.closeModal(modal);
       await this.game.contractService.postpone(fighterId);
       this.notificationService.add('info', 'Decis\u00E3o Adiada',
         `A proposta do ${promoName} foi mantida. Voc\u00EA pode aceit\u00E1-la quando estiver pronto.`);
@@ -1114,7 +1440,7 @@ class App {
     });
 
     modal.querySelector('#conflictCancel').addEventListener('click', () => {
-      modal.remove();
+      LayoutView.closeModal(modal);
     });
   }
 
@@ -1185,16 +1511,16 @@ class App {
         this.notificationService.add('warning', 'Treino Semanal', result.reason);
       }
 
-      modal.remove();
+      LayoutView.closeModal(modal);
       this.renderDashboard();
     });
 
     modal.querySelector('.dismiss-training-modal').addEventListener('click', () => {
-      modal.remove();
+      LayoutView.closeModal(modal);
     });
 
     modal.querySelector('[data-close="weeklyTrainingModal"]').addEventListener('click', () => {
-      modal.remove();
+      LayoutView.closeModal(modal);
     });
   }
 
@@ -1264,6 +1590,7 @@ class App {
     let beatIdx = 0;
     let cancelled = false;
     let tl = gsap.timeline();
+    const monetizationPromise = this.monetizationService.getState();
 
     const faceOff = document.getElementById('hubFaceOff');
     let threeFaceOff = null;
@@ -1275,7 +1602,7 @@ class App {
       }).catch(() => {});
     } catch {}
 
-    const finish = () => {
+    const finish = async () => {
       cancelled = true;
       tl.kill();
       tl = gsap.timeline();
@@ -1288,6 +1615,8 @@ class App {
       if (statusText) statusText.textContent = 'Luta encerrada';
       if (skipBtn) skipBtn.style.display = 'none';
 
+      const won = this._lastFightWon;
+
       // Marco de título? Toca a cinemática por cima do resumo — o resumo já
       // está montado embaixo quando ela termina ou é pulada. O sting de
       // vitória/derrota só toca quando NÃO há cinemática (que tem seu
@@ -1296,9 +1625,9 @@ class App {
         const c = this._pendingCinematic;
         this._pendingCinematic = null;
         CinematicService.play(c.id, c.text);
-      } else if (this._lastFightWon === true) {
+      } else if (won === true) {
         AudioService.play('success');
-      } else if (this._lastFightWon === false) {
+      } else if (won === false) {
         AudioService.play('fail');
       }
       this._lastFightWon = undefined;
@@ -1311,7 +1640,18 @@ class App {
           .to('#hubScorecards', { opacity: 1, duration: 0.3 }, '-=0.1')
           .to('#hubPurseDisplay', { opacity: 1, y: 0, duration: 0.3 }, '-=0.05')
           .to('#hubDamageWarning', { opacity: 1, duration: 0.3 }, '-=0.05')
-          .to('#hubActions', { opacity: 1, y: 0, duration: 0.3 }, '-=0.05');
+          .to('#hubActions', { opacity: 1, y: 0, duration: 0.3 }, '-=0.05')
+          .to('#hubAdSlot', { opacity: 1, duration: 0.3 }, '-=0.05');
+        AdService.mount('hubAdSlotInner');
+
+        // Cosmético de apoiador (js/services/monetization-service.js) —
+        // puramente decorativo, só dispara em vitória.
+        if (won === true) {
+          const monetization = await monetizationPromise;
+          if (monetization.equipped.winEffect === 'cos-confetti') {
+            this._fireConfetti(summary);
+          }
+        }
       }
     };
 
@@ -1381,6 +1721,38 @@ class App {
 
     gsap.delayedCall(1.2, showBeat);
   }
+
+  // Cosmético "Confete na Vitória" (COSMETIC_ITEMS, game-config.js) — puramente
+  // decorativo. Peças em position:fixed ancoradas no card de resultado, não
+  // no fluxo do documento, pra nunca empurrar layout.
+  _fireConfetti(anchorEl) {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const rect = anchorEl.getBoundingClientRect();
+    const colors = ['#f3efe9', '#c9a227', '#8e857c', '#ef5f6b'];
+
+    for (let i = 0; i < 28; i++) {
+      const piece = document.createElement('span');
+      piece.className = 'confetti-piece';
+      piece.style.background = colors[i % colors.length];
+      piece.style.top = `${rect.top}px`;
+      piece.style.left = `${rect.left + Math.random() * rect.width}px`;
+      document.body.appendChild(piece);
+
+      gsap.fromTo(piece,
+        { y: -10, opacity: 1, rotate: 0 },
+        {
+          y: 200 + Math.random() * 100,
+          x: (Math.random() - 0.5) * 180,
+          rotate: Math.random() * 540 - 270,
+          opacity: 0,
+          duration: 1.3 + Math.random() * 0.6,
+          ease: 'power1.in',
+          onComplete: () => piece.remove(),
+        }
+      );
+    }
+  }
+
   _playLiveBroadcast() {
     const status = document.getElementById('liveStatus');
     const fights = Array.from(document.querySelectorAll('#liveFights .live-fight'));
@@ -1498,6 +1870,101 @@ class App {
         await this.game.fighterCtrl.updateFighter(f);
         this.notificationService.add('success', 'Renomear', `Lutador renomeado para ${newName}.`);
         this.showFighterProfile(fighterId);
+      });
+    });
+
+    // Edição de aparência pós-criação — mesmo editor da criação de
+    // personagem (AppearanceEditor, uma fonte só). Salvar persiste no
+    // fighter; cancelar não toca em nada.
+    document.querySelectorAll('.fighter-equip-unlock').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const fId = btn.dataset.id;
+        const unlockId = btn.dataset.unlock;
+        const f = await this.game.fighterCtrl.getFighter(fId);
+        if (!f || !unlockId) return;
+        VisualIdentityService.syncUnlocks(f);
+        const base = f.appearance
+          ? { ...f.appearance }
+          : VisualIdentityService.resolveBaseAppearance(f);
+        f.appearance = VisualIdentityService.applyUnlockPatch(base, unlockId);
+        f.visualLock = true; // equip manual = look intencional
+        await this.game.fighterCtrl.updateFighter(f);
+        this.notificationService.add('success', 'Visual', 'Look equipado no retrato.');
+        this.showFighterProfile(fId);
+      });
+    });
+
+    document.querySelectorAll('.fighter-imagine-export').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const fId = btn.dataset.id;
+        const f = await this.game.fighterCtrl.getFighter(fId);
+        if (!f) return;
+        const eras = VisualIdentityService.buildEraImaginePrompts(f);
+        const identity = VisualIdentityService.describeIdentity(f);
+        const text = [
+          `# Concept art — ${f.name}`,
+          `Arquétipo: ${identity.archetypeLabel} | Era: ${identity.stageLabel}`,
+          '',
+          ...eras.map(e => `## ${e.label}\n${e.prompt}\n`),
+          '---',
+          'Uso: cole no Grok Imagine / gerador de concept art (offline). Não roda no jogo.',
+        ].join('\n');
+        try {
+          await navigator.clipboard.writeText(text);
+          this.notificationService.add('success', 'Concept art', 'Prompts de 4 eras copiados para a área de transferência.');
+        } catch {
+          // Fallback download
+          const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = `concept-${(f.name || 'fighter').replace(/\s+/g, '-').toLowerCase()}.txt`;
+          a.click();
+          URL.revokeObjectURL(a.href);
+          this.notificationService.add('success', 'Concept art', 'Arquivo de prompts baixado.');
+        }
+      });
+    });
+
+    document.querySelectorAll('.fighter-edit-appearance').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const fId = btn.dataset.id;
+        const f = await this.game.fighterCtrl.getFighter(fId);
+        if (!f) return;
+
+        const state = { ...PortraitService.appearanceFor(f) };
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.id = 'appearanceEditModal';
+        modal.innerHTML = `
+          <div class="modal" style="max-width:560px">
+            <div class="modal-header">
+              <h3>Editar Aparência</h3>
+              <button class="modal-close" data-close="appearanceEditModal">&times;</button>
+            </div>
+            <div id="appearanceEditHost">${AppearanceEditor.render(state, { fighter: f })}</div>
+            <div class="modal-actions">
+              <button class="btn btn-secondary" data-close="appearanceEditModal">Cancelar</button>
+              <button class="btn btn-primary" id="appearanceSaveBtn">Salvar</button>
+            </div>
+          </div>`;
+        document.body.appendChild(modal);
+        AppearanceEditor.wire(modal.querySelector('#appearanceEditHost'), state, {
+          fighter: f,
+          context: {
+            age: f.age,
+            fightingStyle: f.style || f.fightingStyle,
+            popularity: f.popularity,
+            totalFights: f.totalFights,
+          },
+        });
+
+        modal.querySelector('#appearanceSaveBtn').addEventListener('click', async () => {
+          f.appearance = { ...state };
+          f.visualLock = true; // edição manual trava blend automático
+          await this.game.fighterCtrl.updateFighter(f);
+          LayoutView.closeModal(modal);
+          this.showFighterProfile(fId);
+        });
       });
     });
 
@@ -1905,7 +2372,9 @@ class App {
 
   // ===== Configurações =====
   async renderSettings() {
-    await LayoutView.render(SettingsView.render());
+    const monetization = await this.monetizationService.getState();
+    const player = await this.game.getPlayerFighter().catch(() => null);
+    await LayoutView.render(SettingsView.render(monetization, player));
 
     const volume = document.getElementById('settingsVolume');
     const volumeLabel = document.getElementById('settingsVolumeLabel');
@@ -1947,6 +2416,34 @@ class App {
       });
     });
 
+    document.getElementById('settingsVisualAutoEvolve')?.addEventListener('change', async (e) => {
+      const f = await this.game.getPlayerFighter().catch(() => null);
+      if (!f) return;
+      f.visualAutoEvolve = !!e.target.checked;
+      if (f.visualAutoEvolve) {
+        f.visualLock = false;
+        // Sync unlocks elegíveis agora (título/pop já conquistados)
+        const { newly } = VisualIdentityService.syncUnlocks(f);
+        const reward = VisualIdentityService.applyCareerVisualRewards(f, {
+          preferUnlockIds: newly,
+          forceEquip: false,
+        });
+        if (newly.length) {
+          this.notificationService.add(
+            'success',
+            'Visual',
+            `${newly.length} desbloqueio(s) sincronizado(s). O look pode evoluir daqui pra frente.`
+          );
+        } else {
+          this.notificationService.add('info', 'Visual', 'Evolução automática ligada — conquistas futuras mudam o visual.');
+        }
+        if (reward.appearance) f.appearance = reward.appearance;
+      } else {
+        this.notificationService.add('info', 'Visual', 'Evolução automática desligada. Seu visual fica como está.');
+      }
+      await this.game.fighterCtrl.updateFighter(f);
+    });
+
     document.getElementById('settingsSaveLoad')?.addEventListener('click', () => this.handleSaveLoad());
 
     document.getElementById('settingsExport')?.addEventListener('click', async () => {
@@ -1972,6 +2469,27 @@ class App {
         setTimeout(() => location.reload(), 800);
       } catch (err) {
         this.notificationService.add('warning', 'Importação Falhou', String(err?.message || err));
+      }
+    });
+
+    document.querySelectorAll('[data-cosmetic-slot]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const result = await this.monetizationService.setEquipped(btn.dataset.cosmeticSlot, btn.dataset.cosmeticItem || null);
+        if (!result.ok) this.notificationService.add('warning', 'Loja', result.reason);
+        this.renderSettings();
+      });
+    });
+
+    document.getElementById('supporterCodeRedeem')?.addEventListener('click', async () => {
+      const input = document.getElementById('supporterCodeInput');
+      const msg = document.getElementById('supporterCodeMsg');
+      const result = await this.monetizationService.redeemSupporterCode(input?.value);
+      if (result.ok) {
+        this.notificationService.add('success', 'Obrigado por apoiar!', 'Todos os cosméticos foram desbloqueados.');
+        this.renderSettings();
+      } else if (msg) {
+        msg.textContent = result.reason;
+        msg.style.color = 'var(--red-ink)';
       }
     });
   }

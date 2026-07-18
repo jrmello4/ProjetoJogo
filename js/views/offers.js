@@ -1,6 +1,7 @@
 import { formatCurrency, getWeightClassShort, getWeightClassName, renderAttrRange, e } from '../utils/helpers.js';
 import { TIER_LABELS, NEGOTIATION_CONFIG, TITLE_ROLE, GAME_PLANS, CARD_POSITION } from '../config/game-config.js';
 import { OFFER_STATUS } from '../models/fight-offer.js';
+import { PortraitService } from '../services/portrait-service.js';
 
 const STATUS_LABELS = {
   [OFFER_STATUS.COMPLETED]: { label: 'Realizada', cls: 'badge-success' },
@@ -218,8 +219,12 @@ export class OffersView {
     `;
   }
 
-  static render(pending, accepted, history, fighter, now, dossiers = {}, contractProposals = [], teammates = {}, rivalries = {}, readiness = {}) {
+  static render(pending, accepted, history, fighter, now, dossiers = {}, contractProposals = [], teammates = {}, rivalries = {}, readiness = {}, opponents = {}) {
     const fighterOf = () => fighter;
+    // Retrato do oponente — SEMPRE do lutador completo (opponents map);
+    // sem ele, cai num placeholder de projeção só como último recurso.
+    const opponentPortrait = (o, size) =>
+      `<span class="portrait-frame offer-portrait">${PortraitService.renderFighter(opponents[o.opponentId] || { id: o.opponentId, name: o.opponentName }, { size })}</span>`;
 
     const tierBadge = (tier) => {
       const cls = tier === 1 ? 'badge-danger' : tier === 2 ? 'badge-warning' : 'badge-info';
@@ -262,7 +267,10 @@ export class OffersView {
                 </div>
                 <span class="live-vs">VS</span>
                 <div class="live-corner live-corner--blue">
-                  <div class="live-corner-name">${e(o.opponentName)}${rivalries[o.id] ? ` <span class="badge badge-danger" style="font-size:0.6rem">⚔️ RIVAL · ${rivalries[o.id].label}</span>` : ''}</div>
+                  <div class="flex items-center gap-2" style="justify-content:flex-end">
+                    ${opponentPortrait(o, 32)}
+                    <div class="live-corner-name">${e(o.opponentName)}${rivalries[o.id] ? ` <span class="badge badge-danger" style="font-size:0.6rem">⚔️ RIVAL · ${rivalries[o.id].label}</span>` : ''}</div>
+                  </div>
                   <div class="live-corner-record">${o.opponentRecord ? `${o.opponentRecord.wins}-${o.opponentRecord.losses}-${o.opponentRecord.draws}` : ''} · OVR ${o.opponentOverall ?? '?'} · ${e(o.opponentStyle || '')}</div>
                 </div>
               </div>
@@ -396,9 +404,12 @@ export class OffersView {
         return `
           <div class="card mb-2 ${o.isTitleFight ? 'offer-card--title' : ''}" data-reveal>
             <div class="flex items-center justify-between mb-3">
-              <div>
-                <div class="text-sm font-bold">${o.isTitleFight ? '<span class="belt-mark">🏆</span> ' : ''}${fighter ? e(fighter.name) : '—'} vs ${e(o.opponentName)}${o.isReencounter ? ' <span class="badge badge-danger" style="font-size:0.65rem">⚔️ REENCONTRO</span>' : ''}${o.isShortNotice ? ' <span class="badge badge-warning" style="font-size:0.65rem">🔥 Short Notice</span>' : ''}${o.isSuperFight ? ' <span class="badge badge-danger" style="font-size:0.65rem">⭐ Super Fight</span>' : ''}${o.opponentWeightBully ? ' <span class="badge badge-warning" style="font-size:0.65rem">⚠️ Corta Peso Pesado</span>' : ''}${rivalries[o.id] ? ` <span class="badge badge-danger" style="font-size:0.65rem">⚔️ RIVAL · ${e(rivalries[o.id].label)}</span>` : ''}</div>
-                <div class="text-xs text-muted">${e(o.promotionName)} · ${formatCurrency(o.purse)} + ${formatCurrency(o.winBonus)} por vitória</div>
+              <div class="flex items-center gap-2">
+                ${opponentPortrait(o, 36)}
+                <div>
+                  <div class="text-sm font-bold">${o.isTitleFight ? '<span class="belt-mark">🏆</span> ' : ''}${fighter ? e(fighter.name) : '—'} vs ${e(o.opponentName)}${o.isReencounter ? ' <span class="badge badge-danger" style="font-size:0.65rem">⚔️ REENCONTRO</span>' : ''}${o.isShortNotice ? ' <span class="badge badge-warning" style="font-size:0.65rem">🔥 Short Notice</span>' : ''}${o.isSuperFight ? ' <span class="badge badge-danger" style="font-size:0.65rem">⭐ Super Fight</span>' : ''}${o.opponentWeightBully ? ' <span class="badge badge-warning" style="font-size:0.65rem">⚠️ Corta Peso Pesado</span>' : ''}${rivalries[o.id] ? ` <span class="badge badge-danger" style="font-size:0.65rem">⚔️ RIVAL · ${e(rivalries[o.id].label)}</span>` : ''}</div>
+                  <div class="text-xs text-muted">${e(o.promotionName)} · ${formatCurrency(o.purse)} + ${formatCurrency(o.winBonus)} por vitória</div>
+                </div>
               </div>
               <span class="badge ${weeksOut <= 1 ? 'badge-danger' : 'badge-warning'}">${weeksOut <= 0 ? 'Esta semana!' : `em ${weeksOut} sem`}</span>
             </div>

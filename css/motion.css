@@ -93,6 +93,33 @@ html.lenis, html.lenis body { height: auto; }
   isolation: isolate;
 }
 
+/* Moldura Elite — cosmético de apoiador (js/services/monetization-service.js).
+   Deliberadamente monocromático: vermelho/azul/dourado já têm significado
+   fixo neste sistema (ver cabeçalho de main.css) e um cosmético pago não
+   pode pisar nisso. Brilho sutil percorrendo a borda, chalk sobre ash. */
+.poster--elite::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  border: 1px solid rgba(243, 239, 233, 0.22);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .poster--elite::before {
+    background: linear-gradient(100deg, transparent 40%, rgba(243, 239, 233, 0.16) 50%, transparent 60%);
+    background-size: 250% 100%;
+    animation: posterEliteShimmer 5s ease-in-out infinite;
+  }
+}
+
+@keyframes posterEliteShimmer {
+  0%   { background-position: 100% 0; }
+  50%  { background-position: 0 0; }
+  100% { background-position: 100% 0; }
+}
+
 /* The arena, crushed. Texture behind type — the way a real poster works. */
 .poster-arena {
   position: absolute;

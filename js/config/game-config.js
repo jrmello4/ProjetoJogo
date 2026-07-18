@@ -121,13 +121,17 @@ export const ARCHETYPES = {
   generalist: { label: 'Generalista', seedAttrs: [], seedBonus: 0 },
 };
 
+// `styleKey` liga a origem ao estilo MECÂNICO (FIGHTING_STYLES) — sem isso
+// o estilo do jogador saía do randomStyle() do gerador e a escolha aqui só
+// mudava o rótulo cosmético (jogador escolhia Boxe e nascia Wrestler).
+// Kickboxing e Judô mapeiam pro estilo mais próximo (só existem 5 estilos).
 export const ORIGINS = {
-  kickboxing: { label: 'Kickboxing', seedAttrs: ['kickboxing', 'footwork'], seedBonus: 10 },
-  judo: { label: 'Judô', seedAttrs: ['wrestling', 'takedowns'], seedBonus: 10 },
-  wrestling: { label: 'Wrestling', seedAttrs: ['wrestling', 'takedowns', 'strength'], seedBonus: 10 },
-  muayThai: { label: 'Muay Thai', seedAttrs: ['muayThai', 'clinch'], seedBonus: 10 },
-  bjj: { label: 'Jiu-Jitsu', seedAttrs: ['bjj', 'submissionOffense'], seedBonus: 10 },
-  boxing: { label: 'Boxe', seedAttrs: ['boxing', 'headMovement'], seedBonus: 10 },
+  kickboxing: { label: 'Kickboxing', seedAttrs: ['kickboxing', 'footwork'], seedBonus: 10, styleKey: 'muayThai' },
+  judo: { label: 'Judô', seedAttrs: ['wrestling', 'takedowns'], seedBonus: 10, styleKey: 'wrestler' },
+  wrestling: { label: 'Wrestling', seedAttrs: ['wrestling', 'takedowns', 'strength'], seedBonus: 10, styleKey: 'wrestler' },
+  muayThai: { label: 'Muay Thai', seedAttrs: ['muayThai', 'clinch'], seedBonus: 10, styleKey: 'muayThai' },
+  bjj: { label: 'Jiu-Jitsu', seedAttrs: ['bjj', 'submissionOffense'], seedBonus: 10, styleKey: 'bjj' },
+  boxing: { label: 'Boxe', seedAttrs: ['boxing', 'headMovement'], seedBonus: 10, styleKey: 'boxer' },
 };
 
 // Divisões usadas na geração do mundo — concentra lutadores para
@@ -152,14 +156,16 @@ export const CORE_WEIGHT_CLASSES = [
 
 // Promoções de IA. tier 1 = topo mundial; tier 3 = circuito regional.
 // skill = faixa de baseSkill dos lutadores gerados para o roster.
-// Rosters dimensionados para o ritmo realista de ~3-5 lutas/ano por
-// atleta: cards continuam cheios mesmo com longos descansos entre lutas.
+// Rosters dimensionados para profundidade por divisão (~5–8 por classe
+// nos 8 CORE_WEIGHT_CLASSES): matchmaking e mercado de ofertas não
+// esgotam o elenco. Capacidade total assinada ~1.5× o baseline antigo
+// (172) sem estourar o teto de POPULATION_CAP + purga de aposentados.
 export const PROMOTIONS = [
-  { id: 'promo-afc', name: 'Apex Fighting Championship', short: 'AFC', tier: 1, reputation: 92, cadenceWeeks: 4, rosterSize: 44, skill: [58, 82] },
-  { id: 'promo-pfc', name: 'Pride Fighting Championship', short: 'PFC', tier: 2, reputation: 68, cadenceWeeks: 4, rosterSize: 36, skill: [46, 66] },
-  { id: 'promo-gce', name: 'Global Combat Elite', short: 'GCE', tier: 2, reputation: 61, cadenceWeeks: 4, rosterSize: 36, skill: [44, 62] },
-  { id: 'promo-ifp', name: 'Iron Fist Promotions', short: 'IFP', tier: 3, reputation: 38, cadenceWeeks: 3, rosterSize: 28, skill: [32, 52] },
-  { id: 'promo-vtr', name: 'Vale Tudo Regional', short: 'VTR', tier: 3, reputation: 27, cadenceWeeks: 3, rosterSize: 28, skill: [28, 48] },
+  { id: 'promo-afc', name: 'Apex Fighting Championship', short: 'AFC', tier: 1, reputation: 92, cadenceWeeks: 4, rosterSize: 66, skill: [58, 82] },
+  { id: 'promo-pfc', name: 'Pride Fighting Championship', short: 'PFC', tier: 2, reputation: 68, cadenceWeeks: 4, rosterSize: 54, skill: [46, 66] },
+  { id: 'promo-gce', name: 'Global Combat Elite', short: 'GCE', tier: 2, reputation: 61, cadenceWeeks: 4, rosterSize: 54, skill: [44, 62] },
+  { id: 'promo-ifp', name: 'Iron Fist Promotions', short: 'IFP', tier: 3, reputation: 38, cadenceWeeks: 3, rosterSize: 42, skill: [32, 52] },
+  { id: 'promo-vtr', name: 'Vale Tudo Regional', short: 'VTR', tier: 3, reputation: 27, cadenceWeeks: 3, rosterSize: 42, skill: [28, 48] },
 ];
 
 // Posição no card do evento — reflete a visibilidade da luta dentro do
@@ -260,8 +266,10 @@ export const EXPECTATION_CONFIG = {
 };
 
 export const WORLD_CONFIG = {
-  FREE_AGENT_POOL: 14,
-  FREE_AGENT_MIN: 8,
+  // Pool inicial / alvo de refill de agentes livres (bootstrap + _refillFreeAgents).
+  // Escala com o roster assinado (~1.5× do baseline 14) pra manter mercado.
+  FREE_AGENT_POOL: 24,
+  FREE_AGENT_MIN: 14,
   // Quantos lutadores do mundo treinam numa academia. Alto de propósito: a sala
   // de treino do jogador precisa ter gente dentro dela desde a semana 1 (§3b).
   ACADEMY_AFFILIATION_CHANCE: 0.6,
@@ -279,13 +287,15 @@ export const WORLD_CONFIG = {
   SCAR_CHANCE_LIGHT: 0.05,
   SCAR_CHANCE_SEVERE: 0.20,
 
-  // Draft anual (semana 52)
-  DRAFT_MIN: 5,
-  DRAFT_MAX: 10,
+  // Draft anual (semana 52) — repõe o elenco maior sem floodar o store.
+  DRAFT_MIN: 8,
+  DRAFT_MAX: 16,
 
   // Fase 1: teto de população — acima disto, veteranos irrelevantes são
   // aposentados forçadamente para evitar degradação da performance.
-  POPULATION_CAP: 300,
+  // Baseline ativo ≈ signed (258) + free agents (24) ≈ 282; headroom
+  // proporcional ao antigo (300 sobre ~186) → ~450.
+  POPULATION_CAP: 450,
 
   // P11.1 — fator caos no card de IA: em vez de sempre parear vizinhos de
   // rating, a promoção às vezes monta uma luta estranha (styles clash) ou
@@ -1527,5 +1537,53 @@ export const ONBOARDING_STEPS = [
     label: 'Lute sua primeira luta',
     hint: 'Comande o córner entre os rounds — as instruções mudam o resultado.',
     done: (fighter) => (fighter.record?.wins || 0) + (fighter.record?.losses || 0) + (fighter.record?.draws || 0) > 0,
+  },
+];
+
+// Monetização real do jogo (não confundir com SPONSOR_BRANDS acima, que é
+// ficção interna do lutador). Jogo é grátis na web, sem servidor próprio —
+// então a monetização tem duas pernas, as duas pensadas pra nunca cortar
+// uma decisão ou luta no meio:
+//
+//   1) Anúncio diegético — banner "patrocinador" nas pausas naturais
+//      (modal de Simular Período, tela de Live Fight Hub). Enquanto
+//      ADSENSE.enabled for false, a AdService preenche o slot com uma
+//      marca fictícia de SPONSOR_BRANDS (nunca fica vazio/estranho).
+//      Pra ligar anúncio de verdade: crie conta no Google AdSense, troque
+//      publisherId/slotId abaixo e vire enabled:true.
+//
+//   2) Cosméticos de apoiador — puramente visuais (nunca afeta economia
+//      ou dificuldade). Sem backend não dá pra processar pagamento real
+//      aqui; o fluxo é apoiar via SUPPORT_URL (Ko-fi/Buy Me a Coffee) e o
+//      dev manda de volta o código único de apoiador pra resgatar em
+//      Configurações. Ver nota de segurança em MonetizationService — é
+//      hash SHA-256, não é DRM de verdade, e não precisa ser.
+export const MONETIZATION_CONFIG = {
+  SUPPORT_URL: 'https://ko-fi.com/SEU_USUARIO_AQUI', // TODO: trocar antes de publicar
+  // sha256("OBRIGADO2026") — troque o código enviado aos apoiadores e
+  // recalcule o hash (crypto.createHash('sha256').update(code).digest('hex'))
+  // sempre que quiser invalidar códigos antigos.
+  SUPPORTER_CODE_HASH: 'e20668a112a7a9b6637fbf190053ec1db0fa7ab599ec56a88b11cd991bfa08ad',
+  ADSENSE: {
+    enabled: false,     // true só depois de preencher publisherId/slotId reais
+    publisherId: '',    // ex: 'ca-pub-XXXXXXXXXXXXXXXX'
+    slotId: '',
+  },
+};
+
+export const COSMETIC_ITEMS = [
+  {
+    id: 'cos-elite-frame',
+    slot: 'posterFrame',
+    name: 'Moldura Elite',
+    icon: '✨',
+    description: 'Brilho sutil na borda do cartaz de luta.',
+  },
+  {
+    id: 'cos-confetti',
+    slot: 'winEffect',
+    name: 'Confete na Vitória',
+    icon: '🎉',
+    description: 'Chuva de confete na tela de resultado quando você vence.',
   },
 ];

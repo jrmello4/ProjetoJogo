@@ -4,6 +4,8 @@ import { Academy } from '../models/academy.js';
 import { RankingService } from './ranking.js';
 import { getWeightClassName } from '../utils/helpers.js';
 import { TITLE_CONFIG, TITLE_ROLE, CORE_WEIGHT_CLASSES } from '../config/game-config.js';
+import { VisualIdentityService } from './visual-identity-service.js';
+import { VISUAL_UNLOCKS } from '../config/visual-identity-config.js';
 
 // Cinturões: quem detém, quem desafia, e o que acontece quando o cinturão
 // troca de mãos. Toda a regra de título vive aqui — nem o OfferService nem
@@ -302,6 +304,20 @@ export class TitleService {
     if (winner) {
       if (!retained) winner.titlesWon = (winner.titlesWon || 0) + 1;
       winner.updatePopularity(retained ? TITLE_CONFIG.POPULARITY_ON_DEFENSE : TITLE_CONFIG.POPULARITY_ON_TITLE_WIN);
+      // Identidade visual: desbloqueia corrente/terno; equipa se autoEvolve
+      const visual = VisualIdentityService.onTitleResolved(winner, { retained });
+      if (visual.newly.length > 0 && playerFighterId && winner.id === playerFighterId) {
+        const names = visual.newly.map(id => VISUAL_UNLOCKS[id]?.label).filter(Boolean);
+        if (names.length && this.notifService) {
+          await this.notifService.add(
+            'success',
+            '🎨 Visual desbloqueado',
+            names.length === 1
+              ? `Novo visual: ${names[0]}.`
+              : `Novos visuais: ${names.join(', ')}.`
+          );
+        }
+      }
       await this.fighterCtrl.updateFighter(winner);
       await this._bumpAcademyReputation(winner.academyId, retained ? TITLE_CONFIG.REP_ON_DEFENSE : TITLE_CONFIG.REP_ON_TITLE_WIN);
     }

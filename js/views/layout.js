@@ -154,7 +154,7 @@ export class LayoutView {
       if (e.target.closest('[data-close]')) {
         const modalId = e.target.closest('[data-close]').dataset.close;
         const modal = document.getElementById(modalId);
-        if (modal) modal.remove();
+        if (modal) this.closeModal(modal);
       }
     });
 
@@ -187,10 +187,14 @@ export class LayoutView {
       if (e.key === 'Escape') {
         const cinematic = document.querySelector('.cinematic-overlay');
         if (cinematic) return; // CinematicService já tem seu próprio handler de Esc
+        // Criação de personagem é hard-gate (primeiro boot + nova carreira):
+        // Esc não pode fechar — senão init() já retornou e o app soft-locka.
+        const topModal = document.querySelector('.modal-overlay');
+        if (topModal?.id === 'characterCreationModal') return;
         const closeBtn = document.querySelector('.modal-overlay [data-close]');
         if (closeBtn) { closeBtn.click(); return; }
         const modal = document.querySelector('.modal-overlay');
-        if (modal) { modal.remove(); return; }
+        if (modal) { this.closeModal(modal); return; }
         if (document.getElementById('sidebar')?.classList.contains('open')) {
           this.setSidebarOpen(false);
         }
@@ -234,7 +238,7 @@ export class LayoutView {
         </div>
       </div>`;
     document.body.appendChild(modal);
-    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+    modal.addEventListener('click', (e) => { if (e.target === modal) this.closeModal(modal); });
   }
 
   static _initScrollProgress() {
@@ -304,5 +308,25 @@ export class LayoutView {
         }
       }
     }).observe(document.body, { childList: true });
+  }
+
+  // Fecha um .modal-overlay tocando a animação de saída antes de tirar do
+  // DOM — chamar .remove() direto corta a transição no meio (some sem
+  // motion nenhum). O setTimeout é rede de segurança: se animationend não
+  // disparar por algum motivo (elemento escondido, display:none em algum
+  // ancestral), o modal não fica preso na tela pra sempre.
+  static closeModal(modal) {
+    if (!modal || modal.dataset.closing === '1') return;
+    modal.dataset.closing = '1';
+    modal.classList.add('is-closing');
+
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      modal.remove();
+    };
+    modal.addEventListener('animationend', (e) => { if (e.target === modal) finish(); });
+    setTimeout(finish, 200);
   }
 }

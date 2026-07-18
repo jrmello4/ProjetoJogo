@@ -2,6 +2,8 @@
 // Usa GSAP para animações (screen shake, fade, scale, stagger)
 // e ThreeFaceOff para o palco 3D entre os rounds.
 import { escapeHtml } from '../utils/helpers.js';
+import { AdService } from '../services/ad-service.js';
+import { PortraitService } from '../services/portrait-service.js';
 
 export class LiveFightHubView {
   static render(fighterA, fighterB, result) {
@@ -15,7 +17,11 @@ export class LiveFightHubView {
     return `
       <div class="page-header" style="text-align:center;border:none">
         <div id="hubFaceOff" class="faceoff-container" style="height:200px"></div>
-        <h2 id="hubFightTitle" style="opacity:0">⚔️ ${nameA} vs ${nameB}</h2>
+        <h2 id="hubFightTitle" style="opacity:0;display:flex;align-items:center;justify-content:center;gap:0.875rem;flex-wrap:wrap">
+          <span class="portrait-frame" style="border-top:2px solid var(--red)">${PortraitService.renderFighter(fighterA, { size: 48, context: 'octagon' })}</span>
+          <span>⚔️ ${nameA} vs ${nameB}</span>
+          <span class="portrait-frame" style="border-top:2px solid var(--blue)">${PortraitService.renderFighter(fighterB, { size: 48, context: 'octagon' })}</span>
+        </h2>
         <p id="hubFightSubtitle" class="text-muted" style="opacity:0">${escapeHtml(result.method || 'Decisão')} · ${result.round ? `R${result.round}` : rounds.length > 0 ? `${rounds.length} rounds` : ''}</p>
       </div>
 
@@ -80,6 +86,10 @@ export class LiveFightHubView {
         <div style="display:flex;gap:0.75rem;justify-content:center;flex-wrap:wrap;opacity:0" id="hubActions">
           <button class="btn btn-secondary" id="hubBackBtn">Voltar ao Dashboard</button>
           <button class="btn btn-primary" id="shareFightBtn">📤 Compartilhar</button>
+        </div>
+
+        <div style="opacity:0" id="hubAdSlot">
+          ${AdService.renderSlot('live-fight-hub', 'hubAdSlotInner')}
         </div>
       </div>
 

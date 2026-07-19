@@ -208,8 +208,8 @@ export class PortraitService {
     return `<svg viewBox="0 0 ${GW} ${GH}" width="${size}" height="${Math.round(size * 1.2)}"
       class="portrait portrait--pixel ${className}" role="img" aria-label="Retrato do lutador"
       shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
-      <rect width="${GW}" height="${GH}" fill="#17120e"/>
-      <rect y="${GH - 10}" width="${GW}" height="10" fill="#120e0a"/>
+      <rect width="${GW}" height="${GH}" fill="#241e18"/>
+      <rect y="${GH - 10}" width="${GW}" height="10" fill="#1a1611"/>
       ${px}</svg>`;
   }
 

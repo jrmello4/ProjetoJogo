@@ -155,7 +155,7 @@
   overflow: hidden;
 }
 
-.rank-portrait svg { margin-top: 8px; }
+.rank-portrait svg { margin-top: 5px; }
 
 /* Retrato nas ofertas — mesmo recorte circular do ranking. */
 .offer-portrait {
@@ -168,7 +168,7 @@
   overflow: hidden;
 }
 
-.offer-portrait svg { margin-top: 10px; }
+.offer-portrait svg { margin-top: 6px; }
 
 .rank-row:hover { background: var(--bg-hover); }
 
@@ -1218,7 +1218,7 @@
   flex-shrink: 0;
 }
 
-.poster-offer-silhouette svg { margin-top: 10px; }
+.poster-offer-silhouette svg { margin-top: 9px; }
 
 .poster-offer-vs {
   font-family: var(--font-mono);

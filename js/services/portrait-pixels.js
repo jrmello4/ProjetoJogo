@@ -81,8 +81,10 @@ const HEAD_SHAPES = [
   [[5, 14, 25], [6, 12, 27], [7, 11, 28], [8, 10, 29], [9, 10, 29], [10, 10, 29], [11, 10, 29], [12, 10, 29], [13, 10, 29], [14, 10, 29], [15, 11, 28], [16, 11, 28], [17, 12, 27], [18, 13, 26], [19, 14, 25], [20, 15, 24], [21, 17, 22]],
   // 3 alongado
   [[4, 15, 24], [5, 14, 25], [6, 13, 26], [7, 12, 27], [8, 12, 27], [9, 12, 27], [10, 12, 27], [11, 12, 27], [12, 12, 27], [13, 12, 27], [14, 12, 27], [15, 12, 27], [16, 13, 26], [17, 13, 26], [18, 14, 25], [19, 14, 25], [20, 15, 24], [21, 16, 23], [22, 17, 22]],
-  // 4 angular — maçãs marcadas
-  [[5, 14, 25], [6, 13, 26], [7, 12, 27], [8, 11, 28], [9, 11, 28], [10, 11, 28], [11, 10, 29], [12, 10, 29], [13, 11, 28], [14, 11, 28], [15, 12, 27], [16, 12, 27], [17, 13, 26], [18, 13, 26], [19, 14, 25], [20, 15, 24], [21, 17, 22]],
+  // 4 angular — maçãs marcadas + mandíbula mais afunilada que o oval (a
+  // diferença de maçã do rosto sozinha ficava embaixo de qualquer cabelo
+  // com cobertura até a têmpora — cabelo médio+ tornava angular==oval).
+  [[5, 14, 25], [6, 13, 26], [7, 12, 27], [8, 11, 28], [9, 11, 28], [10, 11, 28], [11, 10, 29], [12, 10, 29], [13, 11, 28], [14, 11, 28], [15, 12, 27], [16, 12, 27], [17, 13, 26], [18, 13, 26], [19, 15, 24], [20, 16, 23], [21, 18, 21]],
   // 5 diamante — queixo fino
   [[5, 15, 24], [6, 13, 26], [7, 12, 27], [8, 11, 28], [9, 11, 28], [10, 10, 29], [11, 10, 29], [12, 11, 28], [13, 11, 28], [14, 12, 27], [15, 12, 27], [16, 13, 26], [17, 14, 25], [18, 14, 25], [19, 15, 24], [20, 16, 23], [21, 18, 21]],
 ];
@@ -90,36 +92,121 @@ const HEAD_SHAPES = [
 // Meia-largura do ombro por físico (BODY_TYPES na mesma ordem do catálogo)
 const SHOULDER_HALF = [12, 14, 16, 15, 17, 11];
 
+// ---- massa capilar reutilizável ----
+//
+// Achado inspecionando o render de verdade (rasterizado, não o buffer em
+// ASCII), em DUAS rodadas:
+//   1) a maioria dos cabelos cobria só 3-4 linhas no topo do crânio — a
+//      têmpora inteira ficava pele à mostra, "cabelo curto" virava
+//      indistinguível de careca.
+//   2) a correção ingênua da rodada 1 (uma massa só, largura por linha
+//      igual à cabeça inteira, descendo até perto da orelha) pintava por
+//      cima da sobrancelha pra qualquer estilo que descesse além de y8 —
+//      sobrancelha nunca aparecia em cabelo médio+ (paintHairFront roda
+//      DEPOIS de paintBrows no pipeline).
+//
+// Fix: separar COROA (topo do crânio, nunca passa de y8 — sempre acima da
+// sobrancelha) de TÊMPORA (só as colunas de fora, x10-12/27-29, nunca
+// entra na faixa central x13-26 onde vivem sobrancelha/olho/nariz/boca).
+// Cabelo "desce até a orelha" pela têmpora ficando mais funda, não pela
+// coroa cobrindo mais linhas — geometricamente impossível de atropelar
+// feição de rosto, não é uma convenção que cada case precisa lembrar de
+// respeitar.
+const HAIR_CROWN = [
+  [3, 16, 23], [4, 14, 25], [5, 12, 27], [6, 11, 28], [7, 11, 28], [8, 11, 28],
+];
+const HAIR_TEMPLES = [
+  [8, 10, 12, 27, 29], [9, 10, 12, 27, 29], [10, 10, 12, 27, 29], [11, 10, 12, 27, 29],
+  [12, 10, 12, 27, 29], [13, 11, 12, 27, 28], [14, 11, 12, 27, 28], [15, 12, 13, 26, 27],
+];
+const hairCrownRows = (bottom) => HAIR_CROWN.filter(([y]) => y <= bottom);
+const hairTempleRows = (bottom) => HAIR_TEMPLES.filter(([y]) => y <= bottom);
+
+function paintHairCrown(p, bottom, color, bulge = 0) {
+  for (const [y, x0, x1] of hairCrownRows(bottom)) p.row(y, x0 - bulge, x1 + bulge, color);
+}
+function paintHairTemples(p, bottom, color, bulge = 0) {
+  for (const [y, lx0, lx1, rx0, rx1] of hairTempleRows(bottom)) {
+    p.row(y, lx0 - bulge, lx1 + bulge, color);
+    p.row(y, rx0 - bulge, rx1 + bulge, color);
+  }
+}
+
+// Touca de cabelo completa: coroa + têmporas. `bulge` alarga (cabelo
+// cheio/afro); `flat` troca a curva do topo por um corte reto (flat top).
+function hairCap(p, bottom, color, { bulge = 0, flat = false } = {}) {
+  paintHairCrown(p, bottom, color, bulge);
+  paintHairTemples(p, bottom, color, bulge);
+  if (flat) {
+    const rows = hairCrownRows(bottom);
+    const last = rows[rows.length - 1];
+    for (let y = rows[0][0]; y < last[0]; y++) p.row(y, last[1] - bulge, last[2] + bulge, color);
+  }
+}
+
 // ---- pintores ----
 
 function paintHairBack(p, style, hair, hairSh) {
   // Pintado ANTES do torso/cabeça — fica naturalmente atrás.
+  //
+  // Achado inspecionando o render de verdade (rasterizado, não o buffer em
+  // ASCII): o pescoço e o tronco são pintados DEPOIS, e são opacos — toda
+  // mecha que descia abaixo da linha do ombro (y~25) desaparecia por
+  // completo, sobrando só um cotoco acima do ombro. Cabelo comprido cai
+  // POR CIMA do peito/roupa, não atrás dela — então cada estilo aqui
+  // desenha só a parte que é GENUINAMENTE atrás (acima do ombro); a queda
+  // sobre o peito é repintada por paintHairFall, depois da roupa.
   if (style === 8 || style === 21 || style === 23) { // longo / mullet / rabo
-    const yEnd = style === 21 ? 30 : 34;
-    p.rect(9, 8, 12, yEnd, hair);
-    p.rect(27, 8, 30, yEnd, hair);
-    p.rect(10, yEnd + 1, 11, yEnd + 2, hairSh);
-    p.rect(28, yEnd + 1, 29, yEnd + 2, hairSh);
-    if (style === 23) { p.rect(18, 22, 21, 33, hair); p.rect(19, 34, 20, 36, hairSh); } // cauda
+    p.rect(9, 8, 12, 24, hair);
+    p.rect(27, 8, 30, 24, hair);
+    if (style === 23) p.rect(18, 22, 21, 24, hair); // início do rabo, ainda atrás
   }
   if (style === 7) { // dreads
-    for (const x of [10, 13, 16, 21, 24, 27]) p.rect(x, 8, x + 1, 26 + (x % 3), hair);
+    for (const x of [10, 13, 16, 21, 24, 27]) p.rect(x, 8, x + 1, 24, hair);
   }
   if (style === 13) { // tranças
-    for (const x of [11, 15, 19, 23, 27]) p.rect(x, 8, x, 28, hair);
+    for (const x of [11, 15, 19, 23, 27]) p.rect(x, 8, x, 24, hair);
   }
   if (style === 15) { // cacheado — volume atrás
     p.rect(9, 7, 11, 16, hair);
     p.rect(28, 7, 30, 16, hair);
   }
-  if (style === 5) { // black power — auréola atrás
-    p.rect(8, 2, 31, 12, hair);
+  if (style === 5) { // black power — auréola atrás, cantos arredondados
+    p.spans([
+      [2, 12, 27], [3, 10, 29], [4, 9, 30],
+      [5, 8, 31], [6, 8, 31], [7, 8, 31], [8, 8, 31], [9, 8, 31],
+      [10, 9, 30], [11, 10, 29], [12, 12, 27],
+    ], hair);
+  }
+}
+
+// Continuação de paintHairBack pintada DEPOIS da roupa/tronco — a mecha
+// que cai sobre o peito fica na FRENTE da roupa (anatomia: cabelo comprido
+// cai por cima do colarinho, não some atrás dele). Mesmas coordenadas de
+// paintHairBack pra y>=25, só que sobrevivendo ao overwrite do torso.
+function paintHairFall(p, style, hair, hairSh) {
+  if (style === 8 || style === 21) { // longo / mullet
+    const yEnd = style === 21 ? 30 : 34;
+    p.rect(9, 25, 12, yEnd, hair);
+    p.rect(27, 25, 30, yEnd, hair);
+    p.rect(10, yEnd + 1, 11, yEnd + 2, hairSh);
+    p.rect(28, yEnd + 1, 29, yEnd + 2, hairSh);
+  }
+  if (style === 23) { // rabo — cauda cai na frente do peito
+    p.rect(18, 25, 21, 33, hair);
+    p.rect(19, 34, 20, 36, hairSh);
+  }
+  if (style === 7) { // dreads — pontas caindo sobre o peito
+    for (const x of [10, 13, 16, 21, 24, 27]) p.rect(x, 25, x + 1, 26 + (x % 3), hair);
+  }
+  if (style === 13) { // tranças — pontas caindo sobre o peito
+    for (const x of [11, 15, 19, 23, 27]) p.rect(x, 25, x, 28, hair);
   }
 }
 
 function paintTorso(p, skin, skinSh, half) {
   const L = CX - half, R = CX - 1 + half;
-  p.spans([[25, CX - half + 3, CX + half + 2 - 3]], skin);
+  p.spans([[25, CX - half + 3, CX + half - 4]], skin);
   p.spans([[26, L + 1, R - 1]], skin);
   for (let y = 27; y < H; y++) p.row(y, L, R, skin);
   // sombra lateral direita + linha de peitoral
@@ -311,18 +398,23 @@ function paintBeard(p, style, hair, hairSh, skinMask) {
     p.setOn(15, 17, hair, skinMask); p.setOn(24, 17, hair, skinMask);
     return;
   }
-  if (style === 4) { // cheia — bigode em y16, boca (y17-18) fica visível
-    jaw(hair, true);
-    p.rowOn(16, 14, 25, hair, skinMask);
-    p.rectOn(14, 19, 25, 21, hair, skinMask);
-    return;
-  }
-  if (style === 5) { // longa — desce abaixo do queixo (sem máscara no pescoço)
-    jaw(hair, true);
-    p.rowOn(16, 14, 25, hair, skinMask);
-    p.rectOn(14, 19, 25, 21, hair, skinMask);
-    p.rect(15, 22, 24, 27, hair);
-    p.rect(16, 28, 23, 29, hairSh);
+  if (style === 4 || style === 5) {
+    // cheia / longa — achado inspecionando o render de verdade: a versão
+    // antiga (jaw() retangular preenchido) virava uma mancha sólida sem
+    // curva nenhuma, exatamente "barba como mancha sobre o rosto". Curva
+    // de mandíbula explícita (bulge no ângulo, afunila no queixo) +
+    // sombra em duas faixas pra dar volume — a mesma linguagem de luz
+    // usada no resto do busto, não um bloco chapado.
+    p.rowOn(16, 14, 25, hair, skinMask); // bigode
+    const jawCurve = [[17, 13, 26], [18, 12, 27], [19, 13, 26], [20, 14, 25], [21, 16, 23]];
+    for (const [y, x0, x1] of jawCurve) p.rowOn(y, x0, x1, hair, skinMask);
+    p.rowOn(17, 13, 14, hairSh, skinMask); p.rowOn(17, 25, 26, hairSh, skinMask);
+    p.rowOn(20, 15, 16, hairSh, skinMask); p.rowOn(20, 23, 24, hairSh, skinMask);
+    if (style === 5) {
+      p.rect(15, 22, 24, 27, hair);
+      p.rect(16, 23, 17, 27, hairSh); p.rect(22, 23, 23, 27, hairSh);
+      p.rect(16, 28, 23, 29, hairSh);
+    }
     return;
   }
   if (style === 6) { // desenhada — linha fina
@@ -358,91 +450,158 @@ function paintBeard(p, style, hair, hairSh, skinMask) {
   p.rectOn(18, 20, 21, 21, hair, skinMask);
 }
 
+// Cada case: hairCap() dá a MASSA (o que faz o estilo parecer cabelo de
+// verdade, não um risco fino no topo do crânio); o que vem depois é só a
+// característica que TORNA o estilo reconhecível (crista, topete, parte,
+// entrada). É a ordem errada que gera "genérico" — volume primeiro, marca
+// registrada depois, nunca o contrário.
 function paintHairFront(p, style, hair, hairSh) {
-  const cap = (yTop) => {
-    p.spans([[yTop, 14, 25], [yTop + 1, 12, 27], [yTop + 2, 11, 28], [yTop + 3, 11, 28]], hair);
-    p.row(8, 11, 12, hair); p.row(8, 27, 28, hair);
-    p.row(9, 11, 11, hair); p.row(9, 28, 28, hair);
-  };
   switch (style) {
     case 0: return; // careca
-    case 1: // raspado — sombra de couro
-      for (let x = 12; x <= 27; x++) if (x % 2 === 0) p.set(x, 5 + (x % 3 === 0 ? 1 : 0), hairSh);
-      p.row(5, 14, 25, hairSh);
+
+    case 1: // raspado — tosado bem rente, só tom (sem massa de cor cheia)
+      hairCap(p, 6, hairSh);
       return;
-    case 2: cap(4); return; // buzz
-    case 3: // moicano
-      p.rect(18, 1, 21, 8, hair); p.rect(19, 0, 20, 0, hair);
-      p.row(5, 14, 25, hairSh);
+
+    case 2: // buzz cut — rente mas com cor cheia (passo visível acima do raspado)
+      hairCap(p, 8, hair);
       return;
-    case 4: // coque samurai
-      cap(4); p.rect(17, 1, 22, 3, hair); p.row(0, 18, 21, hairSh);
+
+    case 3: // moicano — laterais raspadas + crista alta e grossa no centro
+      hairCap(p, 5, hairSh);
+      p.rect(17, 0, 22, 8, hair);
+      p.rect(18, 9, 21, 10, hair);
       return;
-    case 5: // black power — massa frontal
-      p.spans([[1, 13, 26], [2, 10, 29], [3, 9, 30], [4, 8, 31], [5, 8, 31], [6, 8, 31], [7, 9, 30], [8, 9, 30], [9, 10, 29]], hair);
-      p.row(2, 12, 15, hairSh);
+
+    case 4: // coque samurai — nuca curta + bun alto e RECUADO (mais atrás que o top knot)
+      hairCap(p, 8, hair);
+      p.rect(18, 0, 21, 3, hair);
+      p.row(4, 18, 21, hairSh);
       return;
-    case 6: // médio
-      cap(3); p.row(7, 11, 13, hair); p.row(7, 26, 28, hair);
-      p.set(14, 7, hair); p.set(25, 7, hair);
+
+    case 5: // black power — massa redonda e cheia, claramente mais larga que a cabeça
+      hairCap(p, 10, hair, { bulge: 3 });
+      p.row(4, 13, 17, hairSh);
       return;
-    case 7: cap(4); p.row(4, 13, 26, hairSh); return; // dreads — coroa
-    case 8: // longo — franja + coroa
-      cap(3); p.rect(11, 7, 13, 12, hair); p.rect(26, 7, 28, 12, hair);
+
+    case 6: // médio — cobertura até quase a orelha, sem floreio (o comprimento É a marca)
+      hairCap(p, 12, hair);
       return;
-    case 9: // militar — flat top
-      p.rect(12, 2, 27, 6, hair); p.row(2, 12, 27, hairSh);
+
+    case 7: {
+      // dreads — coroa cheia + mechas caindo, ESTRITAMENTE nas laterais.
+      // Achado inspecionando o render de verdade: a primeira versão usava
+      // x12-13/26-27, colado no início do olho (x14) — sem gap nenhum,
+      // e em certas combinações (hair claro) lia como barra atravessando
+      // o rosto. Zona seguindo x<=12/x>=27 (a mesma da têmpora) garante
+      // que NUNCA encosta em olho/nariz/boca, seja qual for a cor.
+      hairCap(p, 9, hair);
+      p.rect(10, 10, 12, 20, hair); p.rect(27, 10, 29, 20, hair);
+      p.set(10, 21, hairSh); p.set(29, 21, hairSh);
       return;
-    case 10: // undercut — topo cheio, lados raspados
-      p.rect(13, 2, 26, 6, hair);
-      for (let x = 11; x <= 12; x++) p.set(x, 8, hairSh);
-      for (let x = 27; x <= 28; x++) p.set(x, 8, hairSh);
+    }
+
+    case 8: // longo — cobertura cheia até a orelha; a queda vem do hairBack
+      hairCap(p, 13, hair);
       return;
-    case 11: // franja
-      cap(4); p.row(8, 12, 27, hair); p.row(9, 13, 26, hair);
+
+    case 9: // militar — flat top: topo reto e nítido, sem seguir a curva do crânio
+      hairCap(p, 7, hair, { flat: true });
       return;
-    case 12: // side part
-      cap(4); p.rect(21, 4, 22, 5, hairSh); // risca
-      p.row(8, 24, 27, hair);
+
+    case 10: { // undercut — topo comprido e retangular sobre laterais raspadas
+      hairCap(p, 6, hairSh);
+      p.rect(14, 2, 25, 9, hair);
       return;
-    case 13: // tranças — coroa com linhas
-      cap(4);
-      for (const x of [13, 17, 21, 25]) { p.set(x, 5, hairSh); p.set(x, 6, hairSh); }
+    }
+
+    case 11: // franja — coroa + testa coberta por uma franja reta e grossa
+      hairCap(p, 8, hair);
+      p.row(9, 12, 27, hair);
+      p.row(10, 13, 26, hair);
       return;
-    case 14: // afro curto
-      p.spans([[2, 13, 26], [3, 11, 28], [4, 10, 29], [5, 10, 29], [6, 10, 29], [7, 10, 29], [8, 11, 28]], hair);
-      p.row(3, 13, 16, hairSh);
+
+    case 12: // side part — assimétrico, risca marcada, um lado mais alto
+      hairCap(p, 9, hair, { bulge: 1 });
+      p.row(11, 23, 27, hair);
+      p.rect(20, 4, 21, 7, hairSh); // risca
       return;
-    case 15: // cacheado — topo irregular
-      cap(4);
-      for (const [x, y] of [[13, 3], [16, 2], [19, 3], [22, 2], [25, 3]]) { p.set(x, y, hair); p.set(x + 1, y, hair); }
+
+    case 13: {
+      // tranças — coroa + tranças grossas ESTRITAMENTE nas laterais.
+      // Achado inspecionando o render de verdade: a versão original usava
+      // x16/x24, direto no meio do olho/nariz — como paintHairFront roda
+      // DEPOIS de olho/nariz/boca no pipeline, as tranças pintavam POR
+      // CIMA da feição inteira (virava "grade" sobre o rosto com cabelo
+      // claro). x10-12/27-29 é a mesma zona segura da têmpora.
+      hairCap(p, 8, hair);
+      p.rect(10, 9, 12, 22, hair); p.rect(27, 9, 29, 22, hair);
+      p.set(11, 13, hairSh); p.set(11, 17, hairSh);
+      p.set(28, 13, hairSh); p.set(28, 17, hairSh);
       return;
-    case 16: // bagunçado — espetos
-      cap(4);
-      for (const [x, y] of [[12, 3], [15, 2], [18, 3], [21, 1], [24, 2], [27, 3]]) p.set(x, y, hair);
+    }
+
+    case 14: // afro curto — redondo e largo, mais curto que o black power
+      hairCap(p, 10, hair, { bulge: 2 });
       return;
-    case 17: // penteado atrás
-      cap(3); p.row(4, 13, 26, hairSh); p.row(6, 12, 27, hairSh);
+
+    case 15: { // cacheado — cachos visíveis por cima da massa (não só riscos finos)
+      hairCap(p, 9, hair);
+      const bumps = [[12, 3], [15, 1], [18, 2], [21, 1], [24, 2], [27, 3]];
+      for (const [x, y] of bumps) { p.set(x, y, hair); p.set(x + 1, y, hair); p.set(x, y + 1, hair); }
       return;
-    case 18: // entradas — M recuado
-      p.spans([[5, 17, 22], [6, 13, 26], [7, 11, 28], [8, 11, 28]], hair);
-      p.set(13, 5, hair); p.set(26, 5, hair);
-      p.row(9, 11, 11, hair); p.row(9, 28, 28, hair);
+    }
+
+    case 16: { // bagunçado — espetos irregulares de altura variável
+      hairCap(p, 8, hair);
+      const spikes = [[11, 4], [14, 1], [17, 3], [20, 0], [23, 2], [26, 4], [28, 5]];
+      for (const [x, y] of spikes) { p.set(x, y, hair); p.set(x, y + 1, hair); }
       return;
-    case 19: // top knot
-      p.rect(18, 0, 21, 2, hair);
-      p.row(5, 13, 26, hairSh);
+    }
+
+    case 17: // penteado atrás — cheio, com brilho de gel na diagonal
+      hairCap(p, 11, hair, { bulge: 1 });
+      p.row(5, 13, 20, hairSh);
+      p.row(8, 17, 25, hairSh);
       return;
-    case 20: // cornrows — linhas frontais
-      cap(4);
-      for (const x of [13, 16, 19, 22, 25]) { p.set(x, 4, hairSh); p.set(x, 5, hairSh); p.set(x, 6, hairSh); }
+
+    case 18: // entradas — coroa cheia MENOS os dois cantos frontais (M clássico) + têmporas.
+      // hairCap() só ESCREVE cor, não apaga — o buffer não tem "unset" —
+      // então o recuo entra pulando as colunas do canto ao montar a coroa
+      // na mão, nunca pintando ali em primeiro lugar.
+      for (const [y, x0, x1] of hairCrownRows(9)) {
+        if (y <= 6) p.row(y, x0 + 3, x1 - 3, hair);
+        else p.row(y, x0, x1, hair);
+      }
+      paintHairTemples(p, 9, hair);
       return;
-    case 21: cap(4); p.row(8, 11, 13, hair); p.row(8, 26, 28, hair); return; // mullet — frente normal
-    case 22: // pompadour — topete alto
+
+    case 19: // top knot — laterais bem curtas + bun grande e centrado no topo
+      hairCap(p, 6, hairSh);
+      p.rect(16, 0, 23, 4, hair);
+      p.row(5, 17, 22, hairSh);
+      return;
+
+    case 20: // cornrows — grooves paralelos grossos por cima da massa
+      hairCap(p, 9, hair);
+      for (const x of [13, 16, 19, 22, 25]) p.rect(x, 4, x, 9, hairSh);
+      return;
+
+    case 21: // mullet — frente curta e neutra; o comprimento é só atrás (hairBack)
+      hairCap(p, 8, hair);
+      return;
+
+    case 22: // pompadour — topete alto varrido pra trás, base cheia embaixo
+      hairCap(p, 9, hair, { bulge: 1 });
       p.spans([[1, 14, 23], [2, 13, 25], [3, 12, 26], [4, 12, 27], [5, 11, 28], [6, 11, 28]], hair);
       p.row(2, 14, 17, hairSh);
       return;
-    case 23: cap(4); return; // rabo de cavalo — frente presa
+
+    case 23: // rabo de cavalo — puxado e colado, presilha marcada na nuca
+      hairCap(p, 8, hair);
+      p.row(7, 18, 21, hairSh);
+      return;
+
     default: return;
   }
 }
@@ -517,7 +676,7 @@ function paintOutfit(p, outfit, colors, half) {
   const { cloth, clothSh, accent, skin, skinSh } = colors;
   const L = CX - half, R = CX - 1 + half;
   const fill = (c, cSh, yTop = 25) => {
-    p.spans([[yTop, CX - half + 3, CX + half + 2 - 3]], c);
+    p.spans([[yTop, CX - half + 3, CX + half - 4]], c);
     p.spans([[26, L + 1, R - 1]], c);
     for (let y = 27; y < H; y++) p.row(y, L, R, c);
     for (let y = 28; y < H; y++) p.row(y, R - 2, R, cSh);
@@ -780,6 +939,11 @@ export function paintBuffer(a, colors) {
   paintNeck(p, skin, skinSh);
   paintHead(p, a.faceShape, skin, skinSh);
   paintEars(p, a.earStyle, skin, skinSh);
+  // Queda do cabelo (rabo/comprido/mullet/pontas de dread e trança) por
+  // cima da roupa E do pescoço — ver comentário em paintHairFall. Antes da
+  // tatuagem de propósito: a máscara por material só pinta em pele, então
+  // tatuagem nunca aparece por baixo do cabelo que agora cobre aquele trecho.
+  paintHairFall(p, a.hairBackStyle ?? a.hairStyle, hair, hairSh);
   // Tatuagem depois de TODA a pele existir — a máscara por material faz o
   // resto: só pinta onde ainda é pele (roupa já cobriu o que cobre).
   paintTattoos(p, a.tattooStyle, ink, skinMask, half);

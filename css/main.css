@@ -989,6 +989,10 @@ tbody tr:hover td { background: var(--bg-hover); }
   vertical-align: top;
 }
 
+/* Pixel art: nunca deixar interpolação borrar o grid. crispEdges no SVG
+   faz o grosso; pixelated cobre qualquer rasterização/transform. */
+.portrait--pixel { image-rendering: pixelated; }
+
 @media (max-width: 640px) {
   .appearance-preview-wrap { flex-direction: column; align-items: center; }
   .appearance-identity { width: 100%; }

@@ -3,6 +3,7 @@ import { Fighter } from '../models/fighter.js';
 import { Event } from '../models/event.js';
 import { OFFER_STATUS } from '../models/fight-offer.js';
 import { SimulationEngine } from '../controllers/simulation.js';
+import { CombatAdapter } from '../controllers/combat-adapter.js';
 import { TapeService } from './tape-service.js';
 import { ReadinessService } from './readiness-service.js';
 import { DataGenerator } from './data-generator.js';
@@ -126,8 +127,9 @@ export class WorldService {
 
   // Tick semanal do mundo. Retorna eventos realizados, destacando os que
   // envolvem o lutador do jogador (para a transmissão ao vivo).
-  // cornerHooks (opcional): repassado à simulação da luta do jogador para
-  // permitir instruções de córner ao vivo entre rounds (ver app.js).
+  // cornerHooks (opcional): presença = caminho AO VIVO. App passa
+  // prepareCardFight(container) para montar a UI de cartas dentro de
+  // _runEvent; simulateWeeks passa null e o CombatAdapter resolve com IA.
   async processWeek(absWeekNow, startedAt, playerFighterId, cornerHooks = null) {
     await this._recoverInjuries(absWeekNow, playerFighterId);
     if (this.titleService) await this.titleService.reconcileBelts();
@@ -295,14 +297,6 @@ export class WorldService {
       // sempre, senão um rival recorrente ficaria permanentemente maior.
       const weightBullyDeltas = this._applyWeightBullyBoost(fighterB, fight.booking);
 
-      // Instruções de córner ao vivo só existem para a luta do jogador,
-      // e só quando o app.js fornece os hooks (fast-forward simula automático).
-      let hooks = null;
-      if (fight.booking && cornerHooks) {
-        await cornerHooks.onFightStart?.({ fighter: fighterA, opponent: fighterB, promo });
-        hooks = { onRoundEnd: (info) => cornerHooks.onRoundEnd({ ...info, fighter: fighterA, opponent: fighterB, promo }) };
-      }
-
       // O plano de jogo é do jogador. A IA luta equilibrada.
       const gamePlan = fight.booking?.gamePlan || 'balanced';
 
@@ -345,7 +339,48 @@ export class WorldService {
         tactics.readinessFactorA = tactics.readiness.factor;
       }
 
-      const result = await SimulationEngine.simulateFight(fighterA, fighterB, promo.tier === 1, hooks, gamePlan, fightDateISO, pressureLevel, tactics);
+      // Player booked fight → card combat (official engine). AI-vs-AI stays
+      // on SimulationEngine. interactive mirrors the old cornerHooks signal:
+      // live advanceWeek passes hooks; simulateWeeks / processWeek() does not.
+      let result;
+      if (fight.booking) {
+        const interactive = !!cornerHooks;
+        let container = null;
+        if (interactive && cornerHooks.prepareCardFight) {
+          container = await cornerHooks.prepareCardFight({
+            fighter: fighterA,
+            opponent: fighterB,
+            promo,
+          });
+        } else if (interactive) {
+          // Back-compat: old onFightStart intro still runs if prepareCardFight
+          // is missing (dev callers / partial hooks).
+          await cornerHooks.onFightStart?.({ fighter: fighterA, opponent: fighterB, promo });
+        }
+
+        const adapter = new CombatAdapter();
+        if (container) adapter.setContainer(container);
+        result = await adapter.runFight(
+          fighterA,
+          fighterB,
+          promo.tier === 1,
+          gamePlan,
+          promo.tier,
+          isTitleFight,
+          interactive
+        );
+        // CombatAdapter only resolves the bout — record/morale/popularity/
+        // post-fight effects still live on SimulationEngine (same side
+        // effects simulateFight always applied).
+        result.date = fightDateISO;
+        this._applyCardFightOutcome(fighterA, fighterB, result, fightDateISO);
+      } else {
+        // Instruções de córner ao vivo só existiam no motor antigo; lutas
+        // de IA nunca usam cornerHooks.
+        result = await SimulationEngine.simulateFight(
+          fighterA, fighterB, promo.tier === 1, null, gamePlan, fightDateISO, pressureLevel, tactics
+        );
+      }
       result.tactics = tactics;
 
       // A fita registra o que foi observável: o plano que cada um trouxe, sob
@@ -466,6 +501,34 @@ export class WorldService {
     );
 
     return { event, results, playerResults, playerFighterIds };
+  }
+
+  // Side-effects that SimulationEngine.simulateFight always applied after
+  // resolving a bout (W-L-D record, fight history, morale, popularity,
+  // post-fight fatigue/effects, KO accumulated damage). CombatAdapter only
+  // returns a result object — without this, player card fights would never
+  // update the cartel.
+  _applyCardFightOutcome(fighterA, fighterB, result, dateISO) {
+    const method = { method: result.method };
+    const round = result.round || 3;
+    if (result.isDraw) {
+      SimulationEngine._updateFighter(fighterA, fighterB, 'draw', method, round, dateISO);
+      SimulationEngine._updateFighter(fighterB, fighterA, 'draw', method, round, dateISO);
+      SimulationEngine._updatePopularity(fighterA, fighterB, method, 'draw');
+      SimulationEngine._updatePopularity(fighterB, fighterA, method, 'draw');
+      fighterA.applyPostFightEffects();
+      fighterB.applyPostFightEffects();
+      return;
+    }
+    const winner = result.winnerId === fighterA.id ? fighterA : fighterB;
+    const loser = result.winnerId === fighterA.id ? fighterB : fighterA;
+    SimulationEngine._updateFighter(winner, loser, 'win', method, round, dateISO);
+    SimulationEngine._updateFighter(loser, winner, 'loss', method, round, dateISO);
+    SimulationEngine._updatePopularity(winner, loser, method, 'win');
+    SimulationEngine._updatePopularity(loser, winner, method, 'loss');
+    winner.applyPostFightEffects();
+    loser.applyPostFightEffects();
+    SimulationEngine._applyAccumulatedDamage(winner, loser, result);
   }
 
   // Fase 3 — o que a luta significou pro Livro. É aqui que o sistema deixa de

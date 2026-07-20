@@ -18,11 +18,13 @@ export class AICombat {
     return getDefaultLoadout('balanced'); // No signature (null/'balanced'/unrecognized) — nothing to counter
   }
 
-  // Select a card for the AI to play
-  static selectCard(availableCards, state, opponentAvailableCards) {
+  // Select a card for the AI to play.
+  // `side` defaults to 'B' (opponent); pass 'A' when fast-forward drives the
+  // player corner with the same policy (non-interactive CombatAdapter).
+  static selectCard(availableCards, state, opponentAvailableCards, side = 'B') {
     if (!availableCards.length) return null;
 
-    const fighter = state.fighterB; // AI is always side B
+    const fighter = side === 'A' ? state.fighterA : state.fighterB;
     const position = fighter.position;
 
     // Prioritize cards based on position
@@ -55,9 +57,9 @@ export class AICombat {
     return selected ? selected.card : positionCards[0];
   }
 
-  // Decide whether AI should move manually
-  static selectMoveAction(availableCards, state) {
-    const fighter = state.fighterB;
+  // Decide whether AI should move manually. `side` same as selectCard.
+  static selectMoveAction(availableCards, state, side = 'B') {
+    const fighter = side === 'A' ? state.fighterA : state.fighterB;
     const position = fighter.position;
 
     // If at distance and no engage card available, move to range
@@ -67,7 +69,7 @@ export class AICombat {
     }
 
     // If at range and opponent is grappler, try to keep distance
-    const opponent = state.fighterA.ref;
+    const opponent = side === 'A' ? state.fighterB.ref : state.fighterA.ref;
     if (position === POSITIONS.RANGE && (opponent.style === 'wrestler' || opponent.style === 'bjj')) {
       // Stay at range, don't move
     }

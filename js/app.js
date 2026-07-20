@@ -23,7 +23,6 @@ import { TrainingCamp } from './controllers/training-camp.js';
 import { OnboardingService } from './services/onboarding-service.js';
 import { PressConference } from './controllers/press-conference.js';
 import { WeeklyTrainingController } from './controllers/weekly-training.js';
-import { CornerAdvice } from './controllers/corner-advice.js';
 import { CombatAdapter } from './controllers/combat-adapter.js';
 import { MetaProgressionService } from './services/meta-progression-service.js';
 import * as PerksScreenView from './views/perks-screen.js';
@@ -48,9 +47,9 @@ import { formatCurrency, getAdjacentWeightClasses, clamp, sanitizePlayerName, e 
 import { validateCharCreateStep } from './utils/char-create-validate.js';
 import { CAMP_CONFIG, HYPE_PURSE_RATIO, absWeek } from './config/game-config.js';
 
-// Toggle de debug temporário: ?cardCombat=true na URL liga o novo sistema
-// de combate por cartas (ver CombatAdapter/runCardFight) sem mexer no fluxo
-// padrão de luta. Só pra teste manual/dev — não é exposto na UI ainda.
+// Combate por cartas é o motor oficial das lutas do jogador (WorldService
+// + CombatAdapter). ?cardCombat=true permanece como flag legada de dev e
+// expõe app.runCardFight no console se quiser testar fora do fluxo semanal.
 if (new URLSearchParams(window.location.search).has('cardCombat')) {
   window.__useCardCombat = true;
 }
@@ -940,78 +939,18 @@ class App {
   }
 
   async _advanceWeekInner() {
-    // §C.2 — sinergia técnico-atleta. Snapshot da Academia/coachSynergy ANTES
-    // da luta: as sugestões de córner ao vivo usam esse valor o tempo todo
-    // (a sinergia só muda DEPOIS da luta resolvida, ver _applyCoachSynergyChange).
-    let coachPersonality = 'analytical';
-    let coachSynergyAtFightStart = 40;
-    try {
-      const preFighter = await this.game.getPlayerFighter();
-      const preAcademy = preFighter ? await this.game.getAcademy(preFighter.academyId) : null;
-      coachPersonality = preAcademy?.headCoach?.personality || 'analytical';
-      coachSynergyAtFightStart = preFighter?.coachSynergy ?? 40;
-    } catch { /* sem academia/lutador ainda (onboarding) — segue com o default */ }
-
-    // Tally da luta inteira: cada decisão de córner (rodada em que passou a
-    // valer, sugestão do técnico, escolha do jogador) some para cornerTally
-    // assim que o round QUE ELA GOVERNOU termina — só então dá pra saber se
-    // foi vencido ou perdido. `pendingDecision` guarda a escolha ainda não
-    // resolvida (a mais recente, cujo round ainda está em andamento).
-    const cornerTally = [];
-    let pendingDecision = null;
-    const resolvePendingDecision = (roundEntry) => {
-      if (!pendingDecision || !roundEntry) return;
-      cornerTally.push({
-        ...pendingDecision,
-        won: roundEntry.scoreA > roundEntry.scoreB,
-        lost: roundEntry.scoreA < roundEntry.scoreB,
-      });
-      pendingDecision = null;
-    };
-
+    // Live player fights run inside processWeek via prepareCardFight: WorldService
+    // awaits CombatAdapter.runFight(interactive=true) before finishing the week.
+    // Passing any non-null cornerHooks object is the signal that this is the
+    // interactive path (simulateWeeks passes null → AI plays both sides).
     const cornerHooks = {
-      onFightStart: async ({ fighter, opponent, promo }) => {
-        const html = EventsView.renderCornerFightIntro(fighter, opponent, promo.name);
-        await LayoutView.render(html);
-        await new Promise(r => setTimeout(r, 1000));
+      prepareCardFight: async ({ fighter, opponent, promo }) => {
+        const intro = EventsView.renderCornerFightIntro(fighter, opponent, promo.name);
+        await LayoutView.render(intro);
+        await new Promise(r => setTimeout(r, 800));
+        await LayoutView.render('<div id="fight-container" class="card-fight-host"></div>');
+        return document.getElementById('fight-container');
       },
-      onRoundEnd: (info) => new Promise((resolve) => {
-        // O round que acabou de terminar é o que a ÚLTIMA escolha de córner
-        // governou — resolve o tally antes de pedir a PRÓXIMA escolha.
-        resolvePendingDecision(info.roundResult);
-
-        // §C.2 — sugestão do técnico da Academia atual, já passada pelo
-        // embaralho de sinergia (CornerAdvice.applySynergyNoise).
-        const suggestion = CornerAdvice.getSuggestion(coachPersonality, coachSynergyAtFightStart, info);
-
-        const html = EventsView.renderCornerRound({
-          fighterName: info.fighter.name,
-          opponentName: info.opponent.name,
-          round: info.round,
-          roundResult: info.roundResult,
-          totalScoreA: info.totalScoreA,
-          totalScoreB: info.totalScoreB,
-          cardA: info.cardA,
-          cardB: info.cardB,
-          suggested: suggestion.key,
-        });
-        LayoutView.render(html).then(() => {
-          document.querySelectorAll('.corner-choice').forEach(b => {
-            b.addEventListener('click', () => {
-              const chosenKey = b.dataset.instruction;
-              // 'instinct' bypassa o córner (não é conselho de ninguém) —
-              // nunca conta como "seguiu a sugestão", mesmo que coincida.
-              pendingDecision = {
-                round: info.round + 1,
-                suggestedKey: suggestion.key,
-                chosenKey,
-                followed: chosenKey !== 'instinct' && chosenKey === suggestion.key,
-              };
-              resolve(chosenKey);
-            });
-          });
-        });
-      }),
     };
 
     const summary = await this.game.processWeek(cornerHooks);
@@ -1032,22 +971,6 @@ class App {
       'Semana Iniciada',
       `${absWeekToLabel(now)}. Fluxo pessoal: ${economy.net >= 0 ? '+' : ''}$${economy.net.toLocaleString()}${offersCreated.length > 0 ? ` · ${offersCreated.length} nova${offersCreated.length === 1 ? '' : 's'} oferta${offersCreated.length === 1 ? '' : 's'} de luta` : ''}.`
     );
-
-    // §C.2 — a escolha de córner do ÚLTIMO round instruído nunca passa por
-    // resolvePendingDecision dentro do hook (não há onRoundEnd depois do
-    // round final da luta) — resolve aqui contra o resultado real, e só
-    // então ajusta coachSynergy. Fetch-mutate-save próprio e isolado, ANTES
-    // de qualquer outro código abaixo buscar `fA` fresco — nada depois deste
-    // ponto salva o mesmo Fighter, então não há risco de sobrescrever.
-    const playerFightResult = world.playerEvents[0]?.playerResults?.[0] || null;
-    if (pendingDecision && playerFightResult) {
-      const roundEntry = playerFightResult.rounds?.find(rd => rd.round === pendingDecision.round)
-        || playerFightResult.rounds?.[playerFightResult.rounds.length - 1];
-      resolvePendingDecision(roundEntry);
-    }
-    if (playerFightResult && cornerTally.length > 0) {
-      await this._applyCoachSynergyChange(playerFightResult.fighterAId, cornerTally);
-    }
 
     const featured = world.playerEvents[0];
     if (featured) {
@@ -2680,14 +2603,14 @@ class App {
     });
   }
 
-  // ===== Combate por cartas (Fase 1 — ponto de entrada standalone/dev,
-  // ainda não ligado ao fluxo padrão de luta; ver CombatAdapter) =====
+  // ===== Combate por cartas — ponto de entrada standalone/dev (console).
+  // O fluxo oficial da semana usa prepareCardFight → WorldService → CombatAdapter. =====
   async runCardFight(fighterA, fighterB, promo, gamePlanKey) {
     await LayoutView.render('<div id="fight-container" class="card-fight-host"></div>');
     const adapter = new CombatAdapter();
     adapter.setContainer(document.getElementById('fight-container'));
-    const fiveRounds = promo.tier === 1;
-    return adapter.runFight(fighterA, fighterB, fiveRounds, gamePlanKey);
+    const fiveRounds = promo?.tier === 1;
+    return adapter.runFight(fighterA, fighterB, fiveRounds, gamePlanKey, promo?.tier ?? 3, false, true);
   }
 
   // Standalone meta-progression perks screen — same opt-in/dev-testing

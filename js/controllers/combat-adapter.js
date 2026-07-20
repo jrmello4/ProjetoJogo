@@ -1,13 +1,16 @@
 // js/controllers/combat-adapter.js
 //
-// Phase 1 integration adapter: drives CombatEngine/CombatResolver/AICombat
-// through a manual turn loop and renders progress via CardCombatView. This
-// is a standalone entry point (see App#runCardFight in app.js) — it is NOT
-// wired into the game's default fight-trigger flow yet.
+// Drives CombatEngine/CombatResolver/AICombat through a manual turn loop.
+// Used as the official engine for the player's booked fights (WorldService)
+// and as the standalone/dev entry point (App#runCardFight).
+//
+// `interactive` (default true): live UI waits for player clicks on side A.
+// When false (fast-forward / simulateWeeks, no cornerHooks), side A is also
+// driven by AICombat — no DOM, no Promise that waits forever.
 import { CombatEngine } from './combat-engine.js';
 import { CombatResolver } from './combat-resolver.js';
 import { AICombat } from './ai-combat.js';
-import { ACTIVE_CARDS, POSITIONS, getDefaultLoadout } from '../config/card-config.js';
+import { ACTIVE_CARDS, getDefaultLoadout } from '../config/card-config.js';
 import { COACH_SKILLS } from '../config/coach-config.js';
 import { CardCombatView } from '../views/card-combat-view.js';
 import { CardRewardService } from '../services/card-reward-service.js';
@@ -19,6 +22,7 @@ export class CombatAdapter {
     this.view = new CardCombatView();
     this.container = null;
     this.metaProgressionService = null;
+    this.interactive = true;
   }
 
   setContainer(container) {
@@ -34,11 +38,15 @@ export class CombatAdapter {
   }
 
   // promoTier drives which CardRewardService pool a post-fight win draws
-  // from (default 3 = Regional, since this standalone entry point isn't
-  // wired to a real promotion object yet — see App#runCardFight in app.js).
-  // isTitleFight swaps the reward for CardRewardService.getTitleReward()
-  // instead of a player-chosen pool.
-  async runFight(fighterA, fighterB, fiveRounds, gamePlanKey, promoTier = 3, isTitleFight = false) {
+  // from (default 3 = Regional). isTitleFight swaps the reward for
+  // CardRewardService.getTitleReward() instead of a player-chosen pool.
+  // interactive=false: both sides use AI, no UI (fast-forward path).
+  async runFight(fighterA, fighterB, fiveRounds, gamePlanKey, promoTier = 3, isTitleFight = false, interactive = true) {
+    // Without a DOM host, interactive mode would hang forever waiting for
+    // a click that never arrives — fall back to AI-vs-AI resolution.
+    if (interactive && !this.container) interactive = false;
+    this.interactive = interactive;
+
     // getDefaultLoadout returns a direct reference into DEFAULT_LOADOUTS
     // (not a copy) — shallow-copy both the loadout object and its `active`
     // array here before mutating anything below, or a cardPool merge would
@@ -80,12 +88,14 @@ export class CombatAdapter {
     // below to operate on the same state this adapter is driving/rendering.
     this.engine.state = state;
 
-    // Render initial state
-    this.view.render(this.container, state, {
-      onCardPlay: (cardId) => this._onPlayerCardSelected(cardId),
-      onMove: (pos) => this._onPlayerMove(pos),
-      onPass: () => this._onPlayerPass(),
-    });
+    // Render initial state only in interactive mode (needs a real container).
+    if (interactive && this.container) {
+      this.view.render(this.container, state, {
+        onCardPlay: (cardId) => this._onPlayerCardSelected(cardId),
+        onMove: (pos) => this._onPlayerMove(pos),
+        onPass: () => this._onPlayerPass(),
+      });
+    }
 
     const roundTurns = [];
 
@@ -108,9 +118,13 @@ export class CombatAdapter {
         // Tick cooldown for player (A) at start of their turn
         this._tickCooldownsWithPassives('A');
 
-        // PLAYER TURN (A): wait for card selection via UI
-        this.view.update(this.container, state);
-        const playerAction = await this._waitForPlayerAction(state);
+        // SIDE A: live player click, or AI when non-interactive (fast-forward)
+        if (interactive && this.container) {
+          this.view.update(this.container, state);
+        }
+        const playerAction = interactive
+          ? await this._waitForPlayerAction(state)
+          : this._selectAiSideAction('A');
 
         if (playerAction.type === 'card') {
           const preMovePosA = state.fighterA.position;
@@ -158,8 +172,7 @@ export class CombatAdapter {
           const turnResult = CombatResolver.resolveTurn(state, cardA.id, cardB.id);
           roundTurns.push(turnResult);
 
-          // Show turn result briefly
-          this._showTurnResult(turnResult);
+          if (interactive) this._showTurnResult(turnResult);
 
           // Check for finish
           const finish = CombatResolver.checkFinish(state, turnResult, r);
@@ -193,9 +206,9 @@ export class CombatAdapter {
       }
 
       // Corner phase — offer a random coach skill between rounds. Skipped
-      // on the last round (there's no "next round" left for a corner skill
-      // to help with once the fight is over) and skipped after an early
-      // finish (state.ended already true in that case).
+      // on the last round, after an early finish, and entirely in
+      // non-interactive mode (no UI to accept/decline; decline by default
+      // so fast-forward does not grant free corner buffs).
       if (!state.ended && r < state.maxRounds) {
         // Clear single-round corner effects granted for the round that
         // just ended before deciding this round's offer. finishChanceBonusA
@@ -205,10 +218,12 @@ export class CombatAdapter {
         state.finishChanceBonusA = 0;
         state.strategistRevealActive = false;
 
-        const skillEntry = this._pickRandomCoachSkill();
-        const accepted = await this._showCornerOffer(skillEntry);
-        if (accepted) {
-          this._applyCoachSkill(skillEntry, state);
+        if (interactive && this.container) {
+          const skillEntry = this._pickRandomCoachSkill();
+          const accepted = await this._showCornerOffer(skillEntry);
+          if (accepted) {
+            this._applyCoachSkill(skillEntry, state);
+          }
         }
       }
     }
@@ -222,7 +237,9 @@ export class CombatAdapter {
     // Post-fight card reward — only the player (side A) can earn a card,
     // and only on a win (loss/draw leaves rewardCard null). Title fights
     // hand out a fixed powerful card with no selection; regular fights let
-    // the player pick from a tier-based pool via _showCardReward.
+    // the player pick from a tier-based pool via _showCardReward (or auto-
+    // pick a random option when non-interactive so simulateWeeks still
+    // progresses the card pool).
     result.rewardCard = null;
     const playerWon = !result.isDraw && result.winnerId === result.fighterAId;
     if (playerWon) {
@@ -231,7 +248,11 @@ export class CombatAdapter {
       } else {
         const options = CardRewardService.getRewardOptions(promoTier);
         if (options.length > 0) {
-          result.rewardCard = await this._showCardReward(options);
+          if (interactive && this.container) {
+            result.rewardCard = await this._showCardReward(options);
+          } else {
+            result.rewardCard = options[Math.floor(Math.random() * options.length)];
+          }
         }
       }
     }
@@ -267,11 +288,25 @@ export class CombatAdapter {
     return result;
   }
 
-  // Promise-based wait for player to click a card/move/pass button
+  // AI decision for one side — same move-first-then-card policy used for B.
+  // Returns an action descriptor compatible with the player-action path.
+  _selectAiSideAction(side) {
+    const state = this.engine.state;
+    const avail = this.engine.getAvailableCards(state, side);
+    const moveTarget = AICombat.selectMoveAction(avail, state, side);
+    if (moveTarget) return { type: 'move', position: moveTarget };
+    const card = AICombat.selectCard(avail, state, [], side);
+    if (card) return { type: 'card', cardId: card.id };
+    return { type: 'pass' };
+  }
+
+  // Promise-based wait for player to click a card/move/pass button.
+  // Only valid in interactive mode with a container; callers must not use
+  // this on the fast-forward path (use _selectAiSideAction instead).
   _waitForPlayerAction(state) {
     return new Promise(resolve => {
       this._pendingAction = resolve;
-      this.view.update(this.container, state);
+      if (this.container) this.view.update(this.container, state);
     });
   }
 
@@ -496,6 +531,7 @@ export class CombatAdapter {
   }
 
   _showTurnResult(turnResult) {
+    if (!this.container) return;
     const el = this.container.querySelector('.turn-result');
     if (!el) return;
     const winner = turnResult.winner === 'A' ? 'Você' : 'Oponente';

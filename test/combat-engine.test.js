@@ -87,4 +87,45 @@ describe('AICombat', () => {
     expect(selected).toBeTruthy();
     expect(selected.id).toBeDefined();
   });
+
+  it('should select a card for side A when fast-forward drives the player', () => {
+    const cards = [
+      { card: ACTIVE_CARDS.jab, remaining: Infinity },
+      { card: ACTIVE_CARDS.cross, remaining: Infinity },
+    ];
+    const selected = AICombat.selectCard(cards, {
+      fighterA: { position: 'range', stamina: 100 },
+      fighterB: { position: 'distance', stamina: 100 },
+    }, [], 'A');
+    expect(selected).toBeTruthy();
+    expect(selected.id).toBeDefined();
+  });
+});
+
+describe('CombatAdapter non-interactive', () => {
+  it('resolves a full fight without DOM when interactive=false', async () => {
+    const { CombatAdapter } = await import('../js/controllers/combat-adapter.js');
+    const fighterA = createFighter(1, 'Player');
+    const fighterB = createFighter(2, 'Opponent');
+    // TapeService.tapeOf expects a real-ish fighter shape; minimal tape fields.
+    fighterA.tape = null;
+    fighterB.tape = null;
+
+    const adapter = new CombatAdapter();
+    const result = await adapter.runFight(
+      fighterA, fighterB, false, 'balanced', 3, false, false
+    );
+
+    expect(result).toBeTruthy();
+    expect(result.fighterAId).toBe(1);
+    expect(result.fighterBId).toBe(2);
+    expect(result.method).toBeTruthy();
+    expect(typeof result.isDraw).toBe('boolean');
+    if (!result.isDraw) {
+      expect([1, 2]).toContain(result.winnerId);
+      expect(result.loserId).toBeTruthy();
+    }
+    expect(result.stats).toBeTruthy();
+    expect(Array.isArray(result.rounds)).toBe(true);
+  });
 });

@@ -9,6 +9,7 @@ import { CombatResolver } from './combat-resolver.js';
 import { AICombat } from './ai-combat.js';
 import { ACTIVE_CARDS, POSITIONS, getDefaultLoadout } from '../config/card-config.js';
 import { CardCombatView } from '../views/card-combat-view.js';
+import { CardRewardService } from '../services/card-reward-service.js';
 
 export class CombatAdapter {
   constructor() {
@@ -21,7 +22,12 @@ export class CombatAdapter {
     this.container = container;
   }
 
-  async runFight(fighterA, fighterB, fiveRounds, gamePlanKey) {
+  // promoTier drives which CardRewardService pool a post-fight win draws
+  // from (default 3 = Regional, since this standalone entry point isn't
+  // wired to a real promotion object yet — see App#runCardFight in app.js).
+  // isTitleFight swaps the reward for CardRewardService.getTitleReward()
+  // instead of a player-chosen pool.
+  async runFight(fighterA, fighterB, fiveRounds, gamePlanKey, promoTier = 3, isTitleFight = false) {
     const loadoutA = getDefaultLoadout(gamePlanKey);
     const loadoutB = getDefaultLoadout('balanced'); // AI uses balanced for now
 
@@ -131,7 +137,26 @@ export class CombatAdapter {
       this.engine._computeDecision();
     }
 
-    return this.engine._buildResult();
+    const result = this.engine._buildResult();
+
+    // Post-fight card reward — only the player (side A) can earn a card,
+    // and only on a win (loss/draw leaves rewardCard null). Title fights
+    // hand out a fixed powerful card with no selection; regular fights let
+    // the player pick from a tier-based pool via _showCardReward.
+    result.rewardCard = null;
+    const playerWon = !result.isDraw && result.winnerId === result.fighterAId;
+    if (playerWon) {
+      if (isTitleFight) {
+        result.rewardCard = CardRewardService.getTitleReward();
+      } else {
+        const options = CardRewardService.getRewardOptions(promoTier);
+        if (options.length > 0) {
+          result.rewardCard = await this._showCardReward(options);
+        }
+      }
+    }
+
+    return result;
   }
 
   // Promise-based wait for player to click a card/move/pass button
@@ -164,6 +189,34 @@ export class CombatAdapter {
       this._pendingAction = null;
       resolve({ type: 'pass' });
     }
+  }
+
+  // Promise-based wait for player to click a reward card option — same
+  // pattern as _waitForPlayerAction, but resolves with the chosen card
+  // object itself instead of an action descriptor.
+  _showCardReward(options) {
+    return new Promise(resolve => {
+      this.container.innerHTML = `
+        <div class="reward-modal">
+          <h2>Recompensa</h2>
+          <p>Escolha uma carta para adicionar ao seu pool:</p>
+          <div class="reward-options">
+            ${options.map((card, i) => `
+              <button class="reward-card" data-index="${i}">
+                <div class="reward-card-name">${card.name}</div>
+                <div class="reward-card-desc">${card.description}</div>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+      this.container.querySelectorAll('.reward-card').forEach(el => {
+        el.addEventListener('click', () => {
+          const idx = parseInt(el.dataset.index, 10);
+          resolve(options[idx]);
+        });
+      });
+    });
   }
 
   _showTurnResult(turnResult) {

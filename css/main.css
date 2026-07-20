@@ -1399,3 +1399,185 @@ tbody tr:hover td { background: var(--bg-hover); }
 .calendar-legend {
   color: var(--ash);
 }
+
+/* ==========================================================================
+   Combat UI — card hand, position tracker, stamina bars, action buttons.
+   Token notes: no --space-* scale exists in this codebase, so spacing here
+   uses literal px matching nearby component density. --surface/--radius-sm/
+   --corner-red/--corner-blue/--border-alt don't exist either — mapped to
+   --mat, --radius, --red/--blue (the corner fill tokens), and --border.
+   No amber/orange token exists for the takedown card accent, so a literal
+   hex is used there instead of inventing a new custom property.
+   ========================================================================== */
+
+.combat-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.combat-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.position-tracker {
+  text-align: center;
+}
+
+.position-tracker-inner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  padding: 8px;
+  background: var(--mat);
+  border-radius: var(--radius);
+}
+
+.position-tag {
+  padding: 4px 12px;
+  border-radius: var(--radius);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.85em;
+}
+
+.position-tag.player { background: var(--red); color: white; }
+.position-tag.opponent { background: var(--blue); color: white; }
+.position-vs { color: var(--text-muted); font-weight: 700; }
+
+.stamina-display {
+  display: flex;
+  gap: 16px;
+}
+
+.stamina-bar {
+  flex: 1;
+}
+
+.stamina-bar label {
+  font-size: 0.8em;
+  margin-bottom: 2px;
+  display: block;
+}
+
+.stamina-fill {
+  height: 8px;
+  background: var(--success);
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+.stamina-fill.opponent { background: var(--blue); }
+
+.card-hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.card-item {
+  width: 140px;
+  padding: 8px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--mat);
+  user-select: none;
+}
+
+.card-item:hover:not(.disabled) {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.card-item.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.card-item.strike { border-left: 3px solid var(--red); }
+.card-item.takedown { border-left: 3px solid #e67e22; }
+.card-item.submission { border-left: 3px solid var(--gold); }
+.card-item.defense { border-left: 3px solid var(--blue); }
+
+.card-name {
+  font-weight: 700;
+  font-size: 0.95em;
+  margin-bottom: 2px;
+}
+
+.card-desc {
+  font-size: 0.75em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 0.7em;
+  color: var(--text-muted);
+}
+
+.card-cd { color: var(--warning); font-weight: 600; }
+.card-uses { color: var(--red-ink); font-weight: 600; }
+.card-move { color: var(--success); }
+
+.action-bar {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.move-btn, .pass-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--mat);
+  cursor: pointer;
+  font-size: 0.85em;
+  transition: background 0.15s;
+}
+
+.move-btn:hover, .pass-btn:hover {
+  background: var(--accent);
+  color: white;
+}
+
+.turn-result {
+  text-align: center;
+  padding: 8px;
+  font-weight: 600;
+  font-size: 0.85em;
+}
+
+.turn-result.hidden {
+  display: none;
+}
+
+.turn-log {
+  max-height: 120px;
+  overflow-y: auto;
+  font-size: 0.8em;
+}
+
+.turn-log-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.turn-log-entry {
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border);
+}

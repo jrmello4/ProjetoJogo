@@ -65,6 +65,32 @@ export class TrainingCamp {
     const resolvedSpec = installing ? PLAN_SPECIALTY[weaponTarget] : spec;
     const gains = this._calcGains(intensity, resolvedSpec);
 
+    // Task 9 follow-up (fix round 3) — card_discovery é um evento de UMA VEZ:
+    // assim que `cardFocus` está em `fighter.cardPool` (ou nunca poderia
+    // entrar, porque não é uma carta válida no pool desta academia), rodar o
+    // camp de novo com esta config não faz mais nada. Só que `campConfig`
+    // persiste semana a semana igual todo outro spec (é assim que
+    // 'striking' funciona — ganho repetido é o comportamento certo lá). Sem
+    // esta checagem, o jogador paga fadiga e risco de lesão/overtraining
+    // INDEFINIDAMENTE por uma carta que já ganhou, toda semana, até
+    // reconfigurar manualmente — pior ainda no fast-forward, onde ninguém
+    // está olhando pra notar (ver test/simulate-week.test.js, 60 semanas).
+    // Calculado AQUI, antes de fadiga/risco, porque a checagem em si é pura
+    // (só `.includes`, sem mutação) — a mutação real do cardPool continua
+    // mais abaixo, junto dos outros efeitos de spec, pra não duplicar a
+    // lógica de aquisição. Não mexe em `fighter.campConfig` (sem
+    // cancelCamp() automático) — a config persistida fica intacta de
+    // propósito, review anterior já descartou reset automático por efeito
+    // colateral em booking/readiness.
+    let cardDiscoveryNoOp = false;
+    if (spec === 'card_discovery') {
+      const poolKey = this._academyCardPool(academy);
+      const pool = ACADEMY_CARD_POOLS[poolKey] || ACADEMY_CARD_POOLS.balanced;
+      const validCard = !!cardFocus && pool.active.includes(cardFocus);
+      const alreadyOwned = validCard && !!fighter.cardPool?.includes(cardFocus);
+      cardDiscoveryNoOp = !validCard || alreadyOwned;
+    }
+
     // A sala de treino (Fase 3b). Antes daqui, `team` chegava sempre vazio e
     // este bloco inteiro era código morto: existia um sistema de sparring
     // desenhado e nunca povoado. Agora o parceiro é uma pessoa — você aprende
@@ -156,46 +182,55 @@ export class TrainingCamp {
       injuryWeeks: 0,
     };
 
-    if (Math.random() < risks.injuryChance) {
-      result.injured = true;
-      // Sparring controlado não quebra osso do nada — sem a fratura rara
-      // que a lesão de luta de verdade pode rolar (rollInjurySeverity()
-      // completo). Mesma taxonomia médica (contusão/corte/concussão/
-      // articular), taxa de camp fica um pouco mais dura que a antiga
-      // faixa fixa de 3-8 semanas.
-      const severity = rollInjurySeverity(['bruise', 'cut', 'concussion', 'joint']);
-      const injuryWeeks = severity.weeks;
-      result.injuryWeeks = injuryWeeks;
+    // `cardDiscoveryNoOp` (fix round 3): uma semana de card_discovery que não
+    // pode mais adquirir nada (carta já no pool, ou cardFocus inválido pra
+    // esta academia) não custa fadiga nem rola risco — mesmo princípio de
+    // "sem ganho, sem custo" que já vale pra `gains` (_calcGains devolve {}
+    // pra card_discovery). Uma aquisição nova NESTA chamada (cardFocus ainda
+    // não possuído, válido no pool) continua custando normal, como qualquer
+    // outra semana produtiva de camp.
+    if (!cardDiscoveryNoOp) {
+      if (Math.random() < risks.injuryChance) {
+        result.injured = true;
+        // Sparring controlado não quebra osso do nada — sem a fratura rara
+        // que a lesão de luta de verdade pode rolar (rollInjurySeverity()
+        // completo). Mesma taxonomia médica (contusão/corte/concussão/
+        // articular), taxa de camp fica um pouco mais dura que a antiga
+        // faixa fixa de 3-8 semanas.
+        const severity = rollInjurySeverity(['bruise', 'cut', 'concussion', 'joint']);
+        const injuryWeeks = severity.weeks;
+        result.injuryWeeks = injuryWeeks;
 
-      const prevStatus = fighter.status;
-      fighter.status = 'injured';
-      fighter.injury = {
-        stage: 'rest',
-        restUntilAbsWeek: absWeekNow + injuryWeeks,
-        rehabEndAbsWeek: 0,
-        type: severity.type,
-        description: `${severity.label} no treino (${intensity}) — ${formatWeeks(injuryWeeks)}`,
-        rehabCost: 0,
-        rehabChosen: false,
-        resumeStatus: prevStatus,
-      };
-      fighter.availableFromAbsWeek = fighter.injury.restUntilAbsWeek;
+        const prevStatus = fighter.status;
+        fighter.status = 'injured';
+        fighter.injury = {
+          stage: 'rest',
+          restUntilAbsWeek: absWeekNow + injuryWeeks,
+          rehabEndAbsWeek: 0,
+          type: severity.type,
+          description: `${severity.label} no treino (${intensity}) — ${formatWeeks(injuryWeeks)}`,
+          rehabCost: 0,
+          rehabChosen: false,
+          resumeStatus: prevStatus,
+        };
+        fighter.availableFromAbsWeek = fighter.injury.restUntilAbsWeek;
 
-      // Lesão intensa cancela a luta
-      if (intensity === 'intense' && CAMP_CONFIG.CAMP_INJURY_CANCELS_FIGHT) {
-        result.canceledFight = true;
+        // Lesão intensa cancela a luta
+        if (intensity === 'intense' && CAMP_CONFIG.CAMP_INJURY_CANCELS_FIGHT) {
+          result.canceledFight = true;
+        }
       }
-    }
 
-    if (Math.random() < risks.overtrainingChance) {
-      result.overtrained = true;
-      fighter.morale = clamp(fighter.morale - 12, 0, 100);
-      fighter.fatigue = clamp(fighter.fatigue + 15, 0, 100);
-    }
+      if (Math.random() < risks.overtrainingChance) {
+        result.overtrained = true;
+        fighter.morale = clamp(fighter.morale - 12, 0, 100);
+        fighter.fatigue = clamp(fighter.fatigue + 15, 0, 100);
+      }
 
-    // Fadiga: intensidade alta cansa mais
-    const fatigueCost = intensity === 'light' ? 3 : intensity === 'moderate' ? 8 : 15;
-    fighter.applyFatigue(fatigueCost);
+      // Fadiga: intensidade alta cansa mais
+      const fatigueCost = intensity === 'light' ? 3 : intensity === 'moderate' ? 8 : 15;
+      fighter.applyFatigue(fatigueCost);
+    }
 
     // Efeitos especiais das novas specs (§PRD) — `spec` já veio da
     // desestruturação no topo de processCamp

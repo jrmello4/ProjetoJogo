@@ -1,5 +1,5 @@
 // js/views/card-combat-view.js
-import { ACTIVE_CARDS, PASSIVE_CARDS, POSITIONS, POSITION_TRANSITIONS } from '../config/card-config.js';
+import { ACTIVE_CARDS, PASSIVE_CARDS, POSITIONS, POSITION_TRANSITIONS, getCardIllustration } from '../config/card-config.js';
 
 // Canonical position name map — shared across all position-display methods
 const POSITION_NAMES = {
@@ -98,14 +98,25 @@ export class CardCombatView {
       const wrongPos = !card.positions.includes(fighter.position);
       const disabled = onCooldown || noUses || wrongPos;
 
+      // Notebook card anatomy: top (name+cost) · middle (illustration) · bottom (meta)
+      const cost = card.staminaCost ?? card.cost ?? Math.max(1, Math.round((card.baseDamage || 10) / 12));
+      const artSrc = getCardIllustration(card);
+      const fallbackIcon = card.type === 'takedown' ? '⬇️' : card.type === 'submission' ? '🔒' : card.type === 'defense' ? '🛡️' : '👊';
+      const artHtml = artSrc
+        ? `<img class="card-art-img" src="${artSrc}" alt="" width="120" height="96" loading="lazy" draggable="false" />`
+        : `<span class="card-art-fallback" aria-hidden="true">${fallbackIcon}</span>`;
       return `
-        <div class="card-item ${disabled ? 'disabled' : ''} ${card.type}" data-card-id="${card.id}">
-          <div class="card-name">${card.name}</div>
+        <div class="card-item mastery-basic ${disabled ? 'disabled' : ''} ${card.type}" data-card-id="${card.id}">
+          <div class="card-art">${artHtml}</div>
+          <div class="card-top">
+            <div class="card-name">${card.name}</div>
+            <div class="card-cost" title="Custo">${cost}</div>
+          </div>
           <div class="card-desc">${card.description}</div>
           <div class="card-meta">
             <span class="card-pos">${card.positions.map(p => POSITION_NAMES[p]).join('/')}</span>
-            <span class="card-dmg">${card.baseDamage}</span>
-            ${onCooldown ? `<span class="card-cd">CD:${cooldowns[id]}</span>` : ''}
+            <span class="card-dmg">DMG ${card.baseDamage}</span>
+            ${onCooldown ? `<span class="card-cd">CD ${cooldowns[id]}</span>` : ''}
             ${card.maxUses !== Infinity ? `<span class="card-uses">${remaining ?? card.maxUses}/${card.maxUses}</span>` : ''}
             ${card.moveTo ? `<span class="card-move">→ ${POSITION_NAMES[card.moveTo]}</span>` : ''}
           </div>

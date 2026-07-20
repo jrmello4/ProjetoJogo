@@ -1410,13 +1410,46 @@ tbody tr:hover td { background: var(--bg-hover); }
    hex is used there instead of inventing a new custom property.
    ========================================================================== */
 
+/* ==========================================================================
+   TACTICAL CARDS — "Coach page on the mat"
+   --------------------------------------------------------------------------
+   Premium paper face + dark art window + red-corner category.
+   Arts stay clean (no paper in PNG). Paper lives in CSS texture.
+   ========================================================================== */
+:root {
+  /* Paper body */
+  --card-paper:        #f0e6d2;
+  --card-paper-deep:   #e4d5bc;
+  --card-paper-edge:   #c9b896;
+  --card-rule:         rgba(90, 70, 45, 0.11);
+  --card-margin:       rgba(200, 32, 47, 0.18);
+  /* Ink on paper */
+  --card-ink:          #2a2218;
+  --card-ink-soft:     #5c5146;
+  --card-ink-red:      #a81828;
+  --card-ink-blue:     #2a5a9e;
+  /* Elevation on dark mat */
+  --card-shadow:       0 1px 0 rgba(255, 248, 230, 0.35) inset,
+                       0 2px 0 rgba(0, 0, 0, 0.4),
+                       0 12px 24px rgba(0, 0, 0, 0.45);
+  --card-shadow-up:    0 1px 0 rgba(255, 248, 230, 0.45) inset,
+                       0 4px 0 rgba(0, 0, 0, 0.35),
+                       0 18px 32px rgba(0, 0, 0, 0.55);
+  /* Fine fiber noise (SVG) */
+  --card-fiber: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.28 0 0 0 0 0.18 0 0 0 0.22 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
 .combat-container {
   display: flex;
   flex-direction: column;
   gap: 16px;
   padding: 16px;
-  max-width: 800px;
+  max-width: 860px;
   margin: 0 auto;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(200, 32, 47, 0.06) 0%, transparent 50%),
+    var(--canvas);
+  border-radius: 2px;
 }
 
 .combat-header {
@@ -1437,11 +1470,12 @@ tbody tr:hover td { background: var(--bg-hover); }
   padding: 8px;
   background: var(--mat);
   border-radius: var(--radius);
+  border-top: 2px solid var(--red);
 }
 
 .position-tag {
   padding: 4px 12px;
-  border-radius: var(--radius);
+  border-radius: 2px;
   font-weight: 600;
   text-transform: uppercase;
   font-size: 0.85em;
@@ -1464,12 +1498,13 @@ tbody tr:hover td { background: var(--bg-hover); }
   font-size: 0.8em;
   margin-bottom: 2px;
   display: block;
+  color: var(--text-secondary);
 }
 
 .stamina-fill {
   height: 8px;
   background: var(--success);
-  border-radius: 4px;
+  border-radius: 2px;
   transition: width 0.3s;
 }
 
@@ -1478,60 +1513,281 @@ tbody tr:hover td { background: var(--bg-hover); }
 .card-hand {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
   justify-content: center;
+  align-items: stretch;
 }
 
+/* ---- Playable card: premium paper body + dark art window ---- */
 .card-item {
-  width: 140px;
-  padding: 8px;
-  border: 2px solid var(--border);
-  border-radius: var(--radius);
+  --cat-ink: var(--red);
+  position: relative;
+  width: 154px;
+  min-height: 200px;
+  padding: 0 0 9px;
+  border: 1px solid var(--card-paper-edge);
+  border-radius: 3px;
   cursor: pointer;
-  transition: all 0.15s;
-  background: var(--mat);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
   user-select: none;
+  color: var(--card-ink);
+  overflow: hidden;
+  /* Category stripe */
+  border-top: 3px solid var(--cat-ink);
+  /* Layered paper: age gradient + rules + fiber + soft vignette */
+  background-color: var(--card-paper);
+  background-image:
+    /* left coach margin (thin red rule) */
+    linear-gradient(90deg, transparent 11px, var(--card-margin) 11px, var(--card-margin) 12px, transparent 12px),
+    /* ruled lines */
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 15px,
+      var(--card-rule) 15px,
+      var(--card-rule) 16px
+    ),
+    /* warm age wash */
+    linear-gradient(165deg, #f7f0e2 0%, var(--card-paper) 42%, var(--card-paper-deep) 100%),
+    /* fiber grain */
+    var(--card-fiber);
+  background-size: 100% 100%, 100% 16px, 100% 100%, 180px 180px;
+  background-position: 0 0, 0 4px, 0 0, 0 0;
+  box-shadow: var(--card-shadow);
+}
+
+/* Soft paper edge + slight fold highlight (top of page under stripe) */
+.card-item::before {
+  content: '';
+  position: absolute;
+  inset: 3px 0 0 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 245, 0.55) 0%, transparent 14px),
+    radial-gradient(ellipse 80% 40% at 50% 100%, rgba(90, 60, 30, 0.07), transparent 70%);
+}
+
+/* Corner dog-ear — tiny, premium, not torn scrap */
+.card-item::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  z-index: 2;
+  background: linear-gradient(225deg, var(--card-paper-deep) 50%, transparent 50%);
+  box-shadow: -1px 1px 0 rgba(90, 60, 30, 0.12);
+  opacity: 0.85;
+}
+
+.card-item > * {
+  position: relative;
+  z-index: 1;
 }
 
 .card-item:hover:not(.disabled) {
-  border-color: var(--accent);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  transform: translateY(-5px) rotate(-0.35deg);
+  border-color: #b8a47a;
+  box-shadow: var(--card-shadow-up);
 }
 
 .card-item.disabled {
-  opacity: 0.4;
+  opacity: 0.42;
   cursor: not-allowed;
+  filter: grayscale(0.35) brightness(0.96);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
 }
 
-.card-item.strike { border-left: 3px solid var(--red); }
-.card-item.takedown { border-left: 3px solid #e67e22; }
-.card-item.submission { border-left: 3px solid var(--gold); }
-.card-item.defense { border-left: 3px solid var(--blue); }
+.card-item.strike { --cat-ink: var(--red); }
+.card-item.takedown { --cat-ink: #c46a12; }
+.card-item.submission { --cat-ink: #a8861a; }
+.card-item.defense { --cat-ink: var(--blue); }
+
+/* Anatomy — ink on paper */
+.card-item .card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 7px 10px 6px 14px;
+  border-bottom: 1px dashed rgba(90, 70, 45, 0.18);
+}
+
+.card-item .card-cost {
+  flex-shrink: 0;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 5px;
+  border: 1.5px solid var(--cat-ink);
+  border-radius: 2px;
+  color: var(--cat-ink);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2rem;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4) inset;
+}
 
 .card-name {
-  font-weight: 700;
-  font-size: 0.95em;
-  margin-bottom: 2px;
+  font-family: var(--font-display, inherit);
+  font-weight: 800;
+  font-size: 0.8rem;
+  margin: 0;
+  color: var(--card-ink);
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+  text-transform: uppercase;
 }
 
 .card-desc {
-  font-size: 0.75em;
-  color: var(--text-muted);
-  margin-bottom: 4px;
+  font-size: 0.68rem;
+  color: var(--card-ink-soft);
+  margin: 0 10px 0 14px;
+  padding: 0 0 2px 6px;
+  line-height: 1.35;
+  /* blue pen coach mark */
+  border-left: 2px solid var(--card-ink-blue);
+  font-style: italic;
+}
+
+/* Art window — dark mat inset; thin paper frame so the page still reads as paper */
+.card-item .card-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 90px;
+  margin: 6px 8px 0 12px;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 2px;
+  background:
+    radial-gradient(ellipse at 50% 70%, rgba(200, 32, 47, 0.1) 0%, transparent 55%),
+    #14110f;
+  border: 1px solid rgba(90, 60, 30, 0.28);
+  box-shadow:
+    0 1px 0 rgba(255, 252, 245, 0.65),
+    0 2px 4px rgba(42, 34, 24, 0.12) inset;
+}
+
+.card-item .card-art-img {
+  display: block;
+  width: 100%;
+  height: 90px;
+  object-fit: contain;
+  object-position: center center;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  pointer-events: none;
+  user-select: none;
+}
+
+.card-item .card-art-fallback {
+  opacity: 0.85;
+  font-size: 1.75rem;
+  filter: grayscale(0.2);
+}
+
+.card-item .card-coach-note {
+  display: none;
 }
 
 .card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  font-size: 0.7em;
-  color: var(--text-muted);
+  gap: 3px;
+  padding: 6px 10px 0 14px;
+  font-size: 0.62rem;
+  color: var(--card-ink-soft);
+  font-family: var(--font-mono, ui-monospace, monospace);
 }
 
-.card-cd { color: var(--warning); font-weight: 600; }
-.card-uses { color: var(--red-ink); font-weight: 600; }
-.card-move { color: var(--success); }
+.card-meta span {
+  padding: 2px 5px;
+  border: 1px solid rgba(90, 70, 45, 0.22);
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.4);
+  color: var(--card-ink-soft);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+}
+
+.card-meta .card-dmg {
+  color: var(--card-ink-red);
+  border-color: rgba(168, 24, 40, 0.4);
+  font-weight: 700;
+}
+
+.card-meta .card-cd {
+  color: var(--card-ink-blue);
+  border-color: rgba(42, 90, 158, 0.4);
+}
+
+.card-meta .card-move {
+  color: #7a6510;
+  border-style: dashed;
+}
+
+.card-meta .card-uses {
+  color: var(--card-ink-red);
+  border-color: rgba(168, 24, 40, 0.3);
+  font-weight: 600;
+}
+
+/* Mastery — ink / seal on paper */
+.card-item.mastery-basic { }
+.card-item.mastery-advanced {
+  box-shadow: var(--card-shadow), inset 0 0 0 1px rgba(42, 90, 158, 0.28);
+}
+.card-item.mastery-mastered {
+  box-shadow: var(--card-shadow), inset 0 0 0 1px rgba(168, 134, 26, 0.45);
+}
+.card-item.mastery-mastered .card-name {
+  color: #7a6510;
+}
+
+/* Reward / corner modals — mat panels with red rule, not school paper */
+.reward-modal,
+.corner-modal {
+  max-width: 520px;
+  margin: 1.5rem auto;
+  padding: 1.25rem 1.5rem;
+  color: var(--chalk);
+  background: var(--mat);
+  border: 1px solid var(--border-light);
+  border-top: 3px solid var(--red);
+  box-shadow: var(--card-shadow-up);
+  border-radius: 2px;
+}
+.reward-modal h2,
+.corner-modal h2 {
+  color: var(--chalk);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.35rem;
+}
+.reward-card {
+  background: var(--mat-high) !important;
+  border: 1px solid var(--border-light) !important;
+  color: var(--chalk) !important;
+  box-shadow: var(--card-shadow);
+}
+.reward-card:hover {
+  border-color: var(--red) !important;
+  transform: translateY(-2px);
+}
+
+.card-fight-host {
+  min-height: 70vh;
+  padding: 0.5rem;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(200, 32, 47, 0.07), transparent 50%),
+    var(--canvas);
+}
 
 .action-bar {
   display: flex;
@@ -1542,17 +1798,20 @@ tbody tr:hover td { background: var(--bg-hover); }
 
 .move-btn, .pass-btn {
   padding: 8px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid var(--border-light);
+  border-radius: 2px;
   background: var(--mat);
+  color: var(--chalk);
   cursor: pointer;
   font-size: 0.85em;
-  transition: background 0.15s;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+  transition: transform 0.12s, box-shadow 0.12s, background 0.12s, border-color 0.12s;
 }
 
 .move-btn:hover, .pass-btn:hover {
-  background: var(--accent);
-  color: white;
+  background: var(--mat-high);
+  border-color: var(--red);
+  color: var(--chalk);
 }
 
 .turn-result {

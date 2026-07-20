@@ -6,6 +6,52 @@ export const POSITIONS = {
   GROUND_GUARD: 'groundGuard',
 };
 
+// Pixel technique plates — dark mat, no notebook chrome (UI owns the frame).
+// Files in assets/cards/illustrations/*.png
+const ILL = (slug) => `assets/cards/illustrations/${slug}.png`;
+export const CARD_ILLUSTRATIONS = {
+  // Active techniques
+  jab: ILL('jab'),
+  cross: ILL('cross'),
+  overhand: ILL('overhand'),
+  highKick: ILL('high-kick'),
+  doubleLeg: ILL('double-leg'),
+  takedownDefense: ILL('sprawl'),
+  sprawl: ILL('sprawl'),
+  rearNaked: ILL('rear-naked'),
+  clinchKnee: ILL('clinch-knee'),
+  legKick: ILL('low-kick'),
+  lowKick: ILL('low-kick'),
+  singleLeg: ILL('single-leg'),
+  elbowStrike: ILL('clinch-knee'), // closest until dedicated plate
+  groundAndPound: ILL('ground-and-pound'),
+  armbar: ILL('armbar'),
+  // Strategy / training / traits (future + passives)
+  fightIq: ILL('film-study'),
+  pressure: ILL('pressure'),
+  fightAtRange: ILL('fight-at-range'),
+  attackTheBody: ILL('attack-the-body'),
+  filmStudy: ILL('film-study'),
+  clutchFighter: ILL('clutch-fighter'),
+  veteranExperience: ILL('veteran-experience'),
+  boxingCamp: ILL('boxing-camp'),
+  wrestlingCamp: ILL('wrestling-camp'),
+  cardioTraining: ILL('cardio-training'),
+  ironChin: ILL('iron-chin'),
+  heavyHands: ILL('heavy-hands'),
+  eliteCardio: ILL('elite-cardio'),
+  marathon: ILL('elite-cardio'),
+};
+
+export function getCardIllustration(cardOrId) {
+  if (!cardOrId) return null;
+  if (typeof cardOrId === 'string') {
+    return CARD_ILLUSTRATIONS[cardOrId] || null;
+  }
+  if (cardOrId.illustration) return cardOrId.illustration;
+  return CARD_ILLUSTRATIONS[cardOrId.id] || null;
+}
+
 // Which positions you can move to manually (costs 1 action)
 export const POSITION_TRANSITIONS = {
   [POSITIONS.DISTANCE]: [POSITIONS.RANGE],
@@ -21,6 +67,7 @@ export const ACTIVE_CARDS = {
     name: 'Jab',
     type: 'strike',
     description: 'Golpe rápido e direto',
+    illustration: CARD_ILLUSTRATIONS.jab,
     positions: [POSITIONS.RANGE],
     moveTo: null,         // no movement
     cooldown: 1,
@@ -34,6 +81,7 @@ export const ACTIVE_CARDS = {
     name: 'Cruz',
     type: 'strike',
     description: 'Soco reto de trás, potente',
+    illustration: CARD_ILLUSTRATIONS.cross,
     positions: [POSITIONS.RANGE],
     moveTo: null,
     cooldown: 2,
@@ -47,6 +95,7 @@ export const ACTIVE_CARDS = {
     name: 'Overhand',
     type: 'strike',
     description: 'Soco curvado que fecha distância',
+    illustration: CARD_ILLUSTRATIONS.overhand,
     positions: [POSITIONS.DISTANCE],
     moveTo: POSITIONS.RANGE,
     cooldown: 3,
@@ -60,6 +109,7 @@ export const ACTIVE_CARDS = {
     name: 'Chute Alto',
     type: 'strike',
     description: 'Chute na cabeça, alto risco',
+    illustration: CARD_ILLUSTRATIONS.highKick,
     positions: [POSITIONS.DISTANCE, POSITIONS.RANGE],
     moveTo: null,
     cooldown: 3,
@@ -73,6 +123,7 @@ export const ACTIVE_CARDS = {
     name: 'Queda Dupla',
     type: 'takedown',
     description: 'Fechada dupla, leva ao chão',
+    illustration: CARD_ILLUSTRATIONS.doubleLeg,
     positions: [POSITIONS.RANGE],
     moveTo: POSITIONS.GROUND_TOP,
     cooldown: 3,
@@ -86,6 +137,8 @@ export const ACTIVE_CARDS = {
     name: 'Defesa de Queda',
     type: 'defense',
     description: 'Bloqueia tentativa de queda',
+    // Closest notebook plate: Sprawl (defensive anti-takedown page)
+    illustration: CARD_ILLUSTRATIONS.sprawl,
     positions: [POSITIONS.RANGE, POSITIONS.CLINCH, POSITIONS.DISTANCE],
     moveTo: null,
     cooldown: 1,
@@ -100,6 +153,7 @@ export const ACTIVE_CARDS = {
     name: 'Mata-leão',
     type: 'submission',
     description: 'Finalização pelas costas',
+    illustration: CARD_ILLUSTRATIONS.rearNaked,
     positions: [POSITIONS.GROUND_TOP],
     moveTo: null,
     cooldown: 4,
@@ -113,6 +167,7 @@ export const ACTIVE_CARDS = {
     name: 'Joelhada no Clinch',
     type: 'strike',
     description: 'Joelhada curta no clinch',
+    illustration: CARD_ILLUSTRATIONS.clinchKnee,
     positions: [POSITIONS.CLINCH],
     moveTo: null,
     cooldown: 2,
@@ -126,6 +181,7 @@ export const ACTIVE_CARDS = {
     name: 'Chute na Perna',
     type: 'strike',
     description: 'Diminui a mobilidade do oponente',
+    illustration: CARD_ILLUSTRATIONS.lowKick,
     positions: [POSITIONS.DISTANCE, POSITIONS.RANGE],
     moveTo: null,
     cooldown: 2,
@@ -139,6 +195,7 @@ export const ACTIVE_CARDS = {
     name: 'Queda de Uma Perna',
     type: 'takedown',
     description: 'Queda rápida de uma perna',
+    illustration: CARD_ILLUSTRATIONS.singleLeg,
     positions: [POSITIONS.RANGE],
     moveTo: POSITIONS.GROUND_TOP,
     cooldown: 2,
@@ -152,6 +209,7 @@ export const ACTIVE_CARDS = {
     name: 'Cotovelada',
     type: 'strike',
     description: 'Corte profundo, alto dano',
+    illustration: CARD_ILLUSTRATIONS.elbowStrike,
     positions: [POSITIONS.CLINCH, POSITIONS.GROUND_TOP],
     moveTo: null,
     cooldown: 3,
@@ -165,6 +223,7 @@ export const ACTIVE_CARDS = {
     name: 'Ground and Pound',
     type: 'strike',
     description: 'Socos no chão',
+    illustration: CARD_ILLUSTRATIONS.groundAndPound,
     positions: [POSITIONS.GROUND_TOP],
     moveTo: null,
     cooldown: 2,
@@ -178,6 +237,7 @@ export const ACTIVE_CARDS = {
     name: 'Chave de Braço',
     type: 'submission',
     description: 'Finalização de braço',
+    illustration: CARD_ILLUSTRATIONS.armbar,
     positions: [POSITIONS.GROUND_TOP, POSITIONS.GROUND_GUARD],
     moveTo: null,
     cooldown: 4,
@@ -194,6 +254,7 @@ export const PASSIVE_CARDS = {
     name: 'Mão Pesada',
     description: '+15% dano em golpes de poder',
     type: 'passive',
+    illustration: CARD_ILLUSTRATIONS.heavyHands,
     effect: { type: 'damageMult', tags: ['power'], value: 0.15 },
   },
   solidBase: {
@@ -201,6 +262,7 @@ export const PASSIVE_CARDS = {
     name: 'Base Sólida',
     description: '+20% defesa de queda quando em Alcance',
     type: 'passive',
+    illustration: CARD_ILLUSTRATIONS.sprawl,
     effect: { type: 'takedownDefenseBonus', position: POSITIONS.RANGE, value: 0.20 },
   },
   bloodCold: {
@@ -208,6 +270,7 @@ export const PASSIVE_CARDS = {
     name: 'Sangue Frio',
     description: '-1 cooldown nas cartas especiais quando perdendo',
     type: 'passive',
+    illustration: CARD_ILLUSTRATIONS.clutchFighter,
     effect: { type: 'cooldownReductionLoser', value: 1 },
   },
   dirtyFight: {
@@ -215,6 +278,7 @@ export const PASSIVE_CARDS = {
     name: 'Jogo Sujo',
     description: '+25% chance de penalidade no oponente',
     type: 'passive',
+    illustration: CARD_ILLUSTRATIONS.pressure,
     effect: { type: 'foulChance', value: 0.25 },
   },
   student: {
@@ -222,6 +286,7 @@ export const PASSIVE_CARDS = {
     name: 'Estudioso',
     description: 'No primeiro turno, revela carta do oponente',
     type: 'passive',
+    illustration: CARD_ILLUSTRATIONS.filmStudy,
     effect: { type: 'revealFirstTurn' },
   },
   marathon: {
@@ -229,6 +294,7 @@ export const PASSIVE_CARDS = {
     name: 'Maratona',
     description: '-10% fadiga por round',
     type: 'passive',
+    illustration: CARD_ILLUSTRATIONS.eliteCardio,
     effect: { type: 'fatigueReduction', value: 0.10 },
   },
 };

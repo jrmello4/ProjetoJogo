@@ -25,6 +25,8 @@ import { PressConference } from './controllers/press-conference.js';
 import { WeeklyTrainingController } from './controllers/weekly-training.js';
 import { CornerAdvice } from './controllers/corner-advice.js';
 import { CombatAdapter } from './controllers/combat-adapter.js';
+import { MetaProgressionService } from './services/meta-progression-service.js';
+import * as PerksScreenView from './views/perks-screen.js';
 import { RivalryService } from './services/rivalry-service.js';
 import { SeasonService } from './services/season-service.js';
 import { NotificationService } from './services/notification-service.js';
@@ -2686,6 +2688,34 @@ class App {
     adapter.setContainer(document.getElementById('fight-container'));
     const fiveRounds = promo.tier === 1;
     return adapter.runFight(fighterA, fighterB, fiveRounds, gamePlanKey);
+  }
+
+  // Standalone meta-progression perks screen — same opt-in/dev-testing
+  // spirit as runCardFight above: not called from anywhere else yet, not
+  // wired into renderRetirementCeremony or any other live flow (see task-10
+  // brief). `service` is passed on the internal re-render after an unlock
+  // so we don't re-load() from IndexedDB and race unlockPerk's
+  // fire-and-forget save().
+  async renderPerksScreen(service = null) {
+    if (!service) {
+      service = new MetaProgressionService(this.game.db);
+      await service.load();
+    }
+
+    const html = PerksScreenView.render({
+      legacyPoints: service.legacyPoints,
+      unlockedPerks: service.unlockedPerks,
+    });
+    await LayoutView.render(html);
+
+    document.querySelectorAll('.perk-unlock-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const perkId = btn.dataset.perkId;
+        const cost = parseInt(btn.dataset.perkCost, 10);
+        service.unlockPerk(perkId, cost);
+        await this.renderPerksScreen(service);
+      });
+    });
   }
 }
 

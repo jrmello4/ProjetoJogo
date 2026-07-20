@@ -16,10 +16,19 @@ export class CombatAdapter {
     this.engine = new CombatEngine();
     this.view = new CardCombatView();
     this.container = null;
+    this.metaProgressionService = null;
   }
 
   setContainer(container) {
     this.container = container;
+  }
+
+  // Optional — a MetaProgressionService instance to award Legacy Points to
+  // on a player win (see runFight below). Left null by default: today's
+  // dev-testing entry point (App#runCardFight in app.js) doesn't construct
+  // one, and runFight must keep working fine without it.
+  setMetaProgressionService(service) {
+    this.metaProgressionService = service;
   }
 
   // promoTier drives which CardRewardService pool a post-fight win draws
@@ -154,6 +163,16 @@ export class CombatAdapter {
           result.rewardCard = await this._showCardReward(options);
         }
       }
+    }
+
+    // Legacy points for meta-progression — optional, no-op unless a
+    // MetaProgressionService was injected via setMetaProgressionService.
+    // Fire-and-forget by design (addLegacyPoints doesn't await save()),
+    // same as the rest of MetaProgressionService's mutators.
+    if (this.metaProgressionService && playerWon) {
+      this.metaProgressionService.addLegacyPoints(
+        this.metaProgressionService.constructor.computeLegacyPoints(result, isTitleFight)
+      );
     }
 
     return result;

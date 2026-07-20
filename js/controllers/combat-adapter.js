@@ -108,6 +108,12 @@ export class CombatAdapter {
             winner: 'A', margin: 30, effectiveA: 20, effectiveB: 0,
             cardA, cardB: null, damageA: 15, damageB: 0,
           });
+        } else if (!cardA && cardB) {
+          // Player passed/moved (no card), AI attacked — AI wins turn uncontested
+          roundTurns.push({
+            winner: 'B', margin: 30, effectiveA: 0, effectiveB: 20,
+            cardA: null, cardB, damageA: 0, damageB: 15,
+          });
         }
 
         state.turnOwner = state.turnOwner === 'A' ? 'B' : 'A';

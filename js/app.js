@@ -46,6 +46,13 @@ import { formatCurrency, getAdjacentWeightClasses, clamp, sanitizePlayerName, e 
 import { validateCharCreateStep } from './utils/char-create-validate.js';
 import { CAMP_CONFIG, HYPE_PURSE_RATIO, absWeek } from './config/game-config.js';
 
+// Toggle de debug temporário: ?cardCombat=true na URL liga o novo sistema
+// de combate por cartas (ver CombatAdapter/runCardFight) sem mexer no fluxo
+// padrão de luta. Só pra teste manual/dev — não é exposto na UI ainda.
+if (new URLSearchParams(window.location.search).has('cardCombat')) {
+  window.__useCardCombat = true;
+}
+
 // Depois de publicar no itch.io, cole a URL da página do jogo aqui pra ela
 // aparecer nos textos de compartilhamento (resultado de luta, Hall da Fama).
 // Vazio = compartilha só o texto, sem link.

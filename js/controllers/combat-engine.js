@@ -62,8 +62,15 @@ export class CombatEngine {
       while (s.roundTurn < s.maxTurnsPerRound && !s.ended) {
         s.roundTurn++;
         s.currentTurn++;
-        this._tickCooldowns(s.turnOwner === 'A' ? s.cooldownsA : s.cooldownsB);
-        yield { type: 'turn', round: r, turn: s.roundTurn, owner: s.turnOwner };
+        const owner = s.turnOwner;
+        this._tickCooldowns(owner === 'A' ? s.cooldownsA : s.cooldownsB);
+        // Alternate turns: player acts, opponent acts, alternates (2 ações
+        // por turno). Toggle after ticking the current owner's cooldowns,
+        // before yielding, so the yielded `owner` field reflects the side
+        // that just acted while `s.turnOwner` is already primed for the
+        // next iteration.
+        s.turnOwner = owner === 'A' ? 'B' : 'A';
+        yield { type: 'turn', round: r, turn: s.roundTurn, owner };
       }
 
       // Round end — score the round
@@ -173,15 +180,31 @@ export class CombatEngine {
 
   _computeDecision() {
     const s = this.state;
-    const totalA = s.roundScores.reduce((sum, rd) => sum + rd.scoreA, 0);
-    const totalB = s.roundScores.reduce((sum, rd) => sum + rd.scoreB, 0);
 
-    // Simulate 3 judges
+    // Simulate 3 judges. Each judge independently reads the objective
+    // round scores (s.roundScores is never mutated here), but on very
+    // close, non-dominant rounds (margin of 1 — a 10-9-type round) each
+    // judge has a small independent chance to score it even instead, or
+    // to flip it the other way — so split decisions (2-1) are reachable
+    // instead of every judge always agreeing.
     const scorecards = [0, 1, 2].map(() => {
       let a = 0, b = 0;
       for (const rd of s.roundScores) {
-        a += rd.scoreA;
-        b += rd.scoreB;
+        let scoreA = rd.scoreA;
+        let scoreB = rd.scoreB;
+        const margin = Math.abs(scoreA - scoreB);
+        if (margin === 1) {
+          const roll = Math.random();
+          if (roll < 0.10) {
+            // Score the close round even instead of its actual result.
+            scoreA = scoreB = Math.max(scoreA, scoreB);
+          } else if (roll < 0.15) {
+            // Flip a very close round the other way.
+            [scoreA, scoreB] = [scoreB, scoreA];
+          }
+        }
+        a += scoreA;
+        b += scoreB;
       }
       return { a, b };
     });

@@ -2083,8 +2083,13 @@ class App {
     // academia virar uma aposta de carreira, e não um bônus numérico.
     const academy = await this.game.getAcademy(fighter.academyId);
     const weaponOptions = TapeService.installablePlans(academy);
+    // Task 9 — as 2-3 cartas que esta academia oferece pra descoberta,
+    // resolvidas a partir de `specialties`. Mesmo padrão de weaponOptions
+    // acima: computa aqui (onde a Academy de verdade já foi carregada) e
+    // passa pronto pra view, que não conhece Academy nem TrainingCamp.
+    const cardOptions = TrainingCamp.getCardDiscoveryOptions(academy);
     const team = await this.game.partnersService.getTeammates(fighter);
-    const html = TrainingCampView.render(fighter, booking, now, weaponOptions, team);
+    const html = TrainingCampView.render(fighter, booking, now, weaponOptions, team, cardOptions);
     await LayoutView.render(html);
     this._bindTrainingCamp(fighter, booking, now);
   }
@@ -2095,8 +2100,11 @@ class App {
     // existe.
     const specSelect = document.querySelector(`.camp-spec[data-fighter="${fighter.id}"]`);
     const weaponBlock = document.querySelector('[data-weapon-block]');
+    // Task 9 — mesmo toggle do bloco de arma, pro bloco de descoberta de carta.
+    const cardBlock = document.querySelector('[data-card-block]');
     specSelect?.addEventListener('change', () => {
       if (weaponBlock) weaponBlock.style.display = specSelect.value === 'install_weapon' ? '' : 'none';
+      if (cardBlock) cardBlock.style.display = specSelect.value === 'card_discovery' ? '' : 'none';
     });
 
     document.querySelectorAll('.camp-save').forEach(btn => {
@@ -2116,10 +2124,15 @@ class App {
         const weaponTarget = spec === 'install_weapon'
           ? document.querySelector(`.camp-weapon-target[data-fighter="${fighter.id}"]`)?.value || null
           : null;
+        // Task 9 — mesmo padrão de weaponTarget: só lido/enviado quando o
+        // foco selecionado é 'card_discovery'.
+        const cardFocus = spec === 'card_discovery'
+          ? document.querySelector(`.camp-card-target[data-fighter="${fighter.id}"]`)?.value || null
+          : null;
         const partnerId = document.querySelector(`.camp-partner[data-fighter="${fighter.id}"]`)?.value || null;
         const profFocus = document.querySelector('#camp-proficiency-focus')?.value || null;
 
-        TrainingCamp.configureCamp(fighter, intensity, spec || 'striking', partnerId, weaponTarget, profFocus);
+        TrainingCamp.configureCamp(fighter, intensity, spec || 'striking', partnerId, weaponTarget, profFocus, cardFocus);
         OnboardingService.markCampConfigured(fighter);
         await this.game.fighterCtrl.updateFighter(fighter);
 

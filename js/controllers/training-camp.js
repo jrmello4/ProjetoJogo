@@ -2,6 +2,20 @@ import { clamp, formatWeeks } from '../utils/helpers.js';
 import { CAMP_CONFIG, TAPE_CONFIG, PLAN_SPECIALTY, INJURY_CONFIG, rollInjurySeverity } from '../config/game-config.js';
 import { TapeService } from '../services/tape-service.js';
 import { TrainingPartnersService } from '../services/training-partners-service.js';
+import { ACTIVE_CARDS } from '../config/card-config.js';
+
+// Task 9 — pools de carta por especialidade de academia. Academias não têm
+// um campo categórico ('striking'/'grappling'/'balanced'): elas têm
+// `specialties.{striking,grappling,cardio}`, valores numéricos (ver
+// ACADEMIES em game-config.js, faixa observada ~0–0.30). `_academyCardPool`
+// converte isso na chave categórica usando o mesmo espírito de
+// `_getArchetype` (comparar as duas pontas e olhar o gap).
+export const ACADEMY_CARD_POOLS = {
+  // Academias têm pools de carta baseados na especialidade
+  striking: { active: ['jab', 'cross', 'overhand', 'highKick', 'legKick'] },
+  grappling: { active: ['doubleLeg', 'singleLeg', 'clinchKnee', 'rearNaked', 'armbar'] },
+  balanced: { active: ['jab', 'cross', 'doubleLeg', 'takedownDefense', 'legKick'] },
+};
 
 // Épico D: Acampamento de verdade.
 // O camp deixa de ser um botão manual e vira uma configuração que roda
@@ -15,13 +29,18 @@ export class TrainingCamp {
   // funcionam sem luta como treino normal aprimorado).
   // `weaponTarget` (Fase 3): só usado quando spec === 'install_weapon'. É o
   // gamePlanKey da arma que o lutador está instalando.
-  static configureCamp(fighter, intensity, spec, sparringPartnerId = null, weaponTarget = null, proficiencyFocus = null) {
+  // `cardFocus` (Task 9): só usado quando spec === 'card_discovery'. É o
+  // card-id que o lutador escolheu, na configuração, entre as opções que a
+  // academia oferece — mesmo padrão de weaponTarget, mesma razão: processCamp
+  // roda sozinho no fast-forward e não pode parar pra perguntar nada.
+  static configureCamp(fighter, intensity, spec, sparringPartnerId = null, weaponTarget = null, proficiencyFocus = null, cardFocus = null) {
     fighter.campConfig = {
       intensity,
       spec,
       sparringPartnerId,
       weaponTarget,
       proficiencyFocus,
+      cardFocus,
     };
     fighter.campProcessedThisWeek = false;
   }
@@ -39,7 +58,7 @@ export class TrainingCamp {
     const cfg = fighter.campConfig;
     if (!cfg) return null;
 
-    const { intensity, spec, sparringPartnerId, weaponTarget } = cfg;
+    const { intensity, spec, sparringPartnerId, weaponTarget, cardFocus } = cfg;
 
     // Resolve o spec efetivo (install_weapon deriva do weaponTarget)
     const installing = spec === 'install_weapon' && weaponTarget && TapeService.canInstall(academy, weaponTarget);
@@ -130,6 +149,7 @@ export class TrainingCamp {
       sparringBonus,
       weapon,
       sparring,
+      cardAcquired: null,
       injured: false,
       overtrained: false,
       canceledFight: false,
@@ -186,6 +206,18 @@ export class TrainingCamp {
         fighter.injury.restUntilAbsWeek -= 7; // acelera em 1 semana
       }
     }
+    if (spec === 'card_discovery' && cardFocus) {
+      // Task 9 — descoberta de carta: sem TapeService.canInstall-style
+      // validação adiada (a escolha já foi travada na configuração, igual
+      // weaponTarget). Só entra no pool persistente do lutador; dedupe pra
+      // não empilhar a mesma carta se o jogador reconfigurar o camp com o
+      // mesmo foco em semanas seguidas.
+      fighter.cardPool = fighter.cardPool || [];
+      if (!fighter.cardPool.includes(cardFocus)) {
+        fighter.cardPool.push(cardFocus);
+        result.cardAcquired = cardFocus;
+      }
+    }
     if (spec === 'strategy') {
       // Estratégia: bônus na leitura do plano do oponente na próxima luta
       fighter.campStrategyBonus = 1;
@@ -212,6 +244,7 @@ export class TrainingCamp {
       recovery: [],  // sem ganho de atributo — efeito especial em processCamp
       strategy: ['fightIQ'],
       study: ['fightIQ', 'adaptability'],
+      card_discovery: [],  // sem ganho de atributo — a semana vira uma carta, não pontos
     };
 
     const attrs = attrMap[spec] || attrMap.striking;
@@ -257,5 +290,43 @@ export class TrainingCamp {
   static opponentArchetype(opponent) {
     if (!opponent) return null;
     return this._getArchetype(opponent);
+  }
+
+  // Task 9 — a chave categórica de pool de carta de uma academia, derivada
+  // dos bônus numéricos `specialties.{striking,grappling}`. Mesmo espírito
+  // de `_getArchetype` (compara as duas pontas, olha o gap), mas numa escala
+  // bem diferente: `strikingScore`/`grapplingScore` de um lutador vivem
+  // grosso modo em 0–100 (gap > 8 ali é ~8% da escala); `specialties` é um
+  // multiplicador que, no catálogo real (ACADEMIES em game-config.js), varia
+  // só entre 0 e ~0.30. Escalando o mesmo ~8% pra essa faixa dá ~0.024;
+  // usamos 0.05 (um pouco mais conservador, arredondado pra um número limpo)
+  // pra que só uma diferença clara entre as duas especialidades — não ruído
+  // de arredondamento — empurre a academia pra um pool especializado.
+  static _academyCardPool(academy) {
+    const GAP_THRESHOLD = 0.05;
+    const striking = academy?.specialties?.striking ?? 0;
+    const grappling = academy?.specialties?.grappling ?? 0;
+    const gap = striking - grappling;
+    if (gap > GAP_THRESHOLD) return 'striking';
+    if (gap < -GAP_THRESHOLD) return 'grappling';
+    return 'balanced';
+  }
+
+  // Task 9 — as opções de carta que a academia oferece nesta configuração de
+  // camp. Resolve card-ids do pool categórico para objetos {id, name,
+  // description} prontos pra view renderizar. Determinístico (sempre as
+  // mesmas 3 primeiras do pool) — se fosse aleatório a cada render, a
+  // seleção do jogador poderia "sumir da lista" ao reabrir a tela.
+  static getCardDiscoveryOptions(academy) {
+    const poolKey = this._academyCardPool(academy);
+    const pool = ACADEMY_CARD_POOLS[poolKey] || ACADEMY_CARD_POOLS.balanced;
+    return pool.active.slice(0, 3).map(id => {
+      const card = ACTIVE_CARDS[id];
+      return {
+        id,
+        name: card?.name || id,
+        description: card?.description || '',
+      };
+    });
   }
 }

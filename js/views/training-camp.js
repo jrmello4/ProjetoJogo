@@ -1,6 +1,7 @@
 import { formatCurrency, getWeightClassShort, e } from '../utils/helpers.js';
 import { CAMP_CONFIG, GAME_PLANS, MOVES, TAPE_CONFIG } from '../config/game-config.js';
 import { TrainingPartnersService } from '../services/training-partners-service.js';
+import { ACTIVE_CARDS } from '../config/card-config.js';
 
 // Épico D: Acampamento de verdade.
 // Configura intensidade e foco pra próxima luta. Sem sparring partner —
@@ -62,6 +63,31 @@ export class TrainingCampView {
     `;
   }
 
+  // Task 9 — foco de descoberta de carta. Mesmo padrão visual e de show/hide
+  // do bloco de arma nova acima: só aparece quando `cfg.spec ===
+  // 'card_discovery'`, porque escolher a carta é ABRIR MÃO das outras
+  // semanas de treino (igual instalar arma). `cardOptions` já vem resolvido
+  // (id/name/description) — quem decide o pool é `TrainingCamp.
+  // getCardDiscoveryOptions(academy)`, chamado no app.js.
+  static _renderCardDiscovery(fighter, cfg, cardOptions) {
+    if (cardOptions.length === 0) return '';
+
+    const target = cfg.cardFocus || cardOptions[0].id;
+
+    return `
+      <div class="camp-card-discovery mt-3 p-3" style="border:1px dashed var(--gold);border-radius:var(--radius);${cfg.spec === 'card_discovery' ? '' : 'display:none'}" data-card-block>
+        <div class="text-xs font-bold text-secondary mb-2">🃏 DESCOBERTA DE CARTA</div>
+        <p class="text-xs text-muted mb-2">
+          Esta semana o técnico te mostra um golpe do arsenal da academia. Escolha
+          um para entrar no seu pool — ele fica disponível pra sempre, mesmo fora de uso.
+        </p>
+        <select class="form-select camp-card-target" data-fighter="${fighter.id}">
+          ${cardOptions.map(c => `<option value="${e(c.id)}" ${target === c.id ? 'selected' : ''}>${e(c.name)} — ${e(c.description)}</option>`).join('')}
+        </select>
+      </div>
+    `;
+  }
+
   // §Fase 3b — a sala de treino. Quem está no tatame com você não é um bônus
   // percentual: é um lutador com carreira própria, que você pode machucar, de
   // quem você pode aprender, e que vai te conhecer melhor que qualquer fita.
@@ -96,10 +122,11 @@ export class TrainingCampView {
     `;
   }
 
-  static render(fighter, booking, now, weaponOptions = [], team = []) {
+  static render(fighter, booking, now, weaponOptions = [], team = [], cardOptions = []) {
     const hasFight = !!booking;
     const cfg = fighter.campConfig || {};
     const weaponHtml = this._renderWeapon(fighter, cfg, weaponOptions);
+    const cardDiscoveryHtml = this._renderCardDiscovery(fighter, cfg, cardOptions);
     const partnersHtml = this._renderPartners(fighter, cfg, team);
     const getProf = (moveId) => typeof fighter.getMoveProficiency === 'function' ? fighter.getMoveProficiency(moveId) : 0;
     const profOptsHtml = (fighter.moveset || []).map(moveId => {
@@ -178,6 +205,9 @@ export class TrainingCampView {
                   <option value="recovery" ${cfg.spec === 'recovery' ? 'selected' : ''}>Recuperação — reduz fadiga, acelera lesões</option>
                   <option value="strategy" ${cfg.spec === 'strategy' ? 'selected' : ''}>Estratégia — +1 leitura do plano do oponente</option>
                   <option value="study" ${cfg.spec === 'study' ? 'selected' : ''}>Estudo do Adversário — +1 nível scouting temporário</option>
+                  ${cardOptions.length > 0
+                    ? `<option value="card_discovery" ${cfg.spec === 'card_discovery' ? 'selected' : ''}>🃏 Descoberta de Carta</option>`
+                    : ''}
                   ${weaponOptions.length > 0
                     ? `<option value="install_weapon" ${cfg.spec === 'install_weapon' ? 'selected' : ''}>🧰 Instalar arma nova</option>`
                     : ''}
@@ -189,6 +219,7 @@ export class TrainingCampView {
 
             ${partnersHtml}
             ${weaponHtml}
+            ${cardDiscoveryHtml}
 
             <div class="flex items-center justify-between">
               <div class="text-xs text-muted">
@@ -241,6 +272,10 @@ export class TrainingCampView {
     }
     if (result.overtrained) {
       statusHtml += `<div class="text-warning font-bold mt-2">⚠️ Overtraining! Moral e energia reduzidos.</div>`;
+    }
+    if (result.cardAcquired) {
+      const card = ACTIVE_CARDS[result.cardAcquired];
+      statusHtml += `<div class="text-success font-bold mt-2">🃏 Nova carta no pool: ${e(card?.name || result.cardAcquired)}!</div>`;
     }
 
     return `

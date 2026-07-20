@@ -170,6 +170,10 @@ export class Fighter {
     this.pcDoneForOfferId = data.pcDoneForOfferId || null;
     this.style = data.style || 'freestyle';
     this.moveset = data.moveset || [];
+    // Task 9 — pool persistente de cartas descobertas em camp (Foco: Card
+    // Discovery). Array de card-id strings. Sem sistema de slot/equip ainda
+    // (escopo futuro não definido) — só o "descobriu, entrou no pool".
+    this.cardPool = data.cardPool || [];
     this.moveProficiency = data.moveProficiency || {};
     this.styleLockedUntilAbsWeek = data.styleLockedUntilAbsWeek || 0;
     this.level = data.level || 1;

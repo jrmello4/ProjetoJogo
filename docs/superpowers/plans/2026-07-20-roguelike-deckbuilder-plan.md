@@ -961,6 +961,7 @@ export class CardCombatView {
         <div class="action-bar">
           ${this._renderActionButtons(engineState)}
         </div>
+        <div class="turn-result hidden"></div>
         <div class="turn-log">
           ${this._renderTurnLog(engineState)}
         </div>
@@ -1240,6 +1241,17 @@ In `css/main.css`, add:
   color: white;
 }
 
+.turn-result {
+  text-align: center;
+  padding: var(--space-sm);
+  font-weight: 600;
+  font-size: 0.85em;
+}
+
+.turn-result.hidden {
+  display: none;
+}
+
 .turn-log {
   max-height: 120px;
   overflow-y: auto;
@@ -1438,7 +1450,6 @@ export class CombatAdapter {
     el.classList.remove('hidden');
     // Brief flash, then clear
     setTimeout(() => el.classList.add('hidden'), 1500);
-  }
   }
 }
 ```

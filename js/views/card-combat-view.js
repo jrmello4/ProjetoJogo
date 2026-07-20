@@ -1,6 +1,15 @@
 // js/views/card-combat-view.js
 import { ACTIVE_CARDS, PASSIVE_CARDS, POSITIONS, POSITION_TRANSITIONS } from '../config/card-config.js';
 
+// Canonical position name map — shared across all position-display methods
+const POSITION_NAMES = {
+  [POSITIONS.DISTANCE]: 'Distância',
+  [POSITIONS.RANGE]: 'Alcance',
+  [POSITIONS.CLINCH]: 'Clinch',
+  [POSITIONS.GROUND_TOP]: 'Chão (Topo)',
+  [POSITIONS.GROUND_GUARD]: 'Chão (Guarda)',
+};
+
 export class CardCombatView {
   constructor() {
     this.handlers = null;
@@ -65,18 +74,11 @@ export class CardCombatView {
   _renderPositionTracker(state) {
     const posA = state.fighterA.position;
     const posB = state.fighterB.position;
-    const posNames = {
-      [POSITIONS.DISTANCE]: 'Distância',
-      [POSITIONS.RANGE]: 'Alcance',
-      [POSITIONS.CLINCH]: 'Clinch',
-      [POSITIONS.GROUND_TOP]: 'Chão (Topo)',
-      [POSITIONS.GROUND_GUARD]: 'Chão (Guarda)',
-    };
     return `
       <div class="position-tracker-inner">
-        <div class="position-tag player">${posNames[posA] || posA || 'Distância'}</div>
+        <div class="position-tag player">${POSITION_NAMES[posA] || posA || 'Distância'}</div>
         <span class="position-vs">vs</span>
-        <div class="position-tag opponent">${posNames[posB] || posB || 'Distância'}</div>
+        <div class="position-tag opponent">${POSITION_NAMES[posB] || posB || 'Distância'}</div>
       </div>
     `;
   }
@@ -95,24 +97,17 @@ export class CardCombatView {
       const noUses = remaining !== undefined && remaining <= 0;
       const wrongPos = !card.positions.includes(fighter.position);
       const disabled = onCooldown || noUses || wrongPos;
-      const posNames = {
-        [POSITIONS.DISTANCE]: 'Distância',
-        [POSITIONS.RANGE]: 'Alcance',
-        [POSITIONS.CLINCH]: 'Clinch',
-        [POSITIONS.GROUND_TOP]: 'Topo',
-        [POSITIONS.GROUND_GUARD]: 'Guarda',
-      };
 
       return `
         <div class="card-item ${disabled ? 'disabled' : ''} ${card.type}" data-card-id="${card.id}">
           <div class="card-name">${card.name}</div>
           <div class="card-desc">${card.description}</div>
           <div class="card-meta">
-            <span class="card-pos">${card.positions.map(p => posNames[p]).join('/')}</span>
+            <span class="card-pos">${card.positions.map(p => POSITION_NAMES[p]).join('/')}</span>
             <span class="card-dmg">${card.baseDamage}</span>
             ${onCooldown ? `<span class="card-cd">CD:${cooldowns[id]}</span>` : ''}
             ${card.maxUses !== Infinity ? `<span class="card-uses">${remaining ?? card.maxUses}/${card.maxUses}</span>` : ''}
-            ${card.moveTo ? `<span class="card-move">→ ${posNames[card.moveTo]}</span>` : ''}
+            ${card.moveTo ? `<span class="card-move">→ ${POSITION_NAMES[card.moveTo]}</span>` : ''}
           </div>
         </div>
       `;

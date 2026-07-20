@@ -39,7 +39,30 @@ export class CombatAdapter {
   // isTitleFight swaps the reward for CardRewardService.getTitleReward()
   // instead of a player-chosen pool.
   async runFight(fighterA, fighterB, fiveRounds, gamePlanKey, promoTier = 3, isTitleFight = false) {
-    const loadoutA = getDefaultLoadout(gamePlanKey);
+    // getDefaultLoadout returns a direct reference into DEFAULT_LOADOUTS
+    // (not a copy) — shallow-copy both the loadout object and its `active`
+    // array here before mutating anything below, or a cardPool merge would
+    // permanently graft discovered/earned cards onto the shared config
+    // object, leaking into every future fight for every fighter that uses
+    // this game plan.
+    const baseLoadoutA = getDefaultLoadout(gamePlanKey);
+    const loadoutA = { active: [...baseLoadoutA.active], passive: baseLoadoutA.passive };
+    // Final whole-branch review, Finding 2 — discovered (training-camp,
+    // Task 9) and earned (post-fight reward, Task 8) cards live in
+    // fighter.cardPool but were never actually wired into the fight
+    // loadout. Simple dedup merge into the active array — no equip/slot
+    // UI (explicitly out of scope). loadoutA.passive is left untouched:
+    // passives aren't tracked in cardPool per Task 9's scope. The
+    // `ACTIVE_CARDS[id]` guard also defensively skips any non-active-card
+    // id that might end up in cardPool (see the reward-persistence note
+    // near `_showCardReward` below).
+    if (fighterA.cardPool && fighterA.cardPool.length > 0) {
+      for (const id of fighterA.cardPool) {
+        if (ACTIVE_CARDS[id] && !loadoutA.active.includes(id)) {
+          loadoutA.active.push(id);
+        }
+      }
+    }
     // Scout the player's (fighterA's) game-plan signature from their tape
     // and have the AI counter it. `state` doesn't exist yet at this point
     // (it's built by _initState just below, from loadoutB itself), and
@@ -72,8 +95,8 @@ export class CombatAdapter {
       state.roundTurn = 0;
 
       if (r > 1) {
-        state.fighterA.stamina = Math.max(15, state.fighterA.stamina - 10);
-        state.fighterB.stamina = Math.max(15, state.fighterB.stamina - 10);
+        state.fighterA.stamina = Math.max(15, state.fighterA.stamina - this._staminaDecayAmount(state.passivesA));
+        state.fighterB.stamina = Math.max(15, state.fighterB.stamina - this._staminaDecayAmount(state.passivesB));
       }
 
       state.turnOwner = 'A';
@@ -83,27 +106,47 @@ export class CombatAdapter {
         state.currentTurn++;
 
         // Tick cooldown for player (A) at start of their turn
-        this.engine._tickCooldowns(state.cooldownsA);
+        this._tickCooldownsWithPassives('A');
 
         // PLAYER TURN (A): wait for card selection via UI
         this.view.update(this.container, state);
         const playerAction = await this._waitForPlayerAction(state);
 
         if (playerAction.type === 'card') {
+          const preMovePosA = state.fighterA.position;
           this.engine.playCard('A', playerAction.cardId);
+          this._maybeResistTakedown('A', playerAction.cardId, preMovePosA);
         } else if (playerAction.type === 'move') {
           this.engine.moveManual('A', playerAction.position);
         }
         // 'pass' = do nothing
 
         // Tick cooldown for AI
-        this.engine._tickCooldowns(state.cooldownsB);
+        this._tickCooldownsWithPassives('B');
 
-        // AI TURN (B): AI selects card
+        // AI TURN (B): decide whether to reposition manually before
+        // considering a card. Finding 1 (final whole-branch review) — the
+        // AI never called AICombat.selectMoveAction, so it could get stuck
+        // at DISTANCE forever whenever its current loadout (via
+        // AICombat.selectLoadout) has no moveTo-capable card reachable
+        // from DISTANCE (only 'overhand' qualifies, and several countering
+        // loadouts don't include it). Checked first, before selectCard: if
+        // it returns a target position, the AI spends its turn moving and
+        // does NOT also play a card (aiCard stays null) — that naturally
+        // routes into the existing cardA && !cardB / uncontested-player-
+        // attack branch below, already correct and tested.
         const availB = this.engine.getAvailableCards(state, 'B');
-        const aiCard = AICombat.selectCard(availB, state, []);
-        if (aiCard) {
-          this.engine.playCard('B', aiCard.id);
+        const moveTargetB = AICombat.selectMoveAction(availB, state);
+        let aiCard = null;
+        if (moveTargetB) {
+          this.engine.moveManual('B', moveTargetB);
+        } else {
+          aiCard = AICombat.selectCard(availB, state, []);
+          if (aiCard) {
+            const preMovePosB = state.fighterB.position;
+            this.engine.playCard('B', aiCard.id);
+            this._maybeResistTakedown('B', aiCard.id, preMovePosB);
+          }
         }
 
         // Resolve the turn: compare player's card vs AI's card
@@ -190,6 +233,24 @@ export class CombatAdapter {
         if (options.length > 0) {
           result.rewardCard = await this._showCardReward(options);
         }
+      }
+    }
+
+    // Final whole-branch review, Finding 2 — persist the chosen/awarded
+    // reward card into fighterA.cardPool, same dedup guard training-camp.js
+    // already uses for camp discoveries (Task 9), so fight rewards actually
+    // stick around the same way. Applied once here, after either reward
+    // branch above has resolved, rather than only inside _showCardReward's
+    // own resolution — this also covers the isTitleFight branch (a title
+    // reward is a reward too, and left it unpersisted would reproduce the
+    // exact same bug for title fights). fighterA.cardPool already exists on
+    // every real Fighter instance (js/models/fighter.js's constructor
+    // default, added in Task 9), but initialize it defensively in case this
+    // is ever called with a plain object that skipped that constructor.
+    if (result.rewardCard) {
+      fighterA.cardPool = fighterA.cardPool || [];
+      if (!fighterA.cardPool.includes(result.rewardCard.id)) {
+        fighterA.cardPool.push(result.rewardCard.id);
       }
     }
 
@@ -339,6 +400,99 @@ export class CombatAdapter {
       default:
         break;
     }
+  }
+
+  // ===== Finding 3 (final whole-branch review) — passive effect hooks =====
+  // combat-resolver.js's applyPassiveDamageMods only ever handled
+  // `damageMult` (heavyHands). These three effect types aren't damage
+  // modifiers at all — they touch stamina decay, position resolution, and
+  // cooldown ticking respectively — so each is dispatched from the actual
+  // point in this adapter's turn loop where that mechanic already lives,
+  // rather than being shoehorned into applyPassiveDamageMods.
+  // dirtyFight (foulChance) and student (revealFirstTurn) are intentionally
+  // left unhandled — out of scope, see task notes.
+
+  // marathon (fatigueReduction) — reduces the flat per-round stamina decay
+  // by the passive's `value` fraction for whichever side has it equipped.
+  _staminaDecayAmount(passives) {
+    const BASE_DECAY = 10;
+    const marathon = (passives || []).find(p => p.effect?.type === 'fatigueReduction');
+    if (!marathon) return BASE_DECAY;
+    return BASE_DECAY * (1 - marathon.effect.value);
+  }
+
+  // solidBase (takedownDefenseBonus) — 20% (passive's `value`) chance to
+  // negate a takedown card's position change when the defender (the side
+  // that did NOT play the card) holds solidBase and is currently in
+  // POSITIONS.RANGE. Implemented as a revert-after-playCard step: playCard
+  // already applies `card.moveTo` unconditionally and has no "skip move"
+  // flag, so capturing the mover's pre-call position and restoring it on a
+  // successful defense roll is the smallest change that works, and avoids
+  // touching combat-engine.js at all. Note that in the current position
+  // model, playCard only ever moves the CARD OWNER's own position (a
+  // takedown moves its player to GROUND_TOP — representing them taking top
+  // position); the opponent's position field is never touched by it. So
+  // "negating the position change" concretely means the attacker fails to
+  // advance to GROUND_TOP and the exchange stays at range — the closest
+  // faithful mapping of "defender stays in RANGE" onto this per-fighter-
+  // independent position model. Cooldown/uses are already consumed by the
+  // playCard call that ran before this — a resisted takedown still costs
+  // the attacker resources, per the finding's explicit call-out.
+  _maybeResistTakedown(attackerSide, cardId, preMovePosition) {
+    const card = ACTIVE_CARDS[cardId];
+    if (!card || card.type !== 'takedown') return;
+    const state = this.engine.state;
+    const attackerFighter = attackerSide === 'A' ? state.fighterA : state.fighterB;
+    const defenderFighter = attackerSide === 'A' ? state.fighterB : state.fighterA;
+    const defenderPassives = attackerSide === 'A' ? state.passivesB : state.passivesA;
+    const solidBase = (defenderPassives || []).find(p => p.effect?.type === 'takedownDefenseBonus');
+    if (!solidBase) return;
+    if (defenderFighter.position !== solidBase.effect.position) return;
+    if (Math.random() < solidBase.effect.value) {
+      attackerFighter.position = preMovePosition;
+    }
+  }
+
+  // bloodCold (cooldownReductionLoser) — when the passive holder is
+  // currently BEHIND on the aggregate scorecard (completed rounds only —
+  // state.roundScores), their limited-use ("special", maxUses !==
+  // Infinity) cards tick down cooldown one extra step per turn. Wraps the
+  // existing per-turn `engine._tickCooldowns` call (both call sites in the
+  // turn loop above now go through this instead of calling the engine
+  // method directly) rather than modifying `_tickCooldowns` itself, since
+  // the extra decrement only applies to a subset of cards and only
+  // conditionally — keeping combat-engine.js's tick function untouched and
+  // ignorant of passives.
+  _tickCooldownsWithPassives(side) {
+    const state = this.engine.state;
+    const cooldowns = side === 'A' ? state.cooldownsA : state.cooldownsB;
+    this.engine._tickCooldowns(cooldowns);
+
+    const passives = side === 'A' ? state.passivesA : state.passivesB;
+    const bloodCold = (passives || []).find(p => p.effect?.type === 'cooldownReductionLoser');
+    if (!bloodCold || !this._isBehindOnScorecard(side)) return;
+
+    for (const cardId of Object.keys(cooldowns)) {
+      const card = ACTIVE_CARDS[cardId];
+      if (!card || card.maxUses === Infinity) continue;
+      if (cooldowns[cardId] > 0) {
+        cooldowns[cardId] -= bloodCold.effect.value;
+        if (cooldowns[cardId] <= 0) delete cooldowns[cardId];
+      }
+    }
+  }
+
+  // Sums completed rounds only (state.roundScores) — the round in progress
+  // hasn't been scored yet at the point cooldowns tick mid-round, so it
+  // can't count toward "currently behind" yet.
+  _isBehindOnScorecard(side) {
+    const state = this.engine.state;
+    let totalA = 0, totalB = 0;
+    for (const rd of state.roundScores) {
+      totalA += rd.scoreA;
+      totalB += rd.scoreB;
+    }
+    return side === 'A' ? totalA < totalB : totalB < totalA;
   }
 
   _showTurnResult(turnResult) {

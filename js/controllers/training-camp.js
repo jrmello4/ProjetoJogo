@@ -83,10 +83,20 @@ export class TrainingCamp {
     // propósito, review anterior já descartou reset automático por efeito
     // colateral em booking/readiness.
     let cardDiscoveryNoOp = false;
+    // `validCard` é hoisted pra fora do bloco (era `const` só dentro do
+    // `if` antes do fix round 4) porque o bloco de aquisição lá embaixo
+    // (~linha 244) precisa da MESMA checagem de pool pra concordar com
+    // `cardDiscoveryNoOp`. Antes do fix, a aquisição só olhava
+    // `cardFocus` truthy + não-possuído — sem checar `pool.active` — então
+    // um `cardFocus` de fora do pool da academia atual (alcançável trocando
+    // de academia depois de configurar o camp) fazia `validCard = false`
+    // (custo pulado) mas ainda entrava no cardPool de graça. Ver
+    // `.superpowers/sdd/task-9-report.md` seção 4.
+    let validCard = false;
     if (spec === 'card_discovery') {
       const poolKey = this._academyCardPool(academy);
       const pool = ACADEMY_CARD_POOLS[poolKey] || ACADEMY_CARD_POOLS.balanced;
-      const validCard = !!cardFocus && pool.active.includes(cardFocus);
+      validCard = !!cardFocus && pool.active.includes(cardFocus);
       const alreadyOwned = validCard && !!fighter.cardPool?.includes(cardFocus);
       cardDiscoveryNoOp = !validCard || alreadyOwned;
     }
@@ -241,12 +251,20 @@ export class TrainingCamp {
         fighter.injury.restUntilAbsWeek -= 7; // acelera em 1 semana
       }
     }
-    if (spec === 'card_discovery' && cardFocus) {
+    if (spec === 'card_discovery' && validCard) {
       // Task 9 — descoberta de carta: sem TapeService.canInstall-style
       // validação adiada (a escolha já foi travada na configuração, igual
       // weaponTarget). Só entra no pool persistente do lutador; dedupe pra
       // não empilhar a mesma carta se o jogador reconfigurar o camp com o
       // mesmo foco em semanas seguidas.
+      //
+      // Fix round 4: era `cardFocus` (truthy) aqui, não `validCard`. Isso
+      // desalinhava esta condição da checagem de `cardDiscoveryNoOp` lá em
+      // cima — um `cardFocus` fora do pool.active da academia atual pulava
+      // o custo (fadiga/lesão/overtraining) mas AINDA ganhava a carta de
+      // graça, porque este bloco nunca checava pertencimento ao pool. Agora
+      // `validCard` já engloba `!!cardFocus && pool.active.includes(...)`,
+      // então um cardFocus fora do pool não custa nada E não concede nada.
       fighter.cardPool = fighter.cardPool || [];
       if (!fighter.cardPool.includes(cardFocus)) {
         fighter.cardPool.push(cardFocus);

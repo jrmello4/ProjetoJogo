@@ -2083,11 +2083,14 @@ class App {
     // academia virar uma aposta de carreira, e não um bônus numérico.
     const academy = await this.game.getAcademy(fighter.academyId);
     const weaponOptions = TapeService.installablePlans(academy);
-    // Task 9 — as 2-3 cartas que esta academia oferece pra descoberta,
-    // resolvidas a partir de `specialties`. Mesmo padrão de weaponOptions
-    // acima: computa aqui (onde a Academy de verdade já foi carregada) e
-    // passa pronto pra view, que não conhece Academy nem TrainingCamp.
-    const cardOptions = TrainingCamp.getCardDiscoveryOptions(academy);
+    // Task 9 — as até 3 cartas que esta academia oferece pra descoberta,
+    // resolvidas a partir de `specialties` e filtradas pelo que o lutador já
+    // tem (`fighter.cardPool`) pra nunca oferecer uma carta repetida. Mesmo
+    // padrão de weaponOptions acima: computa aqui (onde a Academy de verdade
+    // já foi carregada) e passa pronto pra view, que não conhece Academy nem
+    // TrainingCamp. Pool esgotado (5/5 já adquiridas) devolve `[]`, e a view
+    // já esconde o bloco e a opção 'card_discovery' do select nesse caso.
+    const cardOptions = TrainingCamp.getCardDiscoveryOptions(academy, fighter);
     const team = await this.game.partnersService.getTeammates(fighter);
     const html = TrainingCampView.render(fighter, booking, now, weaponOptions, team, cardOptions);
     await LayoutView.render(html);

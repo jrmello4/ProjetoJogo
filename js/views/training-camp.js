@@ -67,8 +67,12 @@ export class TrainingCampView {
   // do bloco de arma nova acima: só aparece quando `cfg.spec ===
   // 'card_discovery'`, porque escolher a carta é ABRIR MÃO das outras
   // semanas de treino (igual instalar arma). `cardOptions` já vem resolvido
-  // (id/name/description) — quem decide o pool é `TrainingCamp.
-  // getCardDiscoveryOptions(academy)`, chamado no app.js.
+  // (id/name/description) e já filtrado pelas cartas que o lutador já tem —
+  // quem decide o pool é `TrainingCamp.getCardDiscoveryOptions(academy,
+  // fighter)`, chamado no app.js. Pool esgotado (lutador já tem as 5 cartas
+  // da academia) chega aqui como `cardOptions = []`: o bloco não renderiza E
+  // (ver `render()` abaixo) a opção 'card_discovery' some do <select> de
+  // foco — evita que o jogador configure um camp que seria um no-op.
   static _renderCardDiscovery(fighter, cfg, cardOptions) {
     if (cardOptions.length === 0) return '';
 

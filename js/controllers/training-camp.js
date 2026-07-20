@@ -298,29 +298,78 @@ export class TrainingCamp {
   // bem diferente: `strikingScore`/`grapplingScore` de um lutador vivem
   // grosso modo em 0–100 (gap > 8 ali é ~8% da escala); `specialties` é um
   // multiplicador que, no catálogo real (ACADEMIES em game-config.js), varia
-  // só entre 0 e ~0.30. Escalando o mesmo ~8% pra essa faixa dá ~0.024;
-  // usamos 0.05 (um pouco mais conservador, arredondado pra um número limpo)
-  // pra que só uma diferença clara entre as duas especialidades — não ruído
-  // de arredondamento — empurre a academia pra um pool especializado.
+  // só entre 0 e ~0.30.
+  //
+  // Correção de review (task 9 follow-up): um único threshold simétrico é
+  // matematicamente incapaz de separar as 3 academias reais em 3 pools
+  // diferentes. Os gaps reais (striking - grappling) são:
+  //   academy-blacktiger = 0.10 - 0.15 = -0.05
+  //   academy-fortaleza  = 0.20 - 0.30 = -0.10
+  //   academy-elite      = 0.30 - 0.25 = +0.05
+  // blacktiger e elite têm a MESMA magnitude (0.05) com sinais opostos — um
+  // threshold simétrico sempre os classifica em espelho (os dois cruzam, ou
+  // nenhum cruza), então 'striking' e 'balanced' nunca coexistem com um
+  // threshold só. Daí os dois thresholds:
+  //  - STRIKING_GAP_THRESHOLD = 0.05: bate exatamente no único gap positivo
+  //    do catálogo (academy-elite). É o mesmo "número limpo" já derivado
+  //    escalando o ~8% de `_getArchetype` pra essa faixa (~0.024 → 0.05
+  //    arredondado). Inclusivo (`>=`) de propósito — não é um acidente de
+  //    borda, é a definição: só existe UM ponto de dado positivo no
+  //    catálogo hoje, então não há como pedir "margem" além dele sem
+  //    esvaziar 'striking' de novo.
+  //  - GRAPPLING_GAP_THRESHOLD = 0.075: o ponto médio entre blacktiger
+  //    (-0.05, fica em 'balanced') e fortaleza (-0.10, vira 'grappling') —
+  //    dá aos dois uma margem real e igual (0.025) em vez de uma moeda no
+  //    ar em cima do mesmo -0.05 que já define o corte de striking.
+  // Resultado: as 3 academias reais caem em 3 pools diferentes — nenhum
+  // pool fica morto, e a separação grappling/balanced tem folga de verdade.
+  //
+  // EPSILON: `0.30 - 0.25` em ponto flutuante dá 0.049999999999999996, não
+  // 0.05 — então um `>=` "exato" contra STRIKING_GAP_THRESHOLD falhava pro
+  // próprio academy-elite que o threshold foi desenhado pra capturar (pego
+  // rodando o script de verificação, não por inspeção). EPSILON absorve
+  // esse erro de arredondamento de ponto flutuante sem abrir a porta pra
+  // gaps genuinamente menores que o threshold.
   static _academyCardPool(academy) {
-    const GAP_THRESHOLD = 0.05;
+    const STRIKING_GAP_THRESHOLD = 0.05;
+    const GRAPPLING_GAP_THRESHOLD = 0.075;
+    const EPSILON = 1e-9;
     const striking = academy?.specialties?.striking ?? 0;
     const grappling = academy?.specialties?.grappling ?? 0;
     const gap = striking - grappling;
-    if (gap > GAP_THRESHOLD) return 'striking';
-    if (gap < -GAP_THRESHOLD) return 'grappling';
+    if (gap >= STRIKING_GAP_THRESHOLD - EPSILON) return 'striking';
+    if (gap <= -GRAPPLING_GAP_THRESHOLD + EPSILON) return 'grappling';
     return 'balanced';
   }
 
   // Task 9 — as opções de carta que a academia oferece nesta configuração de
   // camp. Resolve card-ids do pool categórico para objetos {id, name,
   // description} prontos pra view renderizar. Determinístico (sempre as
-  // mesmas 3 primeiras do pool) — se fosse aleatório a cada render, a
-  // seleção do jogador poderia "sumir da lista" ao reabrir a tela.
-  static getCardDiscoveryOptions(academy) {
+  // primeiras 3 do pool NA ORDEM DO POOL, pulando o que o lutador já tem) —
+  // se fosse aleatório a cada render, a seleção do jogador poderia "sumir da
+  // lista" ao reabrir a tela.
+  //
+  // Correção de review (task 9 follow-up): antes disto, a função sempre
+  // devolvia `pool.active.slice(0, 3)` — as 3 mesmas cartas, pra sempre,
+  // não importa o que o lutador já tinha. Consequência: as cartas de índice
+  // 3-4 do pool (5 cartas) nunca eram alcançáveis por este caminho, e assim
+  // que o lutador tinha as 3 primeiras, `card_discovery` virava um
+  // no-op garantido — zero ganho, risco/fadiga cheios, toda semana,
+  // silenciosamente (inclusive no fast-forward). Agora recebe `fighter` e
+  // filtra `fighter.cardPool` antes de fatiar, então sempre tenta oferecer
+  // até 3 cartas que o lutador AINDA NÃO tem, cobrindo o pool de 5 inteiro
+  // conforme as primeiras vão sendo adquiridas. Se as 5 já foram todas
+  // adquiridas, devolve `[]` — a view (`js/views/training-camp.js`) já
+  // esconde o bloco inteiro E a opção 'card_discovery' do <select> quando
+  // `cardOptions.length === 0` (mesmo padrão usado pra `weaponOptions`
+  // vazio), então um pool esgotado nunca vira uma opção selecionável: o
+  // jogador nem chega a configurar um camp que seria um no-op silencioso.
+  static getCardDiscoveryOptions(academy, fighter = null) {
     const poolKey = this._academyCardPool(academy);
     const pool = ACADEMY_CARD_POOLS[poolKey] || ACADEMY_CARD_POOLS.balanced;
-    return pool.active.slice(0, 3).map(id => {
+    const owned = fighter?.cardPool || [];
+    const available = pool.active.filter(id => !owned.includes(id));
+    return available.slice(0, 3).map(id => {
       const card = ACTIVE_CARDS[id];
       return {
         id,

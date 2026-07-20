@@ -429,3 +429,22 @@ export class EventsView {
     `;
   }
 }
+
+// Intro do combate por cartas (Fase 1 — ver CombatAdapter/App#runCardFight).
+// Puramente aditivo: não substitui renderCornerFightIntro, que continua
+// servindo o fluxo de luta ao vivo padrão.
+export function renderCardFightIntro(container, fighterA, fighterB) {
+  container.innerHTML = `
+    <div class="fight-intro">
+      <div class="fighter-card">
+        <div class="fighter-name red">${e(fighterA.name)}</div>
+        <div class="fighter-record">${fighterA.record?.wins || 0}V ${fighterA.record?.losses || 0}D</div>
+      </div>
+      <div class="vs-badge">VS</div>
+      <div class="fighter-card">
+        <div class="fighter-name blue">${e(fighterB.name)}</div>
+        <div class="fighter-record">${fighterB.record?.wins || 0}V ${fighterB.record?.losses || 0}D</div>
+      </div>
+    </div>
+  `;
+}

@@ -24,6 +24,7 @@ import { OnboardingService } from './services/onboarding-service.js';
 import { PressConference } from './controllers/press-conference.js';
 import { WeeklyTrainingController } from './controllers/weekly-training.js';
 import { CornerAdvice } from './controllers/corner-advice.js';
+import { CombatAdapter } from './controllers/combat-adapter.js';
 import { RivalryService } from './services/rivalry-service.js';
 import { SeasonService } from './services/season-service.js';
 import { NotificationService } from './services/notification-service.js';
@@ -2652,6 +2653,16 @@ class App {
         }
       });
     });
+  }
+
+  // ===== Combate por cartas (Fase 1 — ponto de entrada standalone/dev,
+  // ainda não ligado ao fluxo padrão de luta; ver CombatAdapter) =====
+  async runCardFight(fighterA, fighterB, promo, gamePlanKey) {
+    await LayoutView.render('<div id="fight-container" class="card-fight-host"></div>');
+    const adapter = new CombatAdapter();
+    adapter.setContainer(document.getElementById('fight-container'));
+    const fiveRounds = promo.tier === 1;
+    return adapter.runFight(fighterA, fighterB, fiveRounds, gamePlanKey);
   }
 }
 

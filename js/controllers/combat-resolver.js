@@ -66,13 +66,24 @@ export class CombatResolver {
     state.staminaDebtA += (cardA.tags?.includes('heavy') ? 5 : 0);
     state.staminaDebtB += (cardB.tags?.includes('heavy') ? 5 : 0);
 
+    // Determine turn winner. On an exact tie, don't structurally favor A —
+    // decide with a coin flip instead of always resolving to 'A'.
+    let winner;
+    if (totalA > totalB) {
+      winner = 'A';
+    } else if (totalB > totalA) {
+      winner = 'B';
+    } else {
+      winner = Math.random() < 0.5 ? 'A' : 'B';
+    }
+
     return {
       cardA, cardB,
       rawDamageA, rawDamageB,
       damageA, damageB,
       effectiveA: totalA,
       effectiveB: totalB,
-      winner: totalA >= totalB ? 'A' : 'B',
+      winner,
       margin: Math.abs(totalA - totalB),
     };
   }
@@ -149,7 +160,7 @@ export class CombatResolver {
     const effDiff = totalEffectiveA - totalEffectiveB;
     const margin = Math.abs(effDiff);
 
-    // 10-point must
+    // 10-point must, based on who won more turns
     let scoreA = 10, scoreB = 9; // A wins round by default
     if (winsB > winsA) {
       scoreA = 9; scoreB = 10; // B wins round
@@ -158,14 +169,20 @@ export class CombatResolver {
       scoreA = 10; scoreB = 10; // even round
     }
 
-    // Dominance adjustment
+    // Dominance override: when the effective-damage margin is large enough,
+    // the side that is actually dominant by damage (effDiff) is authoritative
+    // for the round winner — it overrides the turn-count-based assignment
+    // above rather than just subtracting from whichever side that logic
+    // happened to pick as the loser. This keeps the score always valid: one
+    // side is exactly 10, the other is 9/8/7 (never e.g. 9-8).
     if (margin > 40) {
-      if (effDiff > 0) scoreB = 8; // 10-8 round
-      else scoreA = 8;
-    }
-    if (margin > 70) {
-      if (effDiff > 0) scoreB = 7; // 10-7 round
-      else scoreA = 7;
+      const loserScore = margin > 70 ? 7 : 8;
+      if (effDiff > 0) {
+        scoreA = 10; scoreB = loserScore; // A dominant — 10-8 / 10-7 round
+      } else if (effDiff < 0) {
+        scoreB = 10; scoreA = loserScore; // B dominant — 10-8 / 10-7 round
+      }
+      // effDiff === 0 can't happen here since margin = |effDiff| > 40 > 0
     }
 
     return { scoreA, scoreB, margin, totalEffectiveA, totalEffectiveB };

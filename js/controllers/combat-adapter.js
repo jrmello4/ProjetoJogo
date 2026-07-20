@@ -11,6 +11,7 @@ import { ACTIVE_CARDS, POSITIONS, getDefaultLoadout } from '../config/card-confi
 import { COACH_SKILLS } from '../config/coach-config.js';
 import { CardCombatView } from '../views/card-combat-view.js';
 import { CardRewardService } from '../services/card-reward-service.js';
+import { TapeService } from '../services/tape-service.js';
 
 export class CombatAdapter {
   constructor() {
@@ -39,7 +40,13 @@ export class CombatAdapter {
   // instead of a player-chosen pool.
   async runFight(fighterA, fighterB, fiveRounds, gamePlanKey, promoTier = 3, isTitleFight = false) {
     const loadoutA = getDefaultLoadout(gamePlanKey);
-    const loadoutB = getDefaultLoadout('balanced'); // AI uses balanced for now
+    // Scout the player's (fighterA's) game-plan signature from their tape
+    // and have the AI counter it. `state` doesn't exist yet at this point
+    // (it's built by _initState just below, from loadoutB itself), and
+    // AICombat.selectLoadout's logic doesn't read `state` today — so we
+    // pass null rather than restructure the init order for an unused param.
+    const tapeData = TapeService.getFavoredPlanData(fighterA);
+    const loadoutB = AICombat.selectLoadout(null, tapeData);
 
     const s = this.engine._initState(fighterA, fighterB, fiveRounds, loadoutA, loadoutB);
     const state = s;

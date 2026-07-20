@@ -1,6 +1,23 @@
-import { ACTIVE_CARDS, POSITIONS } from '../config/card-config.js';
+import { ACTIVE_CARDS, POSITIONS, getDefaultLoadout } from '../config/card-config.js';
+import { COUNTER_OF } from '../config/game-config.js';
 
 export class AICombat {
+  // Choose the AI's loadout by countering the player's scouted game-plan
+  // signature (see TapeService.getFavoredPlanData). `state` is accepted for
+  // signature parity with future extensibility but isn't read by this logic.
+  static selectLoadout(state, tapeData) {
+    if (!tapeData || tapeData.exposure < 30) {
+      return getDefaultLoadout('balanced'); // Unknown/under-scouted player
+    }
+
+    const counter = COUNTER_OF[tapeData.favoredPlan];
+    if (counter) {
+      return getDefaultLoadout(counter); // Counter the player's signature plan
+    }
+
+    return getDefaultLoadout('balanced'); // No signature (null/'balanced'/unrecognized) — nothing to counter
+  }
+
   // Select a card for the AI to play
   static selectCard(availableCards, state, opponentAvailableCards) {
     if (!availableCards.length) return null;

@@ -55,6 +55,17 @@ export class TapeService {
     return n / history.length >= TAPE_CONFIG.SIGNATURE_THRESHOLD ? top : null;
   }
 
+  // ===== Scouting para IA de cartas =====
+  // Empacota exposure + signatureOf no formato que AICombat.selectLoadout
+  // consome pra escolher o loadout que counter-a o jogador. Puramente
+  // aditivo — não toca em planHistory nem em nenhum outro método.
+  static getFavoredPlanData(fighter) {
+    return {
+      exposure: this.tapeOf(fighter).exposure,
+      favoredPlan: this.signatureOf(fighter),
+    };
+  }
+
   // ===== Maestria de plano =====
   // Repetir um plano o afia. É a outra metade da tese: a mesma repetição que
   // te dá a vantagem é a que te entrega. `balanced` é a ausência de plano —

@@ -109,8 +109,24 @@ export class CombatResolver {
     const fighterA = state.fighterA.ref;
     const fighterB = state.fighterB.ref;
 
-    // Base finish chance increases with margin and round number
-    const finishChance = Math.min(0.4, 0.02 + margin * 0.005 + round * 0.02);
+    // Base finish chance increases with margin and round number, capped at
+    // 0.4 before any corner bonus is applied below.
+    let finishChance = Math.min(0.4, 0.02 + margin * 0.005 + round * 0.02);
+
+    // Corner "Finalizador" coach skill (Task 11) — only ever benefits side
+    // A (the player), mirroring the "corner only affects the player"
+    // convention used elsewhere in this codebase (WorldService models only
+    // the player's corner). Applied AFTER the 0.4 cap above, not before:
+    // the base term is frequently already at/near the cap in later rounds
+    // or high-margin turns, so adding the bonus before Math.min would often
+    // get silently absorbed by the cap and the skill would do nothing.
+    // Adding it post-cap guarantees a granted +0.20 always meaningfully
+    // moves the needle, and only when side A is the one landing the finish
+    // (turnResult.winner === 'A' — B's finishes are never boosted by it).
+    if (turnResult.winner === 'A' && state.finishChanceBonusA) {
+      finishChance += state.finishChanceBonusA;
+    }
+
     if (Math.random() > finishChance) return null;
 
     // Determine who gets finished

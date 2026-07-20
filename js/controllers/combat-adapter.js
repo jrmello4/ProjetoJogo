@@ -8,6 +8,7 @@ import { CombatEngine } from './combat-engine.js';
 import { CombatResolver } from './combat-resolver.js';
 import { AICombat } from './ai-combat.js';
 import { ACTIVE_CARDS, POSITIONS, getDefaultLoadout } from '../config/card-config.js';
+import { COACH_SKILLS } from '../config/coach-config.js';
 import { CardCombatView } from '../views/card-combat-view.js';
 import { CardRewardService } from '../services/card-reward-service.js';
 
@@ -140,6 +141,26 @@ export class CombatAdapter {
         state.roundScores.push(roundScore);
         roundTurns.length = 0; // reset for next round
       }
+
+      // Corner phase — offer a random coach skill between rounds. Skipped
+      // on the last round (there's no "next round" left for a corner skill
+      // to help with once the fight is over) and skipped after an early
+      // finish (state.ended already true in that case).
+      if (!state.ended && r < state.maxRounds) {
+        // Clear single-round corner effects granted for the round that
+        // just ended before deciding this round's offer. finishChanceBonusA
+        // and strategistRevealActive are both single-round effects (see
+        // _applyCoachSkill) — this keeps them from silently carrying over
+        // into a round the player didn't actually earn them for.
+        state.finishChanceBonusA = 0;
+        state.strategistRevealActive = false;
+
+        const skillEntry = this._pickRandomCoachSkill();
+        const accepted = await this._showCornerOffer(skillEntry);
+        if (accepted) {
+          this._applyCoachSkill(skillEntry, state);
+        }
+      }
     }
 
     if (!state.ended) {
@@ -236,6 +257,81 @@ export class CombatAdapter {
         });
       });
     });
+  }
+
+  // Picks one of the 3 COACH_SKILLS entries at random — flat, un-scaled
+  // selection with no academy/synergy weighting (that's out of scope for
+  // this dev-testing entry point per the task's explicit boundaries).
+  _pickRandomCoachSkill() {
+    const entries = Object.values(COACH_SKILLS);
+    return entries[Math.floor(Math.random() * entries.length)];
+  }
+
+  // Promise-based wait for the player to accept/decline a corner coach
+  // skill offer — same idiom as _showCardReward: fully replace
+  // this.container's innerHTML, bind click listeners, resolve the Promise
+  // from inside them. Resolves true on accept, false on decline.
+  _showCornerOffer(skillEntry) {
+    return new Promise(resolve => {
+      this.container.innerHTML = `
+        <div class="corner-modal">
+          <h2>Conselho do Córner</h2>
+          <div class="corner-skill">
+            <div class="corner-skill-name">${skillEntry.name}</div>
+            <div class="corner-skill-desc">${skillEntry.description}</div>
+          </div>
+          <div class="corner-actions">
+            <button class="corner-accept-btn">Aceitar</button>
+            <button class="corner-decline-btn">Recusar</button>
+          </div>
+        </div>
+      `;
+      const acceptBtn = this.container.querySelector('.corner-accept-btn');
+      const declineBtn = this.container.querySelector('.corner-decline-btn');
+      acceptBtn.addEventListener('click', () => resolve(true));
+      declineBtn.addEventListener('click', () => resolve(false));
+    });
+  }
+
+  // Applies an accepted coach skill's effect to the fight state. Only side
+  // A (the player) is ever affected — corner skills are a player-only
+  // mechanic, mirroring the "corner only affects the player" convention
+  // used elsewhere in this codebase.
+  _applyCoachSkill(skillEntry, state) {
+    const effect = skillEntry.effect;
+    switch (effect.type) {
+      case 'restoreSpecialUses': {
+        // Eligible: limited-use active cards (maxUses !== Infinity) in the
+        // player's loadout that are currently below their max uses.
+        const candidates = (state.activesA || []).filter(id => {
+          const card = ACTIVE_CARDS[id];
+          if (!card || card.maxUses === Infinity) return false;
+          const remaining = state.usesA[id] ?? card.maxUses;
+          return remaining < card.maxUses;
+        });
+        if (candidates.length > 0) {
+          const chosenId = candidates[Math.floor(Math.random() * candidates.length)];
+          const card = ACTIVE_CARDS[chosenId];
+          const remaining = state.usesA[chosenId] ?? card.maxUses;
+          state.usesA[chosenId] = Math.min(card.maxUses, remaining + effect.value);
+        }
+        // No eligible card (all at max, or no limited-use cards in
+        // loadout) — no-op, this skill simply has no effect this time.
+        break;
+      }
+      case 'revealPosition':
+        // _renderPositionTracker already shows both fighters' positions
+        // unconditionally at all times (pre-existing Task 5 design), so
+        // this flag has no additional visible UI impact today — it's real
+        // state bookkeeping tracked the same way as the other 2 effects.
+        state.strategistRevealActive = true;
+        break;
+      case 'finishChanceBonus':
+        state.finishChanceBonusA = (state.finishChanceBonusA || 0) + effect.value;
+        break;
+      default:
+        break;
+    }
   }
 
   _showTurnResult(turnResult) {

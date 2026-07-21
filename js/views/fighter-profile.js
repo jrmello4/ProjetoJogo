@@ -5,6 +5,13 @@ import { CrowdService } from '../services/crowd-service.js';
 import { PortraitService } from '../services/portrait-service.js';
 import { VisualIdentityService } from '../services/visual-identity-service.js';
 
+const CAREER_STAGES_LABELS = {
+  rookie: 'Iniciante', prospect: 'Prospecto', journeyman: 'Circuito',
+  star: 'Estrela', champion: 'Campeão', ex_champion: 'Ex-campeão',
+  veteran: 'Veterano', legend: 'Lenda', retired: 'Aposentado',
+  fallen: 'Declínio', coach: 'Treinador', mogul: 'Empresário',
+};
+
 export class FighterProfileView {
   // Linha do tempo de momentos — texto cru no label; e() só na saída.
   static _renderMomentsTimeline(moments, careerStartedAt = null) {
@@ -650,6 +657,47 @@ export class FighterProfileView {
             </div>
           ` : '';
         })() : ''}
+      </div>
+
+      <!-- F10: Evolução do lutador — estágios da carreira -->
+      <div class="card mt-4">
+        <div class="card-header">
+          <span class="card-title">📈 Evolução na Carreira</span>
+        </div>
+        ${(() => {
+          const total = fighter.totalFights ?? ((fighter.record?.wins || 0) + (fighter.record?.losses || 0));
+          const titlesWon = fighter.titlesWon || 0;
+          const pop = fighter.popularity || 0;
+
+          const stageIds = ['rookie'];
+          if (total >= 3) stageIds.push('prospect');
+          if (total >= 8) stageIds.push('journeyman');
+          if (pop >= 50 || total >= 12 || titlesWon > 0) stageIds.push('star');
+          if (titlesWon > 0) stageIds.push('champion');
+
+          const currentStage = VisualIdentityService.describeIdentity(fighter).stageId;
+          const currentIdx = stageIds.indexOf(currentStage);
+          if (currentIdx === -1) stageIds.push(currentStage);
+
+          return `
+            <div class="evolution-bar">
+              ${stageIds.map((sid, i) => {
+                const isCurrent = sid === currentStage;
+                return `
+                  <div class="evolution-node ${isCurrent ? 'is-current' : ''}">
+                    <div class="evolution-node-dot"></div>
+                    <div class="evolution-node-label">${CAREER_STAGES_LABELS[sid] || sid}</div>
+                    <div class="evolution-node-date">${isCurrent ? 'atual' : ''}</div>
+                  </div>
+                  ${i < stageIds.length - 1 ? `<div class="evolution-line ${i < currentIdx ? 'is-filled' : ''}"></div>` : ''}
+                `;
+              }).join('')}
+            </div>
+            <div class="text-xs text-muted" style="padding:0 0.5rem 0.5rem">
+              ${currentIdx === stageIds.length - 1 ? 'Você está no topo da sua trajetória atual.' : `Próximo marco: ${CAREER_STAGES_LABELS[stageIds[currentIdx + 1]] || stageIds[currentIdx + 1]}`}
+            </div>
+          `;
+        })()}
       </div>
 
       <!-- G3: Gráfico de carreira (OVR ao longo das lutas) -->

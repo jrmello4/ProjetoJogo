@@ -4,9 +4,16 @@ import { PodcastService } from '../services/podcast-service.js';
 import { YearReviewService } from '../services/year-review-service.js';
 import { CrowdService } from '../services/crowd-service.js';
 import { PortraitService } from '../services/portrait-service.js';
+import { VisualIdentityService } from '../services/visual-identity-service.js';
 import { careerLogEntryLabel } from '../services/career-log-labels.js';
 
 const tierBadgeCls = (tier) => (tier === 1 ? 'badge-danger' : tier === 2 ? 'badge-warning' : 'badge-info');
+const CAREER_STAGES_LABELS = {
+  rookie: 'Iniciante', prospect: 'Prospecto', journeyman: 'Circuito',
+  star: 'Estrela', champion: 'Campeão', ex_champion: 'Ex-campeão',
+  veteran: 'Veterano', legend: 'Lenda', retired: 'Aposentado',
+  fallen: 'Declínio', coach: 'Treinador', mogul: 'Empresário',
+};
 
 // Só passos do onboarding com um alvo ESTÁVEL na tela ganham "Mostrar" —
 // weighedIn só aparece via prompt na semana da pesagem, não tem elemento
@@ -516,6 +523,19 @@ export class DashboardView {
     const injured = fighter.status === 'injured';
     const styleCfg = FIGHTING_STYLES[fighter.style] || FIGHTING_STYLES.freestyle;
     const xpPct = Math.round(fighter.xpProgress * 100);
+
+    // F10: identidade visual — estágio, arquétipo, legado
+    const identity = VisualIdentityService.describeIdentity(fighter);
+    const stageCls = `stage-badge stage-badge--${identity.stageId}`;
+    const stageBadge = `<span class="${stageCls}">${e(identity.stageLabel)}</span>`;
+    const legacyScore = Math.round((
+      (fighter.popularity || 0) +
+      (fighter.overallRating || 50) +
+      Math.min(Math.round((fighter.careerEarnings || 0) / 20000), 50) +
+      Math.min((fighter.titlesWon || 0) * 20, 40) +
+      Math.min((fighter.totalFights || 0) * 1.5, 30)
+    ) / 5);
+
     const fighterHtml = `
       <div class="section-label" data-reveal>Seu Lutador</div>
       <div class="bento-grid mb-4" data-reveal-stagger>
@@ -539,6 +559,17 @@ export class DashboardView {
             : fighter.availableFromAbsWeek > now
               ? `<div class="text-xs" style="color:var(--warning)">⏳ Suspensão médica · ${fighter.availableFromAbsWeek - now} sem</div>`
               : '<div class="text-xs text-muted">Sem luta marcada</div>'}
+
+          <!-- F10: estágio + identidade + reputação -->
+          <div class="flex items-center gap-2 mt-2 flex-wrap">
+            ${stageBadge}
+            <span class="text-xs" style="color:var(--text-secondary)">${e(identity.archetypeLabel)}</span>
+          </div>
+          <div class="rep-cluster mt-1">
+            <span class="rep-pill"><span class="rep-pill-icon">🔥</span><span>${fighter.narrativeHeat || 0}</span></span>
+            <span class="rep-pill"><span class="rep-pill-icon">👥</span><span>${fighter.popularity || 0}</span></span>
+            <span class="rep-pill"><span class="rep-pill-icon">👑</span><span>${legacyScore}</span></span>
+          </div>
 
           <div class="flex items-center gap-2 mt-2">
             <span class="badge badge-info">Nv.${fighter.level}</span>
@@ -643,6 +674,8 @@ export class DashboardView {
       ${onboardingHtml}
       ${this._renderRecentFeed(data)}
 
+      ${this._renderJourney(data)}
+
       ${offersHtml}
       ${weighInHtml}
       ${rehabHtml}
@@ -735,6 +768,87 @@ export class DashboardView {
       ${resultsHtml}
       </div> <!-- end collapsible-body overview -->
     `;
+  }
+
+  // ===== F10: Jornada do lutador no dashboard =====
+  static _renderJourney(data) {
+    const { fighter } = data;
+    if (!fighter) return '';
+    const total = fighter.totalFights ?? ((fighter.record?.wins || 0) + (fighter.record?.losses || 0) + (fighter.record?.draws || 0));
+    const titlesWon = fighter.titlesWon || 0;
+    const pop = fighter.popularity || 0;
+
+    const stageIds = ['rookie'];
+    if (total >= 3) stageIds.push('prospect');
+    if (total >= 8) stageIds.push('journeyman');
+    if (pop >= 50 || total >= 12 || titlesWon > 0) stageIds.push('star');
+    if (titlesWon > 0) stageIds.push('champion');
+
+    const identity = VisualIdentityService.describeIdentity(fighter);
+    const currentIdx = stageIds.indexOf(identity.stageId);
+    if (currentIdx === -1) stageIds.push(identity.stageId);
+
+    const stageTrack = stageIds.map((sid, i) => {
+      const isCurrent = sid === identity.stageId;
+      return `
+        <span class="journey-step ${isCurrent ? 'is-current' : ''}" title="${isCurrent ? 'Estágio atual' : ''}">
+          ${CAREER_STAGES_LABELS[sid] || sid}
+        </span>
+        ${i < stageIds.length - 1 ? '<span class="journey-arrow">→</span>' : ''}
+      `;
+    }).join('');
+
+    const topAttrs = DashboardView._topAttributes(fighter);
+    const legacy = Math.round((
+      pop + (fighter.overallRating || 50) +
+      Math.min(Math.round((fighter.careerEarnings || 0) / 20000), 50) +
+      Math.min(titlesWon * 20, 40) +
+      Math.min(total * 1.5, 30)
+    ) / 5);
+
+    return `
+      <div class="journey-section mb-4" data-reveal>
+        <div class="flex items-center justify-between mb-1">
+          <span class="section-label" style="margin:0;border:none;padding:0">📈 Sua Jornada</span>
+          <span class="text-xs text-muted">${total} lutas · ${fighter.record?.wins || 0}V ${fighter.record?.losses || 0}D</span>
+        </div>
+        <div class="journey-track">${stageTrack}</div>
+        <div class="journey-metric">
+          ${topAttrs.map(a => `
+            <div class="journey-stat">
+              <span class="journey-stat-value" style="color:${a.color}">${a.value}</span>
+              <span class="journey-stat-label">${e(a.label)}</span>
+            </div>
+          `).join('')}
+          <div class="journey-stat">
+            <span class="journey-stat-value" style="color:var(--gold)">${legacy}</span>
+            <span class="journey-stat-label">Legado</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // Retorna top 4 atributos com label + cor semântica
+  static _topAttributes(fighter) {
+    const attrs = [
+      { key: 'boxing', label: 'Boxe' },
+      { key: 'kickboxing', label: 'Kickboxe' },
+      { key: 'muayThai', label: 'Muay Thai' },
+      { key: 'wrestling', label: 'Wrestling' },
+      { key: 'bjj', label: 'BJJ' },
+      { key: 'strength', label: 'Força' },
+      { key: 'speed', label: 'Velocidade' },
+      { key: 'cardio', label: 'Cardio' },
+      { key: 'technique', label: 'Técnica' },
+      { key: 'agility', label: 'Agilidade' },
+    ];
+    const values = attrs.map(a => ({ ...a, value: fighter[a.key] || 50 }));
+    values.sort((a, b) => b.value - a.value);
+    const top = values.slice(0, 4);
+    return top.map(a => ({
+      ...a,
+      color: a.value >= 80 ? '#22c55e' : a.value >= 60 ? '#eab308' : '#ef4444',
+    }));
   }
 
   // ===== Decision overlays (Fase 9) =====

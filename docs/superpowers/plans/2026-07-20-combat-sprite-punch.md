@@ -799,6 +799,13 @@ export class CombatStage {
 
   attach(root, fighterA = null, fighterB = null) {
     this.root = root;
+    // Reset the pose cache — a corner-offer between rounds rebuilds this
+    // container's DOM from scratch (see combat-adapter.js's corner-offer
+    // flow), so attach() can point at a fresh <img> that's back at idle
+    // even though this instance's cache still remembers e.g. groundTop.
+    // Without this, _setPose()'s cache check would no-op and leave the
+    // new element showing the wrong sprite.
+    this._pose = { A: POSES.IDLE, B: POSES.IDLE };
     if (fighterA) this._fighters.A = fighterA;
     if (fighterB) this._fighters.B = fighterB;
   }

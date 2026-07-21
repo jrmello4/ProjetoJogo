@@ -132,4 +132,26 @@ export class SettingsView {
         ${redeemHtml}
       </div>`;
   }
+
+  static _renderDebug() {
+    const enabled = localStorage.getItem('debugMode') === 'true';
+    return `
+      <div class="section-label" data-reveal>🔧 Debug</div>
+      <div class="card mb-4" data-reveal style="${enabled ? '' : 'opacity:0.5'}">
+        <div class="card-header flex items-center justify-between">
+          <span class="card-title">Ferramentas de Desenvolvimento</span>
+          <button class="btn btn-sm ${enabled ? 'btn-primary' : 'btn-secondary'}" id="debugToggleBtn">
+            ${enabled ? 'Ativo' : 'Ativar'}
+          </button>
+        </div>
+        ${enabled ? `
+          <div class="mt-3" id="debugActions" style="display:flex;flex-direction:column;gap:0.4rem">
+            <p class="text-xs text-muted mb-1">Ações (console.log no F12):</p>
+          </div>
+          <div id="debugResult" class="text-xs mt-2"></div>
+        ` : `
+          <p class="text-xs text-muted mt-2">Ative para ferramentas de desenvolvimento.</p>
+        `}
+      </div>`;
+  }
 }

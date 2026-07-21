@@ -30,6 +30,7 @@ import * as PerksScreenView from './views/perks-screen.js';
 import { RivalryService } from './services/rivalry-service.js';
 import { SeasonService } from './services/season-service.js';
 import { NotificationService } from './services/notification-service.js';
+import { DebugService } from './services/debug-service.js';
 import { SaveService } from './services/save-service.js';
 import { CinematicService } from './services/cinematic-service.js';
 import { AudioService } from './services/audio-service.js';
@@ -131,6 +132,8 @@ class App {
     this.rivalryService = null;
     this.seasonService = new SeasonService(this.game.db);
     this.notificationService = new NotificationService(this.game.db);
+    this.debugService = new DebugService(this.game);
+    window.DebugService = this.debugService;
     this.saveService = new SaveService(this.game.db);
     this.monetizationService = new MonetizationService(this.game.db);
     this.threeArena = null;
@@ -2571,6 +2574,44 @@ class App {
         this.notificationService.add('warning', 'Importação Falhou', String(err?.message || err));
       }
     });
+
+    // F16: Debug panel
+    const debugToggle = document.getElementById('debugToggleBtn');
+    debugToggle?.addEventListener('click', async () => {
+      DebugService.toggle();
+      this.renderSettings();
+    });
+
+    if (DebugService.isEnabled() && this.debugService) {
+      const actionsContainer = document.getElementById('debugActions');
+      const resultEl = document.getElementById('debugResult');
+      if (actionsContainer) {
+        const actions = this.debugService.getActions();
+        actions.forEach(a => {
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-sm ' + (a.danger ? 'btn-warning' : 'btn-secondary');
+          btn.textContent = a.label;
+          btn.title = a.desc;
+          btn.style.cssText = 'text-align:left;padding:0.35rem 0.7rem;height:auto';
+          btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            btn.textContent = '...';
+            try {
+              const r = await this.debugService.execute(a.id);
+              if (resultEl) {
+                resultEl.textContent = r.msg;
+                resultEl.style.color = r.type === 'danger' ? 'var(--danger)' : r.type === 'warning' ? 'var(--warning)' : 'var(--success)';
+              }
+            } catch (e) {
+              if (resultEl) { resultEl.textContent = 'Erro: ' + e.message; resultEl.style.color = 'var(--danger)'; }
+            }
+            btn.disabled = false;
+            btn.textContent = a.label;
+          });
+          actionsContainer.appendChild(btn);
+        });
+      }
+    }
 
     document.querySelectorAll('[data-cosmetic-slot]').forEach(btn => {
       btn.addEventListener('click', async () => {

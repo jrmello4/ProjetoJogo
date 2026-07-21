@@ -60,6 +60,61 @@ if (new URLSearchParams(window.location.search).has('cardCombat')) {
 // Vazio = compartilha só o texto, sem link.
 const SHARE_URL = '';
 
+// ===== F12: Detecta momentos cinematográficos da carreira =====
+const CINEMATIC_MOMENTS = {
+  first_win: {
+    icon: '🌟', title: 'Primeira Vitória na Carreira!',
+    desc: 'Sua jornada no MMA profissional começa com uma vitória. Cada lenda começa em algum lugar — esta é a primeira página da sua história.',
+    subtitle: 'Estreia com vitória',
+  },
+  first_loss: {
+    icon: '💔', title: 'Primeira Derrota',
+    desc: 'Todo lutador conhece o amargo do primeiro revés. O que define um campeão não é cair, mas como ele se levanta.',
+    subtitle: 'É assim que lendas são forjadas',
+  },
+  first_title: {
+    icon: '🏆', title: 'CAMPEÃO!',
+    desc: 'Você conquistou o cinturão! Anos de treino, sacrifício e dedicação culminaram neste momento. Seu nome entra para a história da divisão.',
+    subtitle: 'Novo campeão!',
+  },
+  streak_5: {
+    icon: '🔥', title: '5 Vitórias Consecutivas!',
+    desc: 'Você está imparável. Cinco vitórias seguidas colocam todos na categoria de aviso — ninguém quer enfrentar você agora.',
+    subtitle: 'Sequência impressionante',
+  },
+  streak_10: {
+    icon: '⚡', title: '10 Vitórias Seguidas!',
+    desc: 'DOMINAÇÃO ABSOLUTA. Dez vitórias consecutivas é algo que poucos na história conseguem. Você está escrevendo seu nome ao lado dos maiores.',
+    subtitle: 'Fenomenal!',
+  },
+};
+
+function detectCinematicMoment(data) {
+  const fighter = data.fighter;
+  if (!fighter) return null;
+  const won = data.lastFightResult;
+  if (won === null || won === undefined) return null;
+
+  const wins = fighter.record?.wins || 0;
+  const losses = fighter.record?.losses || 0;
+  const total = wins + losses;
+  const titlesWon = fighter.titlesWon || 0;
+  const streak = fighter.winStreak || 0;
+  const chains = data.narrativeChains;
+  if (!chains || chains.length === 0) return null;
+
+  let id = null;
+  if (won === true && wins === 1 && total === 1) id = 'first_win';
+  else if (won === false && losses === 1) id = 'first_loss';
+  else if (won === true && titlesWon === 1) id = 'first_title';
+  else if (won === true && streak === 5) id = 'streak_5';
+  else if (won === true && streak === 10) id = 'streak_10';
+
+  if (!id) return null;
+  const m = CINEMATIC_MOMENTS[id];
+  return { ...m, id };
+}
+
 // §C.1 — rótulos de Manager.style, usados na criação de personagem e na
 // tela de academia/empresário.
 const MANAGER_STYLE_LABELS = {
@@ -905,8 +960,46 @@ class App {
     // Fase 9: collapsible sections
     DashboardView.initCollapsible();
 
+    // Fase 12: momento cinematográfico (milestones)
+    const moment = detectCinematicMoment(data);
+    if (moment) {
+      setTimeout(() => this._showCinematicMoment(moment), 400);
+    }
+
     this._bindFighterClicks();
     this._bindEventClicks();
+  }
+
+  _showCinematicMoment(moment) {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+        localStorage.getItem('reduceMotion') === 'true') return;
+
+    document.querySelector('.cinematic-moment-overlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'cinematic-moment-overlay';
+    overlay.innerHTML = `
+      <div class="cinematic-moment-card">
+        <span class="moment-icon">${moment.icon}</span>
+        <div class="moment-title">${moment.title}</div>
+        <div class="moment-subtitle">${moment.subtitle}</div>
+        <div class="moment-description">${moment.desc}</div>
+        <button class="moment-continue">Continuar</button>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(() => overlay.classList.add('is-open'));
+
+    const close = () => {
+      overlay.dataset.closing = '1';
+      overlay.querySelector('.cinematic-moment-card')?.classList.add('is-closing');
+      setTimeout(() => overlay.remove(), 220);
+    };
+
+    overlay.querySelector('.moment-continue').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
   }
 
   initThreeArena() {

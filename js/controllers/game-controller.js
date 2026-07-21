@@ -1846,6 +1846,7 @@ export class GameController {
       narrativeChains: this.narrativeChainService
         ? await this.narrativeChainService.getAllRecent(1)
         : [],
+      lastFightResult: fighter?.fights?.[0]?.won ?? null,
       onboarding: fighter && OnboardingService.shouldShow(fighter)
         ? {
             activeStep: OnboardingService.activeStep(fighter),

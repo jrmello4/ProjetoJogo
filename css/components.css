@@ -1169,6 +1169,81 @@
 [data-theme="light"] .tape-side--rival .tape-record { color: var(--blue); }
 .tape-vs { font-size: 1.25rem; font-weight: 800; color: var(--text-muted); }
 
+/* Histórico -> arquivo de carreira (pasta/dossiê com aba e selo) */
+.archive-doc {
+  position: relative;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.4rem 1rem 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.archive-tab {
+  position: absolute;
+  top: -0.7rem;
+  left: 0.9rem;
+  background: var(--gold);
+  color: #1a1205;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.7rem;
+  border-radius: 4px 4px 0 0;
+}
+
+.archive-stamp {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: 1.5px solid var(--text-muted);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  transform: rotate(-5deg);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.archive-entries { display: flex; flex-direction: column; }
+
+.archive-entry {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  padding: 0.4rem 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.archive-entry:last-child { border-bottom: none; }
+
+.archive-entry-date {
+  flex-shrink: 0;
+  width: 6.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+}
+
+.archive-entry-text { font-size: 0.8125rem; font-weight: 600; }
+
+/* Aposentadoria -> documento histórico (certificado de indução) */
+.cert-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 0.75rem;
+}
+
 /* ==========================================================================
    O que está em jogo — SITUAÇÃO -> RISCO -> RECOMPENSA -> CONSEQUÊNCIA
    O enquadramento da decisão central do core loop (Fase 1).

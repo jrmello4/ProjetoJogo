@@ -37,17 +37,14 @@ export class FighterProfileView {
       }
     };
     return `
-      <div class="card mb-4" data-reveal>
-        <div class="card-header">
-          <span class="card-title">🎞️ Arquivo da carreira</span>
-        </div>
-        <div class="timeline">
+      <div class="archive-doc mb-4" data-reveal>
+        <span class="archive-tab">📁 Arquivo da Carreira</span>
+        <span class="archive-stamp" aria-hidden="true">Registro</span>
+        <div class="archive-entries">
           ${moments.slice(0, 30).map(m => `
-            <div class="timeline-item">
-              <div class="timeline-date">${e(dateLabel(m.atAbsWeek))}</div>
-              <div class="timeline-content">
-                <span class="text-sm font-bold">${e(label(m))}</span>
-              </div>
+            <div class="archive-entry">
+              <span class="archive-entry-date">${e(dateLabel(m.atAbsWeek))}</span>
+              <span class="archive-entry-text">${e(label(m))}</span>
             </div>
           `).join('')}
         </div>

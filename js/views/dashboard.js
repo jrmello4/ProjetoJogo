@@ -203,6 +203,35 @@ export class DashboardView {
     `;
   }
 
+  // ===== F11: Cadeia de consequências narrativas =====
+  static _renderNarrativeChains(data) {
+    const chains = data.narrativeChains || [];
+    if (chains.length === 0) return '';
+    const chain = chains[0];
+    const cssClass = chain.won ? 'chain-card--win' : 'chain-card--loss';
+
+    return `
+      <div class="section-label" data-reveal>${chain.icon} ${chain.title}</div>
+      <div class="card mb-4 chain-card ${cssClass}" data-reveal>
+        <div class="chain-header">
+          <span class="chain-opponent">vs ${e(chain.opponentName)} · ${e(chain.method)} R${chain.round}</span>
+          <span class="chain-opponent">${chain.isTitleFight ? '🏆 Title Fight' : ''}</span>
+        </div>
+        <div class="chain-list">
+          ${chain.consequences.map(c => `
+            <div class="chain-item">
+              <span class="chain-item-icon">${c.icon}</span>
+              <div class="chain-item-text">
+                <div class="chain-item-title">${e(c.title)}</div>
+                <div class="chain-item-desc">${e(c.desc)}</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
   // ===== Lesão como ficha médica (Fase 8) =====
   // O sistema de documentos: a reabilitação não é um card genérico, é um
   // prontuário — diagnóstico, fase, carimbo de status e o plano de tratamento
@@ -673,6 +702,8 @@ export class DashboardView {
       ${this._renderPoster(data, weekLabel)}
       ${onboardingHtml}
       ${this._renderRecentFeed(data)}
+
+      ${this._renderNarrativeChains(data)}
 
       ${this._renderJourney(data)}
 

@@ -1,5 +1,5 @@
 const DB_NAME = 'MMAManagerDB';
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 
 export class DB {
   constructor() {
@@ -70,6 +70,13 @@ export class DB {
         if (!db.objectStoreNames.contains('notifications')) {
           const notifStore = db.createObjectStore('notifications', { keyPath: 'id' });
           notifStore.createIndex('read', 'read');
+        }
+
+        // v8 — cadeias narrativas pós-luta (Fase 11)
+        if (!db.objectStoreNames.contains('narrativeChains')) {
+          const chainStore = db.createObjectStore('narrativeChains', { keyPath: 'id' });
+          chainStore.createIndex('fighterId', 'fighterId');
+          chainStore.createIndex('absWeek', 'absWeek');
         }
       };
 

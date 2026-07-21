@@ -25,6 +25,7 @@ import { PodcastService } from '../services/podcast-service.js';
 import { YearReviewService } from '../services/year-review-service.js';
 import { CrowdService } from '../services/crowd-service.js';
 import { VisualIdentityService } from '../services/visual-identity-service.js';
+import { NarrativeChainService } from '../services/narrative-chain-service.js';
 import { SocialMedia } from './social-media.js';
 import { FightOffer } from '../models/fight-offer.js';
 import { generateId, clamp, pickTopRandom, sanitizePlayerName } from '../utils/helpers.js';
@@ -116,6 +117,7 @@ export class GameController {
     this.socialMediaService = new SocialMediaService(this.db, this.notifService);
     this.podcastService = new PodcastService(this.db, this.careerLogService, this.notifService);
     this.yearReviewService = new YearReviewService(this.db, this.careerLogService, this.notifService);
+    this.narrativeChainService = new NarrativeChainService(this.db);
     this._registerDomainReactions();
 
     // Sub-controllers extraídos do GameController (P8.2)
@@ -164,6 +166,17 @@ export class GameController {
         isTitleFight: !!booking.isTitleFight,
         resultId: result.id,
       });
+
+      // F11: gera cadeia de consequências narrativas
+      try {
+        const fighter = await this.getPlayerFighter();
+        if (fighter && this.narrativeChainService) {
+          const opponent = booking.opponentId ? await this.fighterCtrl.getFighter(booking.opponentId) : null;
+          await this.narrativeChainService.generateAfterFight(fighter, opponent, result, booking, absWeekNow, result.isDraw);
+        }
+      } catch (e) {
+        console.warn('F11 narrative chain failed:', e);
+      }
     });
   }
 
@@ -1830,6 +1843,9 @@ export class GameController {
       endCareerPrompt: state.endCareerPrompt || false,
       state,
       now,
+      narrativeChains: this.narrativeChainService
+        ? await this.narrativeChainService.getAllRecent(1)
+        : [],
       onboarding: fighter && OnboardingService.shouldShow(fighter)
         ? {
             activeStep: OnboardingService.activeStep(fighter),

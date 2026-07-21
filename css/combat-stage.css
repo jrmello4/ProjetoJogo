@@ -1,0 +1,444 @@
+/* ==========================================================================
+   Combat stage — RED CORNER / BLUE CORNER poster
+   --------------------------------------------------------------------------
+   Full-body pixel-art fighter sprites over a gym backdrop. Poses swap per
+   card played (see js/motion/combat-pose.js) — no stick-figure canvas, no
+   card-plate popups; the pose itself reads as the technique.
+   ========================================================================== */
+
+.combat-stage {
+  --cs-red: var(--red, #c8202f);
+  --cs-blue: var(--blue, #2f6bbf);
+  --cs-chalk: var(--chalk, #f3efe9);
+  --cs-ash: var(--ash, #8e857c);
+  position: relative;
+  min-height: 280px;
+  border-radius: 2px;
+  overflow: hidden;
+  border: 1px solid var(--border-light, rgba(243, 239, 233, 0.18));
+  border-top: 3px solid var(--cs-red);
+  background-color: #14110f;
+  background-image:
+    linear-gradient(180deg, rgba(10, 8, 7, 0.25) 0%, rgba(10, 8, 7, 0.45) 55%, rgba(10, 8, 7, 0.8) 100%),
+    url('../assets/combat/arena/gym.png');
+  background-size: cover;
+  background-position: center 35%;
+  background-repeat: no-repeat;
+  margin: 0 0 0.5rem;
+  user-select: none;
+}
+
+.combat-stage.cs-busy {
+  pointer-events: none;
+}
+
+.combat-stage.cs-shake {
+  animation: csShake 0.38s ease-out;
+}
+
+@keyframes csShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+
+/* ---- Atmosphere ---- */
+.cs-atmosphere {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.cs-vs-mark {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display, 'Archivo', sans-serif);
+  font-weight: 900;
+  font-size: clamp(2.5rem, 8vw, 4rem);
+  letter-spacing: 0.08em;
+  color: rgba(243, 239, 233, 0.05);
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.combat-stage[data-phase="ground"] .cs-vs-mark {
+  opacity: 0.35;
+}
+
+/* ---- Impact flash (heavy hits / takedowns only) ---- */
+.cs-impact-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 55%, rgba(255, 210, 120, 0.4) 0%, rgba(200, 32, 47, 0.15) 45%, transparent 70%);
+  opacity: 0;
+}
+.cs-impact-flash--on {
+  animation: csImpactFlash 0.3s ease-out;
+}
+@keyframes csImpactFlash {
+  0% { opacity: 0; }
+  25% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ---- Phase chip ---- */
+.cs-phase {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.28rem 0.75rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cs-chalk);
+  background: rgba(20, 17, 15, 0.82);
+  border: 1px solid var(--border-light, rgba(243, 239, 233, 0.14));
+  border-radius: 2px;
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+
+.cs-phase-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cs-red);
+  box-shadow: 0 0 8px rgba(200, 32, 47, 0.6);
+  animation: csLiveDot 1.4s ease-in-out infinite;
+}
+
+.combat-stage[data-phase="clinch"] .cs-phase-dot,
+.combat-stage[data-phase="ground"] .cs-phase-dot {
+  background: var(--belt, #c9a227);
+  box-shadow: 0 0 8px rgba(201, 162, 39, 0.5);
+}
+
+@keyframes csLiveDot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* ---- Ring layout ---- */
+.cs-ring {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr minmax(120px, 1.1fr) 1fr;
+  align-items: end;
+  gap: 0.5rem;
+  min-height: 280px;
+  padding: 2.4rem 0.85rem 1rem;
+}
+
+/* ---- Corners ---- */
+.cs-corner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  position: relative;
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.cs-corner--red { justify-self: start; }
+.cs-corner--blue { justify-self: end; }
+
+/* Phase spacing — how close the fighters feel */
+.combat-stage[data-phase="distance"] .cs-corner--red { transform: translateX(-6%); }
+.combat-stage[data-phase="distance"] .cs-corner--blue { transform: translateX(6%); }
+.combat-stage[data-phase="range"] .cs-corner--red { transform: translateX(4%); }
+.combat-stage[data-phase="range"] .cs-corner--blue { transform: translateX(-4%); }
+.combat-stage[data-phase="clinch"] .cs-corner--red { transform: translateX(12%); }
+.combat-stage[data-phase="clinch"] .cs-corner--blue { transform: translateX(-12%); }
+.combat-stage[data-phase="ground"] .cs-corner--red { transform: translate(8%, 8%); }
+.combat-stage[data-phase="ground"] .cs-corner--blue { transform: translate(-8%, 14%); }
+
+.cs-corner[data-role="top"] {
+  z-index: 3;
+  transform: translateY(-12px) !important;
+}
+.cs-corner[data-role="guard"] {
+  z-index: 2;
+  transform: translateY(16px) scale(0.94) !important;
+  opacity: 0.95;
+}
+
+.cs-corner-stripe {
+  position: absolute;
+  top: 0;
+  width: 3px;
+  height: 100%;
+  border-radius: 1px;
+  opacity: 0.9;
+}
+.cs-corner--red .cs-corner-stripe {
+  left: 0;
+  background: linear-gradient(180deg, var(--cs-red), transparent);
+}
+.cs-corner--blue .cs-corner-stripe {
+  right: 0;
+  left: auto;
+  background: linear-gradient(180deg, var(--cs-blue), transparent);
+}
+
+/* ---- Fighter sprite ---- */
+.cs-sprite-frame {
+  position: relative;
+  height: 170px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.cs-sprite-img {
+  display: block;
+  height: 100%;
+  width: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.5));
+  transition: filter 0.15s ease;
+}
+
+.cs-corner--attack .cs-sprite-img {
+  filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px rgba(243, 239, 233, 0.4));
+}
+.cs-corner--red.cs-corner--attack .cs-sprite-img {
+  filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 16px rgba(200, 32, 47, 0.6));
+}
+.cs-corner--blue.cs-corner--attack .cs-sprite-img {
+  filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 16px rgba(47, 107, 191, 0.6));
+}
+.cs-corner--hit .cs-sprite-img {
+  filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.5)) brightness(1.4) saturate(0.7);
+}
+.cs-corner--block .cs-sprite-img {
+  filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px rgba(120, 180, 255, 0.5));
+}
+.cs-corner--shoot .cs-sprite-img {
+  filter: drop-shadow(0 10px 10px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 14px rgba(243, 239, 233, 0.4));
+}
+
+.cs-corner--advance .cs-sprite-img {
+  animation: csAdvance 0.4s ease-out;
+}
+@keyframes csAdvance {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(8px); }
+}
+.cs-corner--blue.cs-corner--advance .cs-sprite-img {
+  animation-name: csAdvanceBlue;
+}
+@keyframes csAdvanceBlue {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-8px); }
+}
+
+.cs-corner-meta {
+  text-align: center;
+  max-width: 140px;
+}
+
+.cs-corner-tag {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.55rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cs-ash);
+  margin-bottom: 0.15rem;
+}
+
+.cs-corner--red .cs-corner-tag { color: var(--red-ink, #ef5f6b); }
+.cs-corner--blue .cs-corner-tag { color: var(--blue-bright, #4a8ae0); }
+
+.cs-corner-name {
+  font-family: var(--font-display, 'Archivo', sans-serif);
+  font-weight: 800;
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--cs-chalk);
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cs-role-badge {
+  display: inline-block;
+  margin-top: 0.3rem;
+  padding: 0.12rem 0.45rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  border-radius: 1px;
+  border: 1px solid rgba(201, 162, 39, 0.45);
+  color: var(--belt, #c9a227);
+  background: rgba(201, 162, 39, 0.1);
+}
+
+/* ---- Center: move caption ---- */
+.cs-center {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  align-self: center;
+  z-index: 4;
+}
+
+.cs-caption {
+  padding: 0.3rem 0.7rem;
+  background: rgba(20, 17, 15, 0.82);
+  border: 1px solid var(--border-light, rgba(243, 239, 233, 0.14));
+  border-radius: 2px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cs-chalk);
+  opacity: 0;
+  transform: translateY(6px);
+  white-space: nowrap;
+}
+.cs-caption[data-side="A"] { border-left: 3px solid var(--cs-red); }
+.cs-caption[data-side="B"] { border-left: 3px solid var(--cs-blue); }
+
+.cs-caption.cs-caption-in {
+  animation: csCaptionIn 0.2s ease-out forwards;
+}
+.cs-caption.cs-caption-out {
+  animation: csCaptionOut 0.16s ease-in forwards;
+}
+@keyframes csCaptionIn {
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes csCaptionOut {
+  to { opacity: 0; transform: translateY(-4px); }
+}
+
+/* ---- Damage floats ---- */
+.cs-floats {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.cs-float {
+  position: absolute;
+  top: 32%;
+  font-family: var(--font-display, 'Archivo', sans-serif);
+  font-weight: 900;
+  font-size: 1.25rem;
+  letter-spacing: 0.04em;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.55), 0 0 16px rgba(0, 0, 0, 0.35);
+  animation: csFloat 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  white-space: nowrap;
+}
+
+.cs-float--a { left: 14%; color: #ff8a8a; }
+.cs-float--b { right: 14%; left: auto; color: #8ab8ff; }
+.cs-float--block { color: #a8d0ff; font-size: 0.95rem; letter-spacing: 0.1em; }
+.cs-float--down { color: #e8c547; font-size: 0.95rem; letter-spacing: 0.1em; }
+.cs-float--sub { color: #e8c547; }
+
+@keyframes csFloat {
+  0% { opacity: 0; transform: translateY(10px) scale(0.85); }
+  18% { opacity: 1; transform: translateY(0) scale(1.08); }
+  100% { opacity: 0; transform: translateY(-40px) scale(1); }
+}
+
+/* ---- Stamina hit feedback (used by adapter) ---- */
+.stamina-fill.stamina-hit {
+  animation: staminaHitFlash 0.45s ease-out;
+  box-shadow: 0 0 10px rgba(255, 80, 60, 0.55);
+}
+.stamina-fill.stamina-hit-heavy {
+  animation: staminaHitHeavy 0.5s ease-out;
+  box-shadow: 0 0 14px rgba(255, 50, 40, 0.75);
+}
+@keyframes staminaHitFlash {
+  0% { filter: brightness(1.8); }
+  40% { filter: brightness(1.25); }
+  100% { filter: brightness(1); }
+}
+@keyframes staminaHitHeavy {
+  0% { filter: brightness(2); transform: scaleY(1.25); }
+  100% { filter: brightness(1); transform: scaleY(1); }
+}
+.combat-header-shake {
+  animation: csShake 0.32s ease-out;
+}
+
+.combat-container .turn-result:not(.hidden) {
+  background: rgba(200, 32, 47, 0.1);
+  border: 1px solid rgba(200, 32, 47, 0.28);
+  border-radius: 2px;
+  color: var(--chalk, #f3efe9);
+  font-size: 0.85rem;
+  padding: 0.55rem 0.75rem;
+}
+
+/* Light theme — keep stage dark (fight always under lights) */
+[data-theme="light"] .combat-stage {
+  border-color: rgba(0, 0, 0, 0.2);
+  color: #f3efe9;
+}
+[data-theme="light"] .cs-corner-name,
+[data-theme="light"] .cs-phase,
+[data-theme="light"] .cs-caption {
+  color: #f3efe9;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 640px) {
+  .cs-ring {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    min-height: 300px;
+    padding-top: 2.6rem;
+  }
+  .cs-center {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    min-height: 100px;
+    order: -1;
+  }
+  .cs-corner--red { grid-column: 1; grid-row: 2; }
+  .cs-corner--blue { grid-column: 2; grid-row: 2; }
+  .cs-sprite-frame {
+    height: 130px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-phase-dot,
+  .combat-stage.cs-shake,
+  .cs-impact-flash--on,
+  .cs-float,
+  .cs-caption.cs-caption-in,
+  .stamina-fill.stamina-hit,
+  .stamina-fill.stamina-hit-heavy {
+    animation-duration: 0.01ms !important;
+  }
+}

@@ -4,6 +4,7 @@ import { PodcastService } from '../services/podcast-service.js';
 import { YearReviewService } from '../services/year-review-service.js';
 import { CrowdService } from '../services/crowd-service.js';
 import { PortraitService } from '../services/portrait-service.js';
+import { careerLogEntryLabel } from '../services/career-log-labels.js';
 
 const tierBadgeCls = (tier) => (tier === 1 ? 'badge-danger' : tier === 2 ? 'badge-warning' : 'badge-info');
 
@@ -164,6 +165,35 @@ export class DashboardView {
     const parts = String(name).trim().split(/\s+/).map(p => escapeHtml(p));
     if (parts.length < 2) return parts[0] || '—';
     return `${parts[0]}<br>${parts.slice(1).join(' ')}`;
+  }
+
+  // ===== Últimos Acontecimentos (Fase 2) =====
+  // O feed vivo da carreira: o que aconteceu de importante, mais recente
+  // primeiro. Alimentado pelo career log (Fase 4) — a mesma fonte que
+  // biografia/documentário consomem. É o que responde "o que está
+  // acontecendo agora?" logo abaixo do pôster, antes de qualquer estatística.
+  static _renderRecentFeed(data) {
+    const items = data.recentHappenings || [];
+    if (items.length === 0) return '';
+    const ago = (atAbsWeek) => {
+      const w = Math.max(0, (data.now ?? 0) - (atAbsWeek ?? 0));
+      return w === 0 ? 'esta semana' : w === 1 ? 'há 1 semana' : `há ${w} semanas`;
+    };
+    return `
+      <div class="section-label" data-reveal>Últimos Acontecimentos</div>
+      <div class="card mb-4 recent-feed" data-reveal>
+        <ul class="feed-list" data-reveal-stagger>
+          ${items.map(entry => {
+            const { icon, text } = careerLogEntryLabel(entry);
+            return `<li class="feed-item">
+              <span class="feed-icon" aria-hidden="true">${icon}</span>
+              <span class="feed-text">${e(text)}</span>
+              <span class="feed-when">${e(ago(entry.atAbsWeek))}</span>
+            </li>`;
+          }).join('')}
+        </ul>
+      </div>
+    `;
   }
 
   static render(data, weekLabel) {
@@ -594,8 +624,17 @@ export class DashboardView {
     return `
       ${this._renderPoster(data, weekLabel)}
       ${onboardingHtml}
+      ${this._renderRecentFeed(data)}
 
-      <!-- Stats -->
+      ${offersHtml}
+      ${weighInHtml}
+      ${rehabHtml}
+      ${socialHtml}
+      ${rivalryHtml}
+      ${narrativeHtml}
+      ${endCareerHtml}
+
+      <!-- Stats — abaixo das decisões: "o que fazer agora" vem antes do placar (Fase 2) -->
       <div class="section-label" data-reveal>Visão Geral</div>
       <div class="bento-grid mb-4" data-reveal-stagger>
         <div class="stat-card stat-card--span-3" title="Dinheiro disponível agora — bolsas entram aqui, camp e vida pessoal saem daqui">
@@ -623,14 +662,6 @@ export class DashboardView {
           <div class="stat-label">Total em bolsas</div>
         </div>
       </div>
-
-      ${offersHtml}
-      ${weighInHtml}
-      ${rehabHtml}
-      ${socialHtml}
-      ${rivalryHtml}
-      ${narrativeHtml}
-      ${endCareerHtml}
       ${crowdSnapshot ? CrowdService.renderReactionCard(crowdSnapshot.reaction, crowdSnapshot.fanMail) : ''}
       ${mediaCompare ? `
       <div class="card mb-4" data-reveal style="border-top-color:var(--danger)">

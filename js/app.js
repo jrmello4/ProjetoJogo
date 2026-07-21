@@ -762,6 +762,12 @@ class App {
       ? await this.game.fighterCtrl.getFighter(bestOffer.opponentId).catch(() => null)
       : null;
 
+    // Fase 2 — feed "Últimos Acontecimentos": os capítulos recentes da
+    // carreira (career log, mais novo primeiro) logo abaixo do pôster.
+    data.recentHappenings = data.fighter
+      ? await this.game.careerLogService.timelineForFighter(data.fighter.id, { limit: 6, newestFirst: true })
+      : [];
+
     const weekLabel = absWeekToLabel(data.now);
     const html = DashboardView.render(data, weekLabel);
     await LayoutView.render(html);

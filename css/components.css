@@ -2065,3 +2065,193 @@ kbd {
   .tutorial-coach-hole,
   .tutorial-coach-callout { transition: none; }
 }
+
+/* ==========================================================================
+   Fase 9 — UI em Camadas: Drawer lateral, decision overlays, collapsible
+   ========================================================================== */
+
+/* --- Drawer lateral (desliza da direita) --- */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+.drawer-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(480px, 100vw);
+  height: 100vh;
+  height: 100dvh;
+  z-index: 41;
+  background: var(--canvas);
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 24px rgba(0,0,0,0.2);
+  transform: translateX(100%);
+  transition: transform 0.3s var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.drawer.is-open {
+  transform: translateX(0);
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.drawer-header h3 {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 92, 'wght' 700;
+  font-size: 1.1rem;
+  margin: 0;
+}
+.drawer-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+  line-height: 1;
+  border-radius: 4px;
+}
+.drawer-close:hover {
+  color: var(--text);
+  background: var(--mat);
+}
+
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem;
+}
+
+/* --- Decision overlay (substitui cards inline de decisão) --- */
+.decision-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+.decision-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.decision-card {
+  background: var(--mat);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--gold);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: var(--shadow-lg, 0 8px 32px rgba(0,0,0,0.3));
+  width: min(520px, calc(100vw - 2rem));
+  max-height: 80vh;
+  overflow-y: auto;
+  animation: decisionSlideIn 0.22s var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+.decision-card.is-closing {
+  animation: decisionSlideOut 0.15s var(--ease-out-expo) both;
+}
+
+.decision-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 92, 'wght' 700;
+  font-size: 1rem;
+}
+
+.decision-card-body {
+  padding: 1.25rem;
+}
+.decision-card-body p {
+  margin: 0 0 1rem 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.decision-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.decision-card-actions .btn {
+  text-align: left;
+  justify-content: flex-start;
+}
+
+@keyframes decisionSlideIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes decisionSlideOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(16px) scale(0.97); }
+}
+
+/* --- Collapsible sections --- */
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  padding: 0.5rem 0;
+}
+.collapsible-header:hover {
+  opacity: 0.8;
+}
+.collapsible-toggle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+.collapsible-header.is-open .collapsible-toggle {
+  transform: rotate(180deg);
+}
+.collapsible-body {
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.25s ease;
+  max-height: 0;
+  opacity: 0;
+}
+.collapsible-body.is-open {
+  max-height: 6000px;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer,
+  .drawer-backdrop,
+  .decision-card,
+  .collapsible-body,
+  .collapsible-toggle { transition: none; }
+  .decision-card { animation: none; }
+  .decision-card.is-closing { animation: none; }
+}

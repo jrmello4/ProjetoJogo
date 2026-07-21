@@ -749,6 +749,9 @@ class App {
   }
 
   async renderDashboard() {
+    // F9: fecha overlay de decisão pendente antes de re-renderizar
+    LayoutView.closeDecisionOverlay(document.querySelector('.decision-overlay'));
+
     const data = await this.game.getDashboard();
     const monetization = await this.monetizationService.getState();
     data.eliteFrame = monetization.equipped.posterFrame === 'cos-elite-frame';
@@ -889,6 +892,21 @@ class App {
     if (data.weeklyTrainingPrompt?.active) {
       this._showWeeklyTrainingModal(data.fighter);
     }
+
+    // Fase 9: overlay de decisão prioritária após dashboard renderizar
+    const pendingDecision = DashboardView.getDecisionOverlayHtml(data);
+    if (pendingDecision) {
+      const overlay = LayoutView.showDecisionOverlay(pendingDecision.html);
+      // Fecha overlay quando qualquer botão de decisão for clicado
+      overlay.querySelectorAll('.btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          LayoutView.closeDecisionOverlay(overlay);
+        }, { once: true });
+      });
+    }
+
+    // Fase 9: collapsible sections
+    DashboardView.initCollapsible();
 
     this._bindFighterClicks();
     this._bindEventClicks();

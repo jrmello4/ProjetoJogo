@@ -651,8 +651,14 @@ export class DashboardView {
       ${narrativeHtml}
       ${endCareerHtml}
 
-      <!-- Stats — abaixo das decisões: "o que fazer agora" vem antes do placar (Fase 2) -->
-      <div class="section-label" data-reveal>Visão Geral</div>
+      <!-- Stats + seções secundárias collapsible (Fase 9) -->
+      <div class="section-label" data-reveal>
+        <div class="collapsible-header is-open" data-collapsible="overview">
+          Visão Geral
+          <span class="collapsible-toggle" aria-hidden="true">▼</span>
+        </div>
+      </div>
+      <div class="collapsible-body is-open" data-collapsible-body="overview">
       <div class="bento-grid mb-4" data-reveal-stagger>
         <div class="stat-card stat-card--span-3" title="Dinheiro disponível agora — bolsas entram aqui, camp e vida pessoal saem daqui">
           <div class="card-header"><span class="card-title">💵 Caixa</span></div>
@@ -678,6 +684,7 @@ export class DashboardView {
           <div class="stat-value stat-value--money" style="font-size:1.4rem">${formatCurrency(fighter.careerEarnings || 0)}</div>
           <div class="stat-label">Total em bolsas</div>
         </div>
+      </div>
       </div>
       ${crowdSnapshot ? CrowdService.renderReactionCard(crowdSnapshot.reaction, crowdSnapshot.fanMail) : ''}
       ${mediaCompare ? `
@@ -726,6 +733,131 @@ export class DashboardView {
       ${worldHtml}
       ${milestonesHtml}
       ${resultsHtml}
+      </div> <!-- end collapsible-body overview -->
     `;
+  }
+
+  // ===== Decision overlays (Fase 9) =====
+  // Retorna HTML para o primeiro overlay de decisão pendente, ou null.
+  // app.js chama após renderDashboard() para mostrar overlays prioritários.
+  static getDecisionOverlayHtml(data) {
+    const { socialPrompt, rivalryPrompt, narrativePrompt, weighInPrompt, endCareerPrompt } = data;
+
+    if (endCareerPrompt) {
+      return {
+        priority: 5,
+        type: 'end-career',
+        title: '🕊️ Último Capítulo',
+        html: `
+          <div class="decision-card-header">🕊️ Sua Carreira Está Chegando ao Fim</div>
+          <div class="decision-card-body">
+            <p>Aos ${data.fighter?.age || '?'} anos, você precisa decidir como quer encerrar sua jornada no MMA. Esta escolha é definitiva.</p>
+            <div class="decision-card-actions">
+              ${Object.entries(END_CAREER_CHOICES).map(([key, choice]) => `
+                <button class="btn btn-secondary end-career-choice" data-end-career="${key}" style="text-align:left;padding:0.75rem 1rem;height:auto;flex-direction:column;align-items:flex-start;gap:0.25rem">
+                  <div class="font-bold">${choice.icon} ${e(choice.label)}</div>
+                  <div class="text-xs text-muted">${e(choice.description)}</div>
+                </button>
+              `).join('')}
+            </div>
+          </div>`
+      };
+    }
+
+    if (weighInPrompt) {
+      return {
+        priority: 4,
+        type: 'weigh-in',
+        title: '⚖️ Semana da Pesagem',
+        html: `
+          <div class="decision-card-header">⚖️ Semana da Pesagem</div>
+          <div class="decision-card-body">
+            <p>Você enfrenta ${e(weighInPrompt.opponentName)} em breve. Defina como vai administrar o corte de peso.</p>
+            <div class="decision-card-actions">
+              ${weighInPrompt.strategies.map(s => `
+                <button class="btn btn-secondary" data-weigh-in-choice="${s.key}" style="text-align:left">
+                  <strong>${e(s.label)}</strong>
+                  <span class="text-xs text-muted ml-2">${e(s.description)}</span>
+                </button>
+              `).join('')}
+            </div>
+          </div>`
+      };
+    }
+
+    if (narrativePrompt) {
+      return {
+        priority: 3,
+        type: 'narrative',
+        title: '📰 Momento da Carreira',
+        html: `
+          <div class="decision-card-header">📰 Momento da Carreira</div>
+          <div class="decision-card-body">
+            <p>${e(narrativePrompt.prompt)}</p>
+            <div class="decision-card-actions">
+              ${narrativePrompt.choices.map(c => `
+                <button class="btn btn-secondary narrative-choice" data-narrative-choice="${c.key}" style="text-align:left">
+                  ${e(c.text)}
+                </button>
+              `).join('')}
+            </div>
+          </div>`
+      };
+    }
+
+    if (socialPrompt) {
+      return {
+        priority: 2,
+        type: 'social',
+        title: '📱 Momento nas Redes',
+        html: `
+          <div class="decision-card-header">📱 Momento nas Redes</div>
+          <div class="decision-card-body">
+            <p>Você tem a atenção da mídia social esta semana — como vai se posicionar?</p>
+            <div class="decision-card-actions">
+              ${socialPrompt.choices.map(c => `
+                <button class="btn btn-secondary" data-social-choice="${c.key}" style="text-align:left">
+                  ${e(c.text)}
+                  <span class="text-xs text-muted ml-2">(${e(c.hint)})</span>
+                </button>
+              `).join('')}
+            </div>
+          </div>`
+      };
+    }
+
+    if (rivalryPrompt) {
+      return {
+        priority: 1,
+        type: 'rivalry',
+        title: '⚔️ Rivalidade',
+        html: `
+          <div class="decision-card-header">⚔️ Rivalidade</div>
+          <div class="decision-card-body">
+            <p>${rivalryPrompt.rivalName} está provocando você. Como reagir?</p>
+            <div class="decision-card-actions">
+              ${rivalryPrompt.choices.map(c => `
+                <button class="btn btn-secondary rivalry-choice" data-choice="${c.key}" style="text-align:left">${e(c.text)}</button>
+              `).join('')}
+            </div>
+          </div>`
+      };
+    }
+
+    return null;
+  }
+
+  // ===== Collapsible init (Fase 9) =====
+  static initCollapsible() {
+    document.querySelectorAll('[data-collapsible]').forEach(header => {
+      const key = header.dataset.collapsible;
+      const body = document.querySelector(`[data-collapsible-body="${key}"]`);
+      if (!body) return;
+
+      header.addEventListener('click', () => {
+        header.classList.toggle('is-open');
+        body.classList.toggle('is-open');
+      });
+    });
   }
 }

@@ -171,6 +171,7 @@ export class LayoutView {
     this._initScrollProgress();
     this._initKeyboardShortcuts();
     this._initModalA11y();
+    this.initDrawerControls();
 
     document.getElementById('shortcutsHintBtn')?.addEventListener('click', () => this._showShortcutsHelp());
   }
@@ -328,5 +329,81 @@ export class LayoutView {
     };
     modal.addEventListener('animationend', (e) => { if (e.target === modal) finish(); });
     setTimeout(finish, 200);
+  }
+
+  // ===== Drawer lateral (Fase 9) =====
+  static renderDrawer(title, contentHtml) {
+    const titleEl = document.getElementById('drawerTitle');
+    const body = document.getElementById('drawerBody');
+    if (titleEl) titleEl.textContent = title;
+    if (body) body.innerHTML = contentHtml;
+    document.getElementById('drawer')?.classList.add('is-open');
+    document.getElementById('drawerBackdrop')?.classList.add('is-open');
+    document.body.classList.add('drawer-open');
+
+    const firstFocusable = body?.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    requestAnimationFrame(() => firstFocusable?.focus({ preventScroll: true }));
+  }
+
+  static closeDrawer() {
+    document.getElementById('drawer')?.classList.remove('is-open');
+    document.getElementById('drawerBackdrop')?.classList.remove('is-open');
+    document.body.classList.remove('drawer-open');
+  }
+
+  static initDrawerControls() {
+    document.getElementById('drawerCloseBtn')?.addEventListener('click', () => this.closeDrawer());
+    document.getElementById('drawerBackdrop')?.addEventListener('click', () => this.closeDrawer());
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.getElementById('drawer')?.classList.contains('is-open')) {
+        if (document.querySelector('.modal-overlay')) return;
+        this.closeDrawer();
+      }
+    });
+  }
+
+  // ===== Decision overlay (Fase 9) =====
+  static showDecisionOverlay(html) {
+    const existing = document.querySelector('.decision-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'decision-overlay';
+    overlay.innerHTML = `<div class="decision-card">${html}</div>`;
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(() => {
+      overlay.classList.add('is-open');
+      const firstBtn = overlay.querySelector('.btn, button');
+      requestAnimationFrame(() => firstBtn?.focus({ preventScroll: true }));
+    });
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) this.closeDecisionOverlay(overlay);
+    });
+
+    const trapHandler = (e) => {
+      if (e.key !== 'Tab') return;
+      const focusables = [...overlay.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(el => el.offsetParent !== null);
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    overlay.addEventListener('keydown', trapHandler);
+
+    return overlay;
+  }
+
+  static closeDecisionOverlay(overlay) {
+    if (!overlay || overlay.dataset.closing === '1') return;
+    overlay.dataset.closing = '1';
+    const card = overlay.querySelector('.decision-card');
+    if (card) card.classList.add('is-closing');
+    setTimeout(() => {
+      if (overlay.isConnected) overlay.remove();
+    }, 180);
   }
 }

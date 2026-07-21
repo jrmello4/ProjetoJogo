@@ -181,7 +181,16 @@ export class DashboardView {
   // acontecendo agora?" logo abaixo do pôster, antes de qualquer estatística.
   static _renderRecentFeed(data) {
     const items = data.recentHappenings || [];
-    if (items.length === 0) return '';
+    if (items.length === 0) {
+      return `
+        <div class="section-label" data-reveal>Últimos Acontecimentos</div>
+        <div class="card mb-4" data-reveal>
+          <div class="empty-state">
+            <span class="empty-state-icon">📋</span>
+            <span class="empty-state-text">Nada de novo esta semana. A carreira segue.</span>
+          </div>
+        </div>`;
+    }
     const ago = (atAbsWeek) => {
       const w = Math.max(0, (data.now ?? 0) - (atAbsWeek ?? 0));
       return w === 0 ? 'esta semana' : w === 1 ? 'há 1 semana' : `há ${w} semanas`;

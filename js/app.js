@@ -2557,6 +2557,7 @@ class App {
       a.download = `mma-manager-backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(a.href);
+      LayoutView.showToast('Backup exportado!');
       this.notificationService.add('success', 'Backup Exportado', 'Arquivo JSON baixado com o mundo inteiro.');
     });
 
@@ -2568,6 +2569,7 @@ class App {
       try {
         const text = await file.text();
         await this.saveService.importSave(text);
+        LayoutView.showToast('Backup importado, recarregando...');
         this.notificationService.add('success', 'Backup Importado', 'Recarregando o mundo...');
         setTimeout(() => location.reload(), 800);
       } catch (err) {

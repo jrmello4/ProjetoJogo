@@ -406,4 +406,20 @@ export class LayoutView {
       if (overlay.isConnected) overlay.remove();
     }, 180);
   }
+
+  /** F17: toast de notificação temporário */
+  static showToast(msg, type = 'success') {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+    const el = document.createElement('div');
+    el.className = `toast toast--${type}`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => {
+      el.style.opacity = '0';
+      el.style.transition = 'opacity 0.2s';
+      setTimeout(() => el.remove(), 250);
+    }, 3000);
+  }
+
 }

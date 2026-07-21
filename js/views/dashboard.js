@@ -681,30 +681,28 @@ export class DashboardView {
       </div>
       ${crowdSnapshot ? CrowdService.renderReactionCard(crowdSnapshot.reaction, crowdSnapshot.fanMail) : ''}
       ${mediaCompare ? `
-      <div class="card mb-4" data-reveal style="border-top-color:var(--danger)">
-        <div class="card-header">
-          <span class="card-title">📡 Na mídia</span>
-          <span class="badge badge-warning">Rivalidade ${mediaCompare.intensity}/10</span>
+      <!-- Notícia -> página de mídia esportiva (Fase 8, reusa a estética de recorte) -->
+      <article class="news-clip mb-4" data-reveal>
+        <div class="news-masthead">
+          <span class="news-outlet">Boletim da Mídia</span>
+          <span class="news-edition">📡 Rivalidade ${mediaCompare.intensity}/10</span>
         </div>
-        <p class="text-sm font-bold mb-3">${escapeHtml(mediaCompare.headline)}</p>
-        <div class="grid grid-cols-3 gap-3 text-center">
-          <div>
-            <div class="text-xs text-muted">Você</div>
-            <div class="font-bold">${escapeHtml(mediaCompare.yourRecord)}</div>
-            <div class="text-xs text-muted">OVR ${mediaCompare.yourOvr} · pop ${mediaCompare.yourPop}</div>
+        <h3 class="news-headline">${escapeHtml(mediaCompare.headline)}</h3>
+        <div class="news-byline">Tale of the tape · confronto direto ${escapeHtml(mediaCompare.h2h)}</div>
+        <div class="tape-compare">
+          <div class="tape-side">
+            <div class="tape-name">Você</div>
+            <div class="tape-record">${escapeHtml(mediaCompare.yourRecord)}</div>
+            <div class="tape-meta">OVR ${mediaCompare.yourOvr} · pop ${mediaCompare.yourPop}</div>
           </div>
-          <div>
-            <div class="text-xs text-muted">Confronto direto</div>
-            <div class="font-bold text-lg">${escapeHtml(mediaCompare.h2h)}</div>
-            <div class="text-xs text-muted">vs ${escapeHtml(mediaCompare.rivalName)}</div>
-          </div>
-          <div>
-            <div class="text-xs text-muted">${escapeHtml(mediaCompare.rivalName)}</div>
-            <div class="font-bold">${escapeHtml(mediaCompare.rivalRecord)}</div>
-            <div class="text-xs text-muted">OVR ${mediaCompare.rivalOvr} · pop ${mediaCompare.rivalPop}</div>
+          <div class="tape-vs" aria-hidden="true">×</div>
+          <div class="tape-side tape-side--rival">
+            <div class="tape-name">${escapeHtml(mediaCompare.rivalName)}</div>
+            <div class="tape-record">${escapeHtml(mediaCompare.rivalRecord)}</div>
+            <div class="tape-meta">OVR ${mediaCompare.rivalOvr} · pop ${mediaCompare.rivalPop}</div>
           </div>
         </div>
-      </div>` : ''}
+      </article>` : ''}
       ${PodcastService.renderCard(podcastEpisode)}
       ${YearReviewService.renderCard(yearReview)}
       ${sponsorsHtml}

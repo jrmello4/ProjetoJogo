@@ -152,9 +152,11 @@ export class TrainingCampView {
     const suspended = (fighter.availableFromAbsWeek || 0) > now;
 
     return `
-      <div class="page-header">
-        <h2>Acampamento de Treinamento</h2>
-        <p>Configure sua preparação semanal para a próxima luta</p>
+      <div class="tactical-board" data-reveal>
+        <span class="tactical-board-tape" aria-hidden="true"></span>
+        <div class="tactical-board-kicker">Prancheta do técnico</div>
+        <h2 class="tactical-board-title">📋 Plano de Camp</h2>
+        <p class="tactical-board-sub">Configure a preparação da semana — é aqui que a luta se ganha antes do primeiro soco.</p>
       </div>
 
       <div class="card camp-card" data-fighter-id="${fighter.id}" style="${!hasFight ? 'opacity:0.6' : ''}">

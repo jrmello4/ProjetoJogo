@@ -946,6 +946,160 @@
 
 .med-treatment-opt { text-align: left; }
 
+/* Contrato -> documento jurídico */
+.legal-doc {
+  position: relative;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--gold);
+  border-radius: var(--radius);
+  padding: 0.875rem 1rem;
+}
+
+.legal-doc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.legal-doc-title {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.legal-doc-seal { font-size: 1.4rem; color: var(--gold); opacity: 0.7; }
+
+.legal-doc-parties {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+  margin-bottom: 0.6rem;
+}
+
+.legal-label {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-right: 0.35rem;
+}
+
+.legal-clauses {
+  margin: 0 0 0.75rem;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.legal-clauses li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+  border-bottom: 1px dotted var(--border);
+  padding-bottom: 0.25rem;
+}
+
+.legal-clause-k { color: var(--text-muted); }
+.legal-clause-v { font-weight: 600; text-align: right; }
+
+.legal-doc-sign {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+}
+
+.legal-sign-line {
+  font-family: var(--font-hand, cursive);
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--text-muted);
+  padding: 0 2.5rem 0.1rem 0;
+}
+
+/* Rivalidade -> recorte de jornal */
+.news-clip {
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.875rem 1rem;
+}
+
+.news-masthead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  border-bottom: 3px double var(--text-muted);
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.news-outlet {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.news-edition {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.news-headline {
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.2;
+  margin: 0 0 0.25rem;
+  letter-spacing: -0.01em;
+}
+
+.news-byline {
+  font-size: 0.6875rem;
+  font-style: italic;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.news-para {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  margin: 0 0 0.4rem;
+  text-align: justify;
+}
+
+.news-para--muted { color: var(--text-muted); font-style: italic; }
+
+.news-meter {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 0.25rem;
+}
+
+.news-meter-fill { height: 100%; background: var(--danger); }
+
 /* ==========================================================================
    O que está em jogo — SITUAÇÃO -> RISCO -> RECOMPENSA -> CONSEQUÊNCIA
    O enquadramento da decisão central do core loop (Fase 1).

@@ -15,6 +15,34 @@ function rivalryTypeInfo(type) {
 }
 
 export class RivalriesView {
+  // Fase 8 — rivalidade como recorte de jornal esportivo: cabeçalho de
+  // veículo, manchete que escala com a intensidade, coluna de bastidores
+  // (o arco) e um medidor de calor. Não é um card de stats — é imprensa.
+  static _renderNewsClip(r, nameA, nameB) {
+    const typeInfo = rivalryTypeInfo(r.type);
+    const headline = r.intensity >= 7
+      ? `${nameA} × ${nameB}: guerra declarada`
+      : r.intensity >= 4
+        ? `${nameA} provoca ${nameB} e o clima esquenta`
+        : `Nasce a rivalidade: ${nameA} × ${nameB}`;
+    const arc = (r.history || []).slice(-4).reverse();
+    const body = arc.length
+      ? arc.map(h => `<p class="news-para">${e(h.description || h.type || '')}</p>`).join('')
+      : '<p class="news-para news-para--muted">Os bastidores ainda estão quietos. Uma luta pode mudar isso.</p>';
+    return `
+      <article class="news-clip" data-reveal>
+        <div class="news-masthead">
+          <span class="news-outlet">O Globo do Octógono</span>
+          <span class="news-edition">${typeInfo.icon} ${e(typeInfo.label)} · calor ${r.intensity}/10</span>
+        </div>
+        <h3 class="news-headline">${e(headline)}</h3>
+        <div class="news-byline">Coluna de bastidores · ${(r.history || []).length} capítulo${(r.history || []).length === 1 ? '' : 's'}</div>
+        <div class="news-body">${body}</div>
+        <div class="news-meter" aria-hidden="true"><div class="news-meter-fill" style="width:${r.intensity * 10}%"></div></div>
+      </article>
+    `;
+  }
+
   static render(rivalries, fighters) {
     if (rivalries.length === 0) {
       return `
@@ -40,41 +68,7 @@ export class RivalriesView {
       </div>
 
       <div class="grid grid-cols-2 gap-4">
-        ${rivalries.map(r => {
-          const typeInfo = rivalryTypeInfo(r.type);
-          return `
-          <div class="card">
-            <div class="flex items-center justify-between mb-3">
-              <span class="badge ${r.intensity >= 7 ? 'badge-danger' : r.intensity >= 4 ? 'badge-warning' : 'badge-info'}">
-                ${e(r.intensityLabel)} (${r.intensity}/10)
-              </span>
-              <span class="text-xs text-muted" title="Origem da rivalidade">${typeInfo.icon} ${e(typeInfo.label)}</span>
-            </div>
-            <div class="flex items-center justify-between">
-              <div class="text-center">
-                <div class="font-bold">${e(getFighterName(r.fighterAId))}</div>
-              </div>
-              <div class="text-danger font-bold">⚔️</div>
-              <div class="text-center">
-                <div class="font-bold">${e(getFighterName(r.fighterBId))}</div>
-              </div>
-            </div>
-            <div class="progress-bar mt-2" style="height:8px">
-              <div class="progress-fill ${r.intensity >= 7 ? 'low' : r.intensity >= 4 ? 'medium' : 'high'}" style="width:${r.intensity * 10}%"></div>
-            </div>
-            <div class="text-xs text-muted mt-2">
-              ${r.history.length} eventos · ${r.history.length > 0 ? e(r.history[r.history.length - 1].description) : ''}
-            </div>
-            ${r.history?.length ? `
-            <div class="mt-2" style="border-top:1px solid var(--border);padding-top:0.5rem;max-height:7rem;overflow:auto">
-              <div class="text-xs text-muted mb-1">📖 Arco</div>
-              ${r.history.slice(-4).reverse().map(h => `
-                <div class="text-xs" style="line-height:1.35;margin-bottom:0.25rem">• ${e(h.description || h.type || '')}</div>
-              `).join('')}
-            </div>` : ''}
-          </div>
-        `;
-        }).join('')}
+        ${rivalries.map(r => this._renderNewsClip(r, getFighterName(r.fighterAId), getFighterName(r.fighterBId))).join('')}
       </div>
     `;
   }

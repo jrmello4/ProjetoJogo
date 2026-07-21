@@ -287,6 +287,39 @@ export class OffersView {
     `;
   }
 
+  // Fase 8 — contrato como documento jurídico. Não é um card de stats: são
+  // partes, cláusulas numeradas e uma linha de assinatura. Os botões mantêm
+  // contract-accept/decline (wiring de app.js intacto).
+  static _renderContractDoc(cp) {
+    const tierLabel = TIER_LABELS[cp.tier] || '';
+    const tierCls = cp.tier === 1 ? 'badge-danger' : cp.tier === 2 ? 'badge-warning' : 'badge-info';
+    return `
+      <div class="legal-doc mb-2" data-reveal>
+        <div class="legal-doc-head">
+          <span class="legal-doc-title">Contrato de Exclusividade</span>
+          <span class="legal-doc-seal" aria-hidden="true">§</span>
+        </div>
+        <div class="legal-doc-parties">
+          <div><span class="legal-label">Promoção</span> <strong>${e(cp.promotionName)}</strong> <span class="badge ${tierCls}">${tierLabel}</span></div>
+          <div><span class="legal-label">Vínculo</span> ${cp.fightsTotal} lutas em regime de exclusividade</div>
+        </div>
+        <ol class="legal-clauses">
+          <li><span class="legal-clause-k">Bolsa por luta</span><span class="legal-clause-v">${formatCurrency(cp.basePurse)}</span></li>
+          <li><span class="legal-clause-k">Bônus de vitória</span><span class="legal-clause-v">${formatCurrency(cp.winBonus)}</span></li>
+          <li><span class="legal-clause-k">Cláusula de título</span><span class="legal-clause-v">${cp.titleClause ? 'Inclusa' : 'Ausente'}</span></li>
+          <li><span class="legal-clause-k">Exclusividade</span><span class="legal-clause-v">outras promoções silenciam enquanto vigente</span></li>
+        </ol>
+        <div class="legal-doc-sign">
+          <span class="legal-sign-line">Assinatura do atleta</span>
+          <div class="flex gap-2">
+            <button class="btn btn-sm btn-success contract-accept" data-fighter="${cp.fighterId}" data-promo="${cp.promotionId}" data-promo-name="${e(cp.promotionName)}">✒️ Assinar</button>
+            <button class="btn btn-sm btn-secondary contract-decline" data-fighter="${cp.fighterId}">Recusar</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   static render(pending, accepted, history, fighter, now, dossiers = {}, contractProposals = [], teammates = {}, rivalries = {}, readiness = {}, opponents = {}, stakes = {}) {
     const fighterOf = () => fighter;
     // Retrato do oponente — SEMPRE do lutador completo (opponents map);
@@ -507,35 +540,7 @@ export class OffersView {
     const contractHtml = contractProposals.length === 0 ? '' : `
       <div class="section-label mt-4">Propostas de Contrato Exclusivo</div>
       <p class="text-xs text-muted mb-2">Aceitar um contrato vincula o atleta a uma promoção — ofertas de outras promoções deixam de aparecer.</p>
-      ${contractProposals.map(cp => `
-        <div class="card mb-2 offer-card--contract" data-reveal>
-          <div class="flex items-center justify-between mb-2">
-            <div class="flex items-center gap-2">
-              ${tierBadge(cp.tier)}
-              <span class="font-bold">${e(cp.promotionName)}</span>
-            </div>
-            <span class="badge badge-info">${cp.fightsTotal} lutas</span>
-          </div>
-          <div class="flex items-center gap-3 mb-2" style="flex-wrap:wrap">
-            <div>
-              <div class="text-xs text-muted">Bolsa por luta</div>
-              <div class="text-sm font-bold" style="color:var(--success)">${formatCurrency(cp.basePurse)}</div>
-            </div>
-            <div>
-              <div class="text-xs text-muted">Bônus de vitória</div>
-              <div class="text-sm font-bold">${formatCurrency(cp.winBonus)}</div>
-            </div>
-            <div>
-              <div class="text-xs text-muted">Cláusula de título</div>
-              <div class="text-sm font-bold">${cp.titleClause ? 'Sim' : 'Não'}</div>
-            </div>
-          </div>
-          <div class="flex gap-2">
-            <button class="btn btn-sm btn-success contract-accept" data-fighter="${cp.fighterId}" data-promo="${cp.promotionId}" data-promo-name="${e(cp.promotionName)}">Aceitar Contrato</button>
-            <button class="btn btn-sm btn-secondary contract-decline" data-fighter="${cp.fighterId}">Recusar</button>
-          </div>
-        </div>
-      `).join('')}
+      ${contractProposals.map(cp => this._renderContractDoc(cp)).join('')}
     `;
 
     return `

@@ -28,6 +28,25 @@ describe('CareerLogService.fillEventTemplate', () => {
   });
 });
 
+describe('CareerLogService.timelineForFighter', () => {
+  it('mantém a cronologia e não mistura eventos de outra carreira', async () => {
+    let doc = null;
+    const service = new CareerLogService({
+      get: async () => doc,
+      put: async (_store, next) => { doc = structuredClone(next); },
+    });
+
+    await service.publish('fighter-1', 'fight_completed', 8, 40, { opponentName: 'Bia' });
+    await service.publish('fighter-2', 'title_won', 3, 90, {});
+    await service.publish('fighter-1', 'rivalry_born', 3, 35, { opponentName: 'Lia' });
+
+    const timeline = await service.timelineForFighter('fighter-1');
+    expect(timeline.map(entry => entry.atAbsWeek)).toEqual([3, 8]);
+    expect(timeline.every(entry => entry.fighterId === 'fighter-1')).toBe(true);
+    expect(timeline.every(entry => entry.id)).toBe(true);
+  });
+});
+
 describe('CareerLogService.selectNarrativeEvent', () => {
   const svc = new CareerLogService({ get: async () => null, put: async () => {} });
 

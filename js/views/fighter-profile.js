@@ -7,8 +7,15 @@ import { VisualIdentityService } from '../services/visual-identity-service.js';
 
 export class FighterProfileView {
   // Linha do tempo de momentos — texto cru no label; e() só na saída.
-  static _renderMomentsTimeline(moments) {
+  static _renderMomentsTimeline(moments, careerStartedAt = null) {
     if (!moments?.length) return '';
+    const dateLabel = (atAbsWeek) => {
+      if (!careerStartedAt || atAbsWeek == null) return `sem ${atAbsWeek ?? '—'}`;
+      const start = new Date(careerStartedAt);
+      if (Number.isNaN(start.getTime())) return `sem ${atAbsWeek}`;
+      start.setUTCDate(start.getUTCDate() + Math.max(0, atAbsWeek - 1) * 7);
+      return start.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    };
     const label = (m) => {
       const d = m.data || {};
       switch (m.type) {
@@ -22,18 +29,22 @@ export class FighterProfileView {
         case 'viral': return 'Post viral';
         case 'year_review': return `Retrospectiva ano ${d.yearNumber || ''}`;
         case 'dna_discovered': return d.traitLabel || 'Traço revelado';
+        case 'fight_completed': {
+          const outcome = d.won === true ? 'Vitória' : d.won === false ? 'Derrota' : 'Empate';
+          return `${outcome}${d.opponentName ? ` · ${d.opponentName}` : ''}${d.method ? ` · ${d.method}` : ''}`;
+        }
         default: return String(m.type || 'Momento').replace(/_/g, ' ');
       }
     };
     return `
       <div class="card mb-4" data-reveal>
         <div class="card-header">
-          <span class="card-title">🎞️ Momentos marcantes</span>
+          <span class="card-title">🎞️ Arquivo da carreira</span>
         </div>
         <div class="timeline">
-          ${moments.slice(0, 10).map(m => `
+          ${moments.slice(0, 30).map(m => `
             <div class="timeline-item">
-              <div class="timeline-date">sem ${m.atAbsWeek ?? '—'} · mag ${m.magnitude ?? 0}</div>
+              <div class="timeline-date">${e(dateLabel(m.atAbsWeek))}</div>
               <div class="timeline-content">
                 <span class="text-sm font-bold">${e(label(m))}</span>
               </div>
@@ -87,7 +98,7 @@ export class FighterProfileView {
     `;
   }
 
-  // ctx opcional: { topMoments, rivalryInfo, forceBio }
+  // ctx opcional: { topMoments, recentMoments, careerStartedAt, rivalryInfo, forceBio }
   static render(fighter, fightHistory = [], isPlayer = false, ctx = {}) {
     if (!fighter) return '<div class="empty-state"><p>Lutador não encontrado.</p></div>';
     const displayHistory = fightHistory.length > 0 ? fightHistory : (fighter.fights || []);
@@ -122,7 +133,7 @@ export class FighterProfileView {
         </div>
         <p class="text-xs text-muted mt-2">Heat alto = vilão que vende. Popularidade alta + pouco heat = herói da torcida.</p>
       </div>` : '';
-    const momentsHtml = this._renderMomentsTimeline(ctx.topMoments || ctx.recentMoments || []);
+    const momentsHtml = this._renderMomentsTimeline(ctx.recentMoments || ctx.topMoments || [], ctx.careerStartedAt);
 
     const attrBars = (attrs, label, colorClass) => {
       return `

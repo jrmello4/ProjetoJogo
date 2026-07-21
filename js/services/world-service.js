@@ -10,6 +10,7 @@ import { DataGenerator } from './data-generator.js';
 import { HallOfFame } from './hall-of-fame.js';
 import { CrowdService } from './crowd-service.js';
 import { VisualIdentityService } from './visual-identity-service.js';
+import { CAREER_EVENT } from './career-events.js';
 import { generateId, getWeightClassName, formatWeeks } from '../utils/helpers.js';
 import {
   ACADEMIES,
@@ -38,7 +39,7 @@ import {
 // Motor do mundo vivo: cada promoção de IA agenda e realiza os próprios
 // eventos. Lutas do jogador entram nos cards via ofertas aceitas.
 export class WorldService {
-  constructor(db, fighterCtrl, notifService, titleService = null, scoutingService = null, contractService = null, managerService = null, careerLogService = null, rivalryService = null) {
+  constructor(db, fighterCtrl, notifService, titleService = null, scoutingService = null, contractService = null, managerService = null, careerLogService = null, rivalryService = null, careerEvents = null) {
     this.db = db;
     this.fighterCtrl = fighterCtrl;
     this.notifService = notifService;
@@ -48,6 +49,7 @@ export class WorldService {
     this.managerService = managerService;
     this.careerLogService = careerLogService;
     this.rivalryService = rivalryService;
+    this.careerEvents = careerEvents;
   }
 
   // Fase 3 — reúne o contexto que decide o quanto o adversário conhece você.
@@ -465,6 +467,18 @@ export class WorldService {
         // Você acabou de passar 15 minutos dentro do octógono com o cara —
         // sabe mais sobre ele do que qualquer olheiro. Tarde demais.
         if (this.scoutingService) await this.scoutingService.observeAfterFight(fighterB.id);
+        await this.careerEvents?.emit(CAREER_EVENT.FIGHT_COMPLETED, {
+          result,
+          booking: fight.booking,
+          promotionId: promo.id,
+          absWeekNow,
+        });
+        if (!result.isDraw) {
+          await this.careerEvents?.emit(
+            result.winnerId === fighterA.id ? CAREER_EVENT.FIGHT_WON : CAREER_EVENT.FIGHT_LOST,
+            { result, booking: fight.booking, absWeekNow }
+          );
+        }
         await this._settlePlayerFight(fight, result, promo, absWeekNow, titleOutcome);
       }
     }

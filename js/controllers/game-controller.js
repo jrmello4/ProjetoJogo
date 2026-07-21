@@ -17,6 +17,7 @@ import { ContractService } from '../services/contract-service.js';
 import { TrainingPartnersService } from '../services/training-partners-service.js';
 import { ManagerService } from '../services/manager-service.js';
 import { CareerLogService } from '../services/career-log-service.js';
+import { CAREER_EVENT, CareerEvents } from '../services/career-events.js';
 import { RivalryService } from '../services/rivalry-service.js';
 import { StyleService } from '../services/style-service.js';
 import { SocialMediaService } from '../services/social-media-service.js';
@@ -82,6 +83,7 @@ export class GameController {
     this.contractService = null;
     this.managerService = null;
     this.careerLogService = null;
+    this.careerEvents = null;
     this.rivalryService = null;
     this.socialMediaService = null;
     this.podcastService = null;
@@ -99,6 +101,7 @@ export class GameController {
     this.seasonService = new SeasonService(this.db);
     this.notifService = new NotificationService(this.db);
     this.careerLogService = new CareerLogService(this.db);
+    this.careerEvents = new CareerEvents();
     this.titleService = new TitleService(this.db, this.fighterCtrl, this.notifService);
     this.scoutingService = new ScoutingService(this.db, this.notifService);
     this.contractService = new ContractService(this.db, this.fighterCtrl, this.notifService);
@@ -107,12 +110,13 @@ export class GameController {
     this.partnersService = new TrainingPartnersService(this.db, this.fighterCtrl, this.notifService, this.careerLogService);
     // Construído depois do RivalryService: WorldService usa rivalryService
     // (decaimento de rivalidade, bônus de hype de revanche na bolsa).
-    this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.scoutingService, this.contractService, this.managerService, this.careerLogService, this.rivalryService);
-    this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.contractService, this.rivalryService);
+    this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.scoutingService, this.contractService, this.managerService, this.careerLogService, this.rivalryService, this.careerEvents);
+    this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.contractService, this.rivalryService, this.careerEvents);
     this.sponsorService = new SponsorService(this.db, this.notifService, this.careerLogService);
     this.socialMediaService = new SocialMediaService(this.db, this.notifService);
     this.podcastService = new PodcastService(this.db, this.careerLogService, this.notifService);
     this.yearReviewService = new YearReviewService(this.db, this.careerLogService, this.notifService);
+    this._registerDomainReactions();
 
     // Sub-controllers extraídos do GameController (P8.2)
     this.financeCtrl = new FinanceController();
@@ -133,6 +137,34 @@ export class GameController {
     this.notifService.clearOld().catch(() => {});
 
     return await this.getPlayerFighter();
+  }
+
+  _registerDomainReactions() {
+    this.careerEvents.on(CAREER_EVENT.FIGHT_OFFERED, async ({ payload }) => {
+      const { offer } = payload;
+      await this.notifService.add(
+        'offer',
+        '📩 Nova Oferta de Luta',
+        `${offer.promotionName} quer você contra ${offer.opponentName} — bolsa de $${offer.purse.toLocaleString()}.${offer.isShortNotice ? ' ⚡ SHORT NOTICE!' : ''}`
+      );
+    });
+    this.careerEvents.on(CAREER_EVENT.FIGHT_ACCEPTED, async ({ payload }) => {
+      const { offer, weeksOut } = payload;
+      await this.notifService.add('success', 'Luta Fechada!', `${offer.opponentName} em ${weeksOut} semana${weeksOut === 1 ? '' : 's'} pelo ${offer.promotionName}. Hora do camp!`);
+    });
+    this.careerEvents.on(CAREER_EVENT.FIGHT_COMPLETED, async ({ payload }) => {
+      const { result, booking, absWeekNow } = payload;
+      const won = result.isDraw ? null : result.winnerId === booking.fighterId;
+      await this.careerLogService.publish(booking.fighterId, 'fight_completed', absWeekNow, result.isDraw ? 30 : result.isFinish ? 55 : 40, {
+        opponentName: booking.opponentName,
+        promotionName: booking.promotionName,
+        won,
+        method: result.method,
+        round: result.round,
+        isTitleFight: !!booking.isTitleFight,
+        resultId: result.id,
+      });
+    });
   }
 
   async _applyPatches(meta) {

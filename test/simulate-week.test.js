@@ -42,6 +42,9 @@ describe('GameController.simulateWeeks — invariantes de integração', () => {
     expect(fights.length).toBeGreaterThanOrEqual(1);
     expect(result.winsDelta + result.lossesDelta).toBeGreaterThanOrEqual(1);
 
+    const careerTimeline = await game.careerLogService.timelineForFighter(endFighter.id);
+    expect(careerTimeline.some(entry => entry.type === 'fight_completed')).toBe(true);
+
     const allFighters = await game.fighterCtrl.getAllFighters();
     const rankings = RankingService.calculateRankings(allFighters.filter(f => f.status !== 'retired'));
     expect(rankings).toBeTruthy();

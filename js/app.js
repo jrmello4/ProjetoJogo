@@ -1735,7 +1735,11 @@ class App {
     // Biografia viva — só pro jogador: careerLog + rival mais quente.
     let profileCtx = {};
     if (isPlayer && this.game.careerLogService) {
-      const topMoments = await this.game.careerLogService.topByMagnitude(fighter.id, 6);
+      const [topMoments, recentMoments, gameState] = await Promise.all([
+        this.game.careerLogService.topByMagnitude(fighter.id, 6),
+        this.game.careerLogService.timelineForFighter(fighter.id, { limit: 30 }),
+        this.game.db.get('gameState', 'state'),
+      ]);
       let rivalryInfo = null;
       if (this.rivalryService) {
         const rivalries = await this.rivalryService.getRivalries(fighter.id);
@@ -1747,7 +1751,7 @@ class App {
           rivalryInfo = { rivalry: top, opponentName: fromFights || otherFighter?.name || 'Adversário desconhecido' };
         }
       }
-      profileCtx = { topMoments, rivalryInfo };
+      profileCtx = { topMoments, recentMoments, careerStartedAt: gameState?.startedAt || null, rivalryInfo };
     }
 
     const html = FighterProfileView.render(fighter, fighter.fights, isPlayer, profileCtx);

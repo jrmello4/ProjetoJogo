@@ -3,17 +3,19 @@ import { Fighter } from '../models/fighter.js';
 import { generateId, clamp } from '../utils/helpers.js';
 import { getWeightClassName } from '../utils/helpers.js';
 import { OFFER_CONFIG, NEGOTIATION_CONFIG, TITLE_CONFIG, TITLE_ROLE, RIVALRY_CONFIG, CARD_POSITION, WEIGHT_BULLY_CONFIG } from '../config/game-config.js';
+import { CAREER_EVENT } from './career-events.js';
 
 // Ciclo de vida das ofertas de luta: geração semanal pelas promoções,
 // expiração, aceite e recusa.
 export class OfferService {
-  constructor(db, fighterCtrl, notifService, titleService = null, contractService = null, rivalryService = null) {
+  constructor(db, fighterCtrl, notifService, titleService = null, contractService = null, rivalryService = null, careerEvents = null) {
     this.db = db;
     this.fighterCtrl = fighterCtrl;
     this.notifService = notifService;
     this.titleService = titleService;
     this.contractService = contractService;
     this.rivalryService = rivalryService;
+    this.careerEvents = careerEvents;
   }
 
   async getAll() {
@@ -48,7 +50,7 @@ export class OfferService {
     await this.db.put('offers', offer);
 
     const weeksOut = offer.eventAbsWeek - absWeekNow;
-    await this.notifService.add('success', 'Luta Fechada!', `${offer.opponentName} em ${weeksOut} semana${weeksOut === 1 ? '' : 's'} pelo ${offer.promotionName}. Hora do camp!`);
+    await this.careerEvents?.emit(CAREER_EVENT.FIGHT_ACCEPTED, { offer, absWeekNow, weeksOut });
     return offer;
   }
 
@@ -106,6 +108,7 @@ export class OfferService {
     const offer = new FightOffer(data);
     offer.status = OFFER_STATUS.DECLINED;
     await this.db.put('offers', offer);
+    await this.careerEvents?.emit(CAREER_EVENT.FIGHT_DECLINED, { offer });
     return offer;
   }
 
@@ -117,6 +120,7 @@ export class OfferService {
     const offer = new FightOffer(data);
     offer.status = OFFER_STATUS.CANCELLED;
     await this.db.put('offers', offer);
+    await this.careerEvents?.emit(CAREER_EVENT.FIGHT_CANCELLED, { offer });
     return offer;
   }
 
@@ -161,6 +165,7 @@ export class OfferService {
     const titleOffer = await this._tryTitleOffer(fighter, academyReputation, promotions, absWeekNow, targetedOpponentIds);
     if (titleOffer) {
       created.push(titleOffer);
+      await this.careerEvents?.emit(CAREER_EVENT.FIGHT_OFFERED, { offer: titleOffer, absWeekNow });
       return created;
     }
 
@@ -168,6 +173,7 @@ export class OfferService {
     const superFight = await this._trySuperFight(fighter, promotions, absWeekNow);
     if (superFight) {
       created.push(superFight);
+      await this.careerEvents?.emit(CAREER_EVENT.FIGHT_OFFERED, { offer: superFight, absWeekNow });
       return created;
     }
 
@@ -257,8 +263,7 @@ export class OfferService {
         `${opponent.name} (ex-colega da sua academia) pode cruzar seu caminho! A rivalidade está armada.`);
     }
     created.push(offer);
-
-    await this.notifService.add('offer', '📩 Nova Oferta de Luta', `${promo.name} quer você contra ${opponent.name} — bolsa de $${purse.toLocaleString()}.${isShortNotice ? ' ⚡ SHORT NOTICE!' : ''}`);
+    await this.careerEvents?.emit(CAREER_EVENT.FIGHT_OFFERED, { offer, absWeekNow });
     if (offer.opponentWeightBully) {
       await this.notifService.add('warning', '⚠️ Corte de Peso Pesado', `${opponent.name} corta muito peso pra fazer ${getWeightClassName(fighter.weightClass)} — ele chega bem maior no dia da luta.`);
     }

@@ -196,6 +196,42 @@ export class DashboardView {
     `;
   }
 
+  // ===== Lesão como ficha médica (Fase 8) =====
+  // O sistema de documentos: a reabilitação não é um card genérico, é um
+  // prontuário — diagnóstico, fase, carimbo de status e o plano de tratamento
+  // a "assinar". Os botões mantêm data-rehab-choice, então o wiring de app.js
+  // não muda.
+  static _renderMedicalRecord(fighter) {
+    const inj = fighter.injury || {};
+    const caseNo = String(fighter.id || '').replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase() || '0000';
+    const fastCost = (INJURY_CONFIG?.REHAB_FAST_COST * INJURY_CONFIG?.REHAB_FAST_WEEKS) || 1500;
+    return `
+      <div class="section-label" data-reveal>Decisões Pendentes</div>
+      <div class="med-record mb-4" data-reveal>
+        <div class="med-record-head">
+          <span class="med-record-org">🏥 Comissão Atlética · Prontuário</span>
+          <span class="med-record-id">Nº ${caseNo}</span>
+        </div>
+        <div class="med-record-fields">
+          <div class="med-field"><span class="med-field-label">Atleta</span><span class="med-field-value">${e(fighter.name)}</span></div>
+          <div class="med-field"><span class="med-field-label">Diagnóstico</span><span class="med-field-value">${e(inj.description || 'Lesão em avaliação')}</span></div>
+          <div class="med-field"><span class="med-field-label">Fase</span><span class="med-field-value">Reabilitação</span></div>
+        </div>
+        <div class="med-stamp" aria-hidden="true">Em reabilitação</div>
+        <div class="med-treatment">
+          <div class="med-treatment-title">Plano de tratamento — assine embaixo:</div>
+          <button class="btn btn-secondary med-treatment-opt" data-rehab-choice="free">
+            <strong>Fisioterapia gratuita</strong>
+            <span class="text-xs text-muted ml-2">6 semanas · sem custo</span>
+          </button>
+          <button class="btn btn-secondary med-treatment-opt" data-rehab-choice="fast">
+            <strong>Fisioterapia rápida</strong>
+            <span class="text-xs text-muted ml-2">3 semanas · $${fastCost}</span>
+          </button>
+        </div>
+      </div>`;
+  }
+
   static render(data, weekLabel) {
     const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, rivalryPrompt, narrativePrompt, weighInPrompt, pendingRehab, readiness, now, endCareerPrompt, onboarding, podcastEpisode, yearReview, crowdSnapshot, mediaCompare } = data;
 
@@ -277,26 +313,7 @@ export class DashboardView {
     }
 
     // ===== P2.2: Reabilitação de lesão =====
-    let rehabHtml = '';
-    if (pendingRehab) {
-      rehabHtml = `
-        <div class="card mb-4" data-reveal style="border-top-color:var(--danger)">
-          <div class="card-header">
-            <span class="card-title">🏥 Reabilitação de Lesão</span>
-          </div>
-          <p class="text-sm text-muted mb-2">Sua lesão está em fase de reabilitação. Escolha o tipo de tratamento:</p>
-          <div class="flex flex-col gap-2">
-            <button class="btn btn-secondary" data-rehab-choice="free" style="text-align:left">
-              <strong>Fisioterapia gratuita</strong>
-              <span class="text-xs text-muted ml-2">(6 semanas — lenta, mas sem custo)</span>
-            </button>
-            <button class="btn btn-secondary" data-rehab-choice="fast" style="text-align:left">
-              <strong>Fisioterapia rápida</strong>
-              <span class="text-xs text-muted ml-2">(3 semanas — $${INJURY_CONFIG?.REHAB_FAST_COST * INJURY_CONFIG?.REHAB_FAST_WEEKS || 1500})</span>
-            </button>
-          </div>
-        </div>`;
-    }
+    const rehabHtml = pendingRehab ? this._renderMedicalRecord(fighter) : '';
 
     // ===== Redes sociais em semana livre (§D.2) =====
     let socialHtml = '';

@@ -858,6 +858,95 @@
 }
 
 /* ==========================================================================
+   Sistema de documentos (Fase 8) — cada sistema é um artefato da carreira.
+   Lesão -> prontuário/ficha médica.
+   ========================================================================== */
+
+.med-record {
+  position: relative;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.med-record-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.875rem;
+  border-bottom: 1px dashed var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.med-record-fields { padding: 0.5rem 0.875rem; }
+
+.med-field {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.med-field:last-child { border-bottom: none; }
+
+.med-field-label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.med-field-value {
+  font-size: 0.8125rem;
+  color: var(--text);
+  text-align: right;
+  font-weight: 600;
+}
+
+.med-stamp {
+  position: absolute;
+  top: 2.9rem;
+  right: 0.75rem;
+  border: 2px solid var(--danger);
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  transform: rotate(-8deg);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.med-treatment {
+  padding: 0.75rem 0.875rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.med-treatment-title {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.med-treatment-opt { text-align: left; }
+
+/* ==========================================================================
    O que está em jogo — SITUAÇÃO -> RISCO -> RECOMPENSA -> CONSEQUÊNCIA
    O enquadramento da decisão central do core loop (Fase 1).
    ========================================================================== */

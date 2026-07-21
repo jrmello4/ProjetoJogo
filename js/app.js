@@ -894,15 +894,12 @@ class App {
     }
 
     // Fase 9: overlay de decisão prioritária após dashboard renderizar
+    // Os handlers inline (social, rivalry, narrative, etc.) já chamam
+    // renderDashboard que limpa o overlay — handler extra causaria
+    // corrida de fechamento com data.closing.
     const pendingDecision = DashboardView.getDecisionOverlayHtml(data);
     if (pendingDecision) {
-      const overlay = LayoutView.showDecisionOverlay(pendingDecision.html);
-      // Fecha overlay quando qualquer botão de decisão for clicado
-      overlay.querySelectorAll('.btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          LayoutView.closeDecisionOverlay(overlay);
-        }, { once: true });
-      });
+      LayoutView.showDecisionOverlay(pendingDecision.html);
     }
 
     // Fase 9: collapsible sections

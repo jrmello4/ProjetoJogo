@@ -22,6 +22,9 @@ node_modules/
 dist/
 cinematics/out/
 
+# graphify knowledge-graph output (generated tooling artifacts, machine-specific paths)
+graphify-out/
+
 # OS files
 .DS_Store
 Thumbs.db

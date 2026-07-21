@@ -17,7 +17,7 @@ import {
 //
 // Este serviço faz o mundo te ler de volta. Ele é estático e não conhece o
 // `db`: recebe lutadores, devolve números. Toda a decisão de leitura, isca,
-// arma nova e maestria vive aqui; `SimulationEngine` só aplica o resultado.
+// arma nova e maestria vive aqui; o motor de cartas só aplica o resultado.
 // Essa fronteira é o que permite testar o sistema sem subir um jogo inteiro.
 export class TapeService {
   static defaultTape() {
@@ -157,7 +157,7 @@ export class TapeService {
   // ===== Resolução tática pré-luta =====
   // Ponto único onde leitura, isca, arma e maestria viram dois números que o
   // motor de luta entende: `edgeA` (o jogador) e `edgeB` (o adversário).
-  // `planEdgeFn` é injetado pelo chamador (SimulationEngine._planEdge) para não
+  // `planEdgeFn` é injetado pelo chamador (FightOutcome._planEdge) para não
   // duplicar aqui a leitura de traços por atributos que o motor já faz.
   static resolveTactics({ player, opponent, gamePlanKey, bait = false, rivalryIntensity = 0, opponentAcademy = null, sparredWeeks = 0, planEdgeFn }) {
     const tape = this.tapeOf(player);

@@ -2,8 +2,8 @@ import { Promotion } from '../models/promotion.js';
 import { Fighter } from '../models/fighter.js';
 import { Event } from '../models/event.js';
 import { OFFER_STATUS } from '../models/fight-offer.js';
-import { SimulationEngine } from '../controllers/simulation.js';
 import { CombatAdapter } from '../controllers/combat-adapter.js';
+import { FightOutcome } from '../controllers/fight-outcome.js';
 import { TapeService } from './tape-service.js';
 import { ReadinessService } from './readiness-service.js';
 import { DataGenerator } from './data-generator.js';
@@ -83,7 +83,7 @@ export class WorldService {
       // O vazamento (§Fase 3b): quem dividiu o tatame com você não precisa da
       // fita. Ele te viu.
       sparredWeeks: player.sparredWith?.[opponent.id] || 0,
-      planEdgeFn: (plan, target) => SimulationEngine._planEdge(plan, target, scoutingLevel),
+      planEdgeFn: (plan, target) => FightOutcome._planEdge(plan, target, scoutingLevel),
     });
   }
 
@@ -301,12 +301,10 @@ export class WorldService {
       const gamePlan = fight.booking?.gamePlan || 'balanced';
 
       const fightDateISO = absWeekToDate(absWeekNow, startedAt).toISOString();
-      const pressureLevel = await this._computePressureLevel(fight, promo);
       // §B.1 — pressurePerformer/bigEventNervous se descobrem exatamente na
       // 1ª luta de tier 1 OU numa disputa de cinturão (condições do spec,
-      // checadas por lutador — não o pressureLevel agregado da luta: tier 1
-      // sozinho só soma +20 em _computePressureLevel, nunca cruzando algum
-      // limiar genérico de "pressão alta" sem título/revanche/sequência).
+      // checadas por lutador). O motor de cartas não modela pressão no
+      // resultado da luta; a descoberta do traço continua sendo o gancho vivo.
       const isTitleFight = !!fight.titleWeightClass;
       if (isTitleFight || (promo.tier === 1 && !fighterA.reachedTier1)) {
         if (fighterA.hasDNA('pressurePerformer')) fighterA.discoverTrait('pressurePerformer');
@@ -339,13 +337,16 @@ export class WorldService {
         tactics.readinessFactorA = tactics.readiness.factor;
       }
 
-      // Player booked fight → card combat (official engine). AI-vs-AI stays
-      // on SimulationEngine. interactive mirrors the old cornerHooks signal:
-      // live advanceWeek passes hooks; simulateWeeks / processWeek() does not.
+      // TODA luta resolve pelo motor de cartas (CombatAdapter) — motor oficial
+      // e único. Só a luta do jogador (fight.booking) recebe UI ao vivo e
+      // prêmio de carta; IA-vs-IA roda headless (interactive=false, sem
+      // recompensa). interactive espelha o antigo sinal de cornerHooks:
+      // advanceWeek ao vivo passa hooks; simulateWeeks / processWeek() não.
       let result;
+      let interactive = false;
+      let container = null;
       if (fight.booking) {
-        const interactive = !!cornerHooks;
-        let container = null;
+        interactive = !!cornerHooks;
         if (interactive && cornerHooks.prepareCardFight) {
           container = await cornerHooks.prepareCardFight({
             fighter: fighterA,
@@ -357,30 +358,26 @@ export class WorldService {
           // is missing (dev callers / partial hooks).
           await cornerHooks.onFightStart?.({ fighter: fighterA, opponent: fighterB, promo });
         }
-
-        const adapter = new CombatAdapter();
-        if (container) adapter.setContainer(container);
-        result = await adapter.runFight(
-          fighterA,
-          fighterB,
-          promo.tier === 1,
-          gamePlan,
-          promo.tier,
-          isTitleFight,
-          interactive
-        );
-        // CombatAdapter only resolves the bout — record/morale/popularity/
-        // post-fight effects still live on SimulationEngine (same side
-        // effects simulateFight always applied).
-        result.date = fightDateISO;
-        this._applyCardFightOutcome(fighterA, fighterB, result, fightDateISO);
-      } else {
-        // Instruções de córner ao vivo só existiam no motor antigo; lutas
-        // de IA nunca usam cornerHooks.
-        result = await SimulationEngine.simulateFight(
-          fighterA, fighterB, promo.tier === 1, null, gamePlan, fightDateISO, pressureLevel, tactics
-        );
       }
+
+      const adapter = new CombatAdapter();
+      if (container) adapter.setContainer(container);
+      result = await adapter.runFight(
+        fighterA,
+        fighterB,
+        promo.tier === 1,
+        gamePlan,
+        promo.tier,
+        isTitleFight,
+        interactive,
+        !!fight.booking, // awardReward — só a luta do jogador ganha carta
+      );
+      // CombatAdapter só resolve a luta — cartel/moral/popularidade/efeitos
+      // pós-luta são aplicados aqui (mesmos side effects de antes), via
+      // FightOutcome. IA-vs-IA recebe exatamente o mesmo tratamento.
+      result.date = fightDateISO;
+      this._applyCardFightOutcome(fighterA, fighterB, result, fightDateISO);
+
       result.tactics = tactics;
 
       // A fita registra o que foi observável: o plano que cada um trouxe, sob
@@ -503,32 +500,32 @@ export class WorldService {
     return { event, results, playerResults, playerFighterIds };
   }
 
-  // Side-effects that SimulationEngine.simulateFight always applied after
-  // resolving a bout (W-L-D record, fight history, morale, popularity,
-  // post-fight fatigue/effects, KO accumulated damage). CombatAdapter only
-  // returns a result object — without this, player card fights would never
-  // update the cartel.
+  // Side-effects always applied after resolving a bout (W-L-D record, fight
+  // history, morale, popularity, post-fight fatigue/effects, KO accumulated
+  // damage). CombatAdapter only returns a result object — without this, no
+  // fight would update the cartel. Lives in FightOutcome now (era o motor
+  // antigo simulateFight que aplicava isto internamente).
   _applyCardFightOutcome(fighterA, fighterB, result, dateISO) {
     const method = { method: result.method };
     const round = result.round || 3;
     if (result.isDraw) {
-      SimulationEngine._updateFighter(fighterA, fighterB, 'draw', method, round, dateISO);
-      SimulationEngine._updateFighter(fighterB, fighterA, 'draw', method, round, dateISO);
-      SimulationEngine._updatePopularity(fighterA, fighterB, method, 'draw');
-      SimulationEngine._updatePopularity(fighterB, fighterA, method, 'draw');
+      FightOutcome._updateFighter(fighterA, fighterB, 'draw', method, round, dateISO);
+      FightOutcome._updateFighter(fighterB, fighterA, 'draw', method, round, dateISO);
+      FightOutcome._updatePopularity(fighterA, fighterB, method, 'draw');
+      FightOutcome._updatePopularity(fighterB, fighterA, method, 'draw');
       fighterA.applyPostFightEffects();
       fighterB.applyPostFightEffects();
       return;
     }
     const winner = result.winnerId === fighterA.id ? fighterA : fighterB;
     const loser = result.winnerId === fighterA.id ? fighterB : fighterA;
-    SimulationEngine._updateFighter(winner, loser, 'win', method, round, dateISO);
-    SimulationEngine._updateFighter(loser, winner, 'loss', method, round, dateISO);
-    SimulationEngine._updatePopularity(winner, loser, method, 'win');
-    SimulationEngine._updatePopularity(loser, winner, method, 'loss');
+    FightOutcome._updateFighter(winner, loser, 'win', method, round, dateISO);
+    FightOutcome._updateFighter(loser, winner, 'loss', method, round, dateISO);
+    FightOutcome._updatePopularity(winner, loser, method, 'win');
+    FightOutcome._updatePopularity(loser, winner, method, 'loss');
     winner.applyPostFightEffects();
     loser.applyPostFightEffects();
-    SimulationEngine._applyAccumulatedDamage(winner, loser, result);
+    FightOutcome._applyAccumulatedDamage(winner, loser, result);
   }
 
   // Fase 3 — o que a luta significou pro Livro. É aqui que o sistema deixa de
@@ -972,26 +969,6 @@ export class WorldService {
         Math.abs(b.overallRating - fighter.overallRating)
       );
     return candidates[0] || null;
-  }
-
-  // §C.3 — pressão psicológica da luta (0-100): escala pressurePerformer/
-  // bigEventNervous/composure em SimulationEngine em vez do antigo binário
-  // isBigEvent (só tier 1). Sinais disponíveis aqui: título em jogo, palco
-  // de elite, reencontro, sequência em risco de qualquer lado, e — agora
-  // que RivalryService está disponível (§D.3) — rivalidade tipo 'grudge'
-  // entre os dois: uma revanche contra o rival que te provocou pesa mais.
-  async _computePressureLevel(fight, promo) {
-    let pressure = 0;
-    if (fight.titleWeightClass) pressure += 50;
-    if (promo.tier === 1) pressure += 20;
-    if (fight.booking?.isReencounter) pressure += 15;
-    if ((fight.fighterA.winStreak || 0) >= 3) pressure += 10;
-    if ((fight.fighterB.winStreak || 0) >= 3) pressure += 10;
-    if (this.rivalryService) {
-      const rivalry = await this.rivalryService.getRivalryBetween(fight.fighterA.id, fight.fighterB.id);
-      if (rivalry?.type === 'grudge') pressure += RIVALRY_CONFIG.GRUDGE_PRESSURE_BONUS;
-    }
-    return Math.min(100, pressure);
   }
 
   // P4.x — aplica o bônus de "chegou maior" quando a oferta marcou o

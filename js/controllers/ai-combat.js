@@ -1,4 +1,4 @@
-import { ACTIVE_CARDS, POSITIONS, getDefaultLoadout } from '../config/card-config.js';
+import { POSITIONS, getDefaultLoadout } from '../config/card-config.js';
 import { COUNTER_OF } from '../config/game-config.js';
 
 export class AICombat {

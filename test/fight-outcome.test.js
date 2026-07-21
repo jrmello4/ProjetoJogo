@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { SimulationEngine } from '../js/controllers/simulation.js';
+import { FightOutcome } from '../js/controllers/fight-outcome.js';
 import { makeFighter } from './fixtures.js';
 
-describe('SimulationEngine._applyAccumulatedDamage', () => {
+describe('FightOutcome._applyAccumulatedDamage', () => {
   it('reassigns damage without throwing on back-to-back KOs (regression: const damage TDZ crash)', () => {
     const winner = makeFighter({ id: 'a' });
     const loser = makeFighter({ id: 'b' });
@@ -10,8 +10,8 @@ describe('SimulationEngine._applyAccumulatedDamage', () => {
 
     const chinBefore = loser.attributes.chin;
     expect(() => {
-      SimulationEngine._applyAccumulatedDamage(winner, loser, result);
-      SimulationEngine._applyAccumulatedDamage(winner, loser, result);
+      FightOutcome._applyAccumulatedDamage(winner, loser, result);
+      FightOutcome._applyAccumulatedDamage(winner, loser, result);
     }).not.toThrow();
     expect(loser.attributes.chin).toBeLessThan(chinBefore);
   });
@@ -22,22 +22,7 @@ describe('SimulationEngine._applyAccumulatedDamage', () => {
     const result = { method: 'Decision (Unanimous)', fighterAId: 'a', fighterBId: 'b', totalScoreA: 60, totalScoreB: 55 };
     const chinBefore = loser.attributes.chin;
 
-    SimulationEngine._applyAccumulatedDamage(winner, loser, result);
+    FightOutcome._applyAccumulatedDamage(winner, loser, result);
     expect(loser.attributes.chin).toBe(chinBefore);
-  });
-});
-
-describe('SimulationEngine.simulateFight', () => {
-  it('resolves to a winner/method without throwing across repeated runs', async () => {
-    for (let i = 0; i < 10; i++) {
-      const fighterA = makeFighter({ id: 'a', name: 'A' });
-      const fighterB = makeFighter({ id: 'b', name: 'B' });
-      const result = await SimulationEngine.simulateFight(fighterA, fighterB);
-      expect(result).toBeTruthy();
-      expect(result.method).toBeTruthy();
-      if (!result.isDraw) {
-        expect([result.fighterAId, result.fighterBId]).toContain(result.winnerId);
-      }
-    }
   });
 });

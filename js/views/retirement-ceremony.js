@@ -142,7 +142,7 @@ function weekLabel(absWeek, startedAt) {
   return `Semana ${absWeek}`;
 }
 
-// fights[] é mais-recente-primeiro (unshift em SimulationEngine) — inverte
+// fights[] é mais-recente-primeiro (unshift em FightOutcome._updateFighter) — inverte
 // pra ordem cronológica real, do primeiro pro último combate.
 function chronologicalFights(fighter) {
   return [...(fighter?.fights || [])].reverse();
@@ -155,7 +155,7 @@ function computeAscensao(fighter) {
   const firstFight = chrono[0];
   const firstWin = chrono.find(f => f.won === true) || null;
   // record.wins+losses+draws conta TODAS as lutas da carreira; fights[] é
-  // limitado às últimas 50 (ver SimulationEngine._updateFighter). Se a
+  // limitado às últimas 50 (ver FightOutcome._updateFighter). Se a
   // carreira foi mais longa que isso, a "primeira luta" aqui é a mais antiga
   // que ainda sobrou no registro, não necessariamente a estreia real —
   // melhor avisar isso do que fingir que é.

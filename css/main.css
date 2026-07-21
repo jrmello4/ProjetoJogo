@@ -1437,6 +1437,9 @@ tbody tr:hover td { background: var(--bg-hover); }
                        0 18px 32px rgba(0, 0, 0, 0.55);
   /* Fine fiber noise (SVG) */
   --card-fiber: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.28 0 0 0 0 0.18 0 0 0 0.22 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* Coach's handwriting — description text, notes */
+  --font-hand: 'Caveat', cursive;
+  --card-tape: rgba(224, 207, 168, 0.85);
 }
 
 .combat-container {
@@ -1492,6 +1495,38 @@ tbody tr:hover td { background: var(--bg-hover); }
 
 .stamina-bar {
   flex: 1;
+  position: relative;
+}
+
+.stamina-bar.side-strike {
+  animation: sideStrike 350ms ease-out;
+}
+
+.hit-fx {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.hit-fx .punch-icon {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1.4em;
+  animation: punchPop 350ms ease-out forwards;
+}
+
+.hit-fx .dmg-num {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-weight: 700;
+  font-size: 0.85em;
+  color: var(--red);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  animation: dmgFloat 500ms ease-out forwards;
 }
 
 .stamina-bar label {
@@ -1522,9 +1557,11 @@ tbody tr:hover td { background: var(--bg-hover); }
 .card-item {
   --cat-ink: var(--red);
   position: relative;
-  width: 154px;
-  min-height: 200px;
-  padding: 0 0 9px;
+  display: flex;
+  flex-direction: column;
+  width: 174px;
+  min-height: 296px;
+  padding: 0 0 8px;
   border: 1px solid var(--card-paper-edge);
   border-radius: 3px;
   cursor: pointer;
@@ -1601,85 +1638,143 @@ tbody tr:hover td { background: var(--bg-hover); }
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
 }
 
+.card-item.card-strike {
+  animation: cardStrike 350ms ease-out;
+}
+
 .card-item.strike { --cat-ink: var(--red); }
 .card-item.takedown { --cat-ink: #c46a12; }
 .card-item.submission { --cat-ink: #a8861a; }
 .card-item.defense { --cat-ink: var(--blue); }
 
-/* Anatomy — ink on paper */
-.card-item .card-top {
+/* Category header bar — full-width strip under the top stripe. The #1
+   thing the player reads: card type (icon + label) on the left, stamina
+   cost stamp on the right. Clean and legible, no overlap with tape. */
+.card-item .card-category-bar {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 7px 10px 6px 14px;
-  border-bottom: 1px dashed rgba(90, 70, 45, 0.18);
+  gap: 5px;
+  padding: 5px 8px 5px 18px;
+  background: var(--cat-ink);
+  color: #fff;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.22);
 }
 
-.card-item .card-cost {
-  flex-shrink: 0;
-  min-width: 1.35rem;
-  height: 1.35rem;
-  padding: 0 5px;
-  border: 1.5px solid var(--cat-ink);
-  border-radius: 2px;
-  color: var(--cat-ink);
-  font-family: var(--font-mono, ui-monospace, monospace);
+.card-item .card-category-bar .cat-icon {
+  font-size: 0.9rem;
+  line-height: 1;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4));
+}
+
+.card-item .card-category-bar .cat-label {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-display);
   font-size: 0.72rem;
-  font-weight: 700;
-  line-height: 1.2rem;
-  text-align: center;
-  background: rgba(255, 255, 255, 0.35);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4) inset;
-}
-
-.card-name {
-  font-family: var(--font-display, inherit);
   font-weight: 800;
-  font-size: 0.8rem;
-  margin: 0;
-  color: var(--card-ink);
-  letter-spacing: 0.04em;
-  line-height: 1.15;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.card-desc {
-  font-size: 0.68rem;
-  color: var(--card-ink-soft);
-  margin: 0 10px 0 14px;
-  padding: 0 0 2px 6px;
-  line-height: 1.35;
-  /* blue pen coach mark */
-  border-left: 2px solid var(--card-ink-blue);
-  font-style: italic;
-}
-
-/* Art window — dark mat inset; thin paper frame so the page still reads as paper */
-.card-item .card-art {
+/* Cost badge — dark angular shield stamped over the coloured header,
+   number stacked over a tiny CUSTO caption. Matches the reference spec. */
+.card-item .card-category-bar .card-cost {
+  flex-shrink: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 90px;
-  margin: 6px 8px 0 12px;
-  padding: 0;
+  width: 30px;
+  height: 34px;
+  margin: -3px -2px -4px 0;
+  color: #fff;
+  background: #1c2433;
+  clip-path: polygon(50% 0, 100% 22%, 100% 78%, 50% 100%, 0 78%, 0 22%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.card-item .card-category-bar .card-cost b {
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.card-item .card-category-bar .card-cost small {
+  font-family: var(--font-mono);
+  font-size: 0.38rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  opacity: 0.75;
+  margin-top: 1px;
+}
+
+/* Binder holes — left margin, notebook-page punch. Sit left of the red
+   margin rule (background-image on .card-item puts that rule at 11-12px). */
+.card-item .card-hole {
+  position: absolute;
+  left: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 35%, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.15) 55%, transparent 70%),
+    var(--card-paper-deep);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+  z-index: 5;
+}
+
+.card-item .card-hole.h1 { top: 46%; }
+.card-item .card-hole.h2 { top: 64%; }
+
+/* Masking tape — one soft strip pinning the top-right corner of the
+   mounted photo. Semi-transparent beige, faint fibre sheen, slightly
+   rotated. No jagged teeth: reads as real tape, not a saw blade. */
+.card-item .card-tape {
+  position: absolute;
+  width: 34px;
+  height: 15px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 45%),
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18) 50%, transparent),
+    var(--card-tape);
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+  border-right: 1px solid rgba(180, 160, 120, 0.4);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  opacity: 0.88;
+  z-index: 4;
+}
+
+.card-item .card-tape.tape-r { top: 44px; left: 2px; transform: rotate(-34deg); }
+
+/* Art window — dark mat, mounted like a taped technique photo. This is the
+   visual focus: fills the card width, strong contrast against the paper. */
+.card-item .card-art {
+  position: relative;
+  height: 104px;
+  margin: 8px 9px 0;
   overflow: hidden;
   border-radius: 2px;
   background:
-    radial-gradient(ellipse at 50% 70%, rgba(200, 32, 47, 0.1) 0%, transparent 55%),
-    #14110f;
-  border: 1px solid rgba(90, 60, 30, 0.28);
+    radial-gradient(ellipse at 50% 70%, rgba(200, 32, 47, 0.08) 0%, transparent 60%),
+    #241c1a;
+  border: 1px solid rgba(20, 14, 12, 0.6);
   box-shadow:
-    0 1px 0 rgba(255, 252, 245, 0.65),
-    0 2px 4px rgba(42, 34, 24, 0.12) inset;
+    0 0 0 1px rgba(255, 252, 245, 0.5),
+    0 3px 6px rgba(42, 34, 24, 0.28) inset;
 }
 
 .card-item .card-art-img {
   display: block;
   width: 100%;
-  height: 90px;
-  object-fit: contain;
-  object-position: center center;
+  height: 104px;
+  object-fit: cover;
+  object-position: center 42%;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   pointer-events: none;
@@ -1687,54 +1782,171 @@ tbody tr:hover td { background: var(--bg-hover); }
 }
 
 .card-item .card-art-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
   opacity: 0.85;
-  font-size: 1.75rem;
+  font-size: 2rem;
   filter: grayscale(0.2);
 }
 
-.card-item .card-coach-note {
-  display: none;
-}
+.card-item .card-coach-note { display: none; }
 
-.card-meta {
+/* Body — paper column below the photo, holds the coach's write-up. */
+.card-item .card-body {
   display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
-  padding: 6px 10px 0 14px;
-  font-size: 0.62rem;
-  color: var(--card-ink-soft);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  padding: 8px 9px 4px 18px;
 }
 
-.card-meta span {
-  padding: 2px 5px;
-  border: 1px solid rgba(90, 70, 45, 0.22);
-  border-radius: 1px;
-  background: rgba(255, 255, 255, 0.4);
-  color: var(--card-ink-soft);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+.card-name {
+  position: relative;
+  align-self: flex-start;
+  font-family: var(--font-display, inherit);
+  font-weight: 800;
+  font-size: 0.86rem;
+  color: var(--card-ink);
+  letter-spacing: 0.02em;
+  line-height: 1.05;
+  text-transform: uppercase;
 }
 
-.card-meta .card-dmg {
-  color: var(--card-ink-red);
-  border-color: rgba(168, 24, 40, 0.4);
-  font-weight: 700;
+/* Red-marker underline swoosh — hand-drawn emphasis, not a plain rule */
+.card-name::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  right: -10px;
+  bottom: -3px;
+  height: 3px;
+  background: var(--cat-ink);
+  opacity: 0.55;
+  border-radius: 2px;
+  transform: rotate(-0.8deg);
 }
 
-.card-meta .card-cd {
-  color: var(--card-ink-blue);
-  border-color: rgba(42, 90, 158, 0.4);
-}
-
-.card-meta .card-move {
-  color: #7a6510;
-  border-style: dashed;
-}
-
-.card-meta .card-uses {
-  color: var(--card-ink-red);
-  border-color: rgba(168, 24, 40, 0.3);
+.card-desc {
+  font-family: var(--font-hand);
+  font-size: 1.02rem;
   font-weight: 600;
+  color: var(--card-ink-blue);
+  padding: 1px 0 1px 7px;
+  line-height: 1.02;
+  border-left: 2px solid var(--card-ink-blue);
+}
+
+/* Labelled tactical stat boxes — the clarity win. Tiny caps label sits
+   above a bordered value cell, three across. */
+.card-item .card-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-top: 1px;
+}
+
+.card-item .stat {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.card-item .stat-label {
+  font-family: var(--font-mono);
+  font-size: 0.42rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--card-ink-soft);
+  padding-left: 1px;
+  margin-bottom: 1px;
+}
+
+.card-item .stat-val {
+  font-family: var(--font-mono);
+  font-size: 0.53rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-align: center;
+  color: var(--card-ink);
+  padding: 2px 1px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(90, 70, 45, 0.3);
+  border-radius: 2px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Footer — DMG stamp on the left, PRIORIDADE pill on the right. */
+.card-item .card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.card-item .card-dmg {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
+  padding: 2px 7px;
+  background: var(--card-ink-red);
+  border-radius: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transform: rotate(-1.5deg);
+}
+
+.card-item .card-priority {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 2px;
+  border: 1px solid currentColor;
+}
+
+.card-item .card-priority.prio-high { color: var(--card-ink-red); background: rgba(168, 24, 40, 0.08); }
+.card-item .card-priority.prio-mid { color: #9a6a12; background: rgba(154, 106, 18, 0.08); }
+.card-item .card-priority.prio-low { color: #3d7a3a; background: rgba(61, 122, 58, 0.08); }
+
+/* Effect note — coach's one-line takeaway at the very bottom. */
+.card-item .card-effect {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding-top: 3px;
+  border-top: 1px dashed rgba(90, 70, 45, 0.25);
+}
+
+.card-item .eff-label {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.42rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--card-ink-soft);
+}
+
+.card-item .eff-val {
+  font-family: var(--font-hand);
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--card-ink);
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Mastery — ink / seal on paper */
@@ -1839,4 +2051,28 @@ tbody tr:hover td { background: var(--bg-hover); }
 .turn-log-entry {
   padding: 2px 0;
   border-bottom: 1px solid var(--border);
+}
+
+@keyframes cardStrike {
+  0% { transform: scale(1) rotate(0deg); box-shadow: var(--card-shadow); }
+  35% { transform: scale(1.08) rotate(-3deg); box-shadow: 0 0 0 3px var(--red), var(--card-shadow-up); }
+  100% { transform: scale(1) rotate(0deg); box-shadow: var(--card-shadow); }
+}
+
+@keyframes sideStrike {
+  0% { box-shadow: none; }
+  35% { box-shadow: 0 0 0 3px var(--blue); }
+  100% { box-shadow: none; }
+}
+
+@keyframes punchPop {
+  0% { opacity: 0; top: 6px; transform: translateX(-50%) scale(0.6) rotate(-12deg); }
+  30% { opacity: 1; top: -10px; transform: translateX(-50%) scale(1.15) rotate(8deg); }
+  100% { opacity: 0; top: -18px; transform: translateX(-50%) scale(0.9) rotate(0deg); }
+}
+
+@keyframes dmgFloat {
+  0% { opacity: 0; top: 4px; }
+  20% { opacity: 1; top: -2px; }
+  100% { opacity: 0; top: -26px; }
 }

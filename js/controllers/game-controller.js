@@ -105,8 +105,8 @@ export class GameController {
     this.managerService = new ManagerService(this.db, this.notifService, this.careerLogService);
     this.rivalryService = new RivalryService(this.db, this.careerLogService);
     this.partnersService = new TrainingPartnersService(this.db, this.fighterCtrl, this.notifService, this.careerLogService);
-    // Construído depois do RivalryService: _computePressureLevel precisa de
-    // rivalryService para pressão extra em revanche 'grudge'.
+    // Construído depois do RivalryService: WorldService usa rivalryService
+    // (decaimento de rivalidade, bônus de hype de revanche na bolsa).
     this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.scoutingService, this.contractService, this.managerService, this.careerLogService, this.rivalryService);
     this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.contractService, this.rivalryService);
     this.sponsorService = new SponsorService(this.db, this.notifService, this.careerLogService);

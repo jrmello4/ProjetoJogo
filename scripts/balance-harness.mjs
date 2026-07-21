@@ -1,9 +1,9 @@
-// Harness estatístico de balanceamento — mede se o motor de simulação é
+// Harness estatístico de balanceamento — mede se o motor de cartas é
 // justo em vez de confiar em "ajustei no olho e parece certo".
 //
 // Roda: npm run balance
 import { Fighter } from '../js/models/fighter.js';
-import { SimulationEngine } from '../js/controllers/simulation.js';
+import { CombatAdapter } from '../js/controllers/combat-adapter.js';
 
 const BASE_ATTRS = {
   boxing: 50, kickboxing: 50, muayThai: 50, wrestling: 50, bjj: 50,
@@ -33,7 +33,9 @@ async function runBatch(n, buildPair) {
   const methods = {};
   for (let i = 0; i < n; i++) {
     const [a, b] = buildPair();
-    const result = await SimulationEngine.simulateFight(a, b);
+    const adapter = new CombatAdapter();
+    // headless: interactive=false, awardReward=false (motor de cartas puro)
+    const result = await adapter.runFight(a, b, false, 'balanced', 3, false, false, false);
     if (result.isDraw) draws++;
     else if (result.winnerId === a.id) winsA++;
     else winsB++;
@@ -57,11 +59,13 @@ function printResult(label, r, expectation) {
   if (expectation) console.log(`  esperado: ${expectation}`);
 }
 
-const N = 3000;
+// Motor de cartas resolve turno-a-turno (mais pesado que o antigo
+// estatístico) — N menor pra manter o harness rodável em segundos.
+const N = 1000;
 
 async function main() {
   console.log('='.repeat(70));
-  console.log('HARNESS DE BALANCEAMENTO — SimulationEngine.simulateFight');
+  console.log('HARNESS DE BALANCEAMENTO — CombatAdapter (motor de cartas)');
   console.log('='.repeat(70));
 
   // 1) Espelho puro: dois lutadores idênticos, zero vantagem de nenhum lado.

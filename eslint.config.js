@@ -26,6 +26,7 @@ export default [
         FileReader: 'readonly',
         Blob: 'readonly',
         URL: 'readonly',
+        URLSearchParams: 'readonly',
         performance: 'readonly',
         THREE: 'readonly',
         rive: 'readonly',

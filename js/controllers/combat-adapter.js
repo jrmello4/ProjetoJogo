@@ -41,7 +41,7 @@ export class CombatAdapter {
   // from (default 3 = Regional). isTitleFight swaps the reward for
   // CardRewardService.getTitleReward() instead of a player-chosen pool.
   // interactive=false: both sides use AI, no UI (fast-forward path).
-  async runFight(fighterA, fighterB, fiveRounds, gamePlanKey, promoTier = 3, isTitleFight = false, interactive = true) {
+  async runFight(fighterA, fighterB, fiveRounds, gamePlanKey, promoTier = 3, isTitleFight = false, interactive = true, awardReward = true) {
     // Without a DOM host, interactive mode would hang forever waiting for
     // a click that never arrives — fall back to AI-vs-AI resolution.
     if (interactive && !this.container) interactive = false;
@@ -168,31 +168,45 @@ export class CombatAdapter {
         const cardA = playerAction.type === 'card' ? ACTIVE_CARDS[playerAction.cardId] : null;
         const cardB = aiCard || null;
 
+        let turnResult = null;
+        let finish = null;
+
         if (cardA && cardB) {
-          const turnResult = CombatResolver.resolveTurn(state, cardA.id, cardB.id);
+          turnResult = CombatResolver.resolveTurn(state, cardA.id, cardB.id);
           roundTurns.push(turnResult);
-
-          if (interactive) this._showTurnResult(turnResult);
-
-          // Check for finish
-          const finish = CombatResolver.checkFinish(state, turnResult, r);
-          if (finish) {
-            state.ended = true;
-            state.finishMethod = finish.method;
-            break;
-          }
+          finish = CombatResolver.checkFinish(state, turnResult, r);
         } else if (cardA && !cardB) {
           // Player attacked, AI had no card — player wins turn uncontested
-          roundTurns.push({
+          turnResult = {
             winner: 'A', margin: 30, effectiveA: 20, effectiveB: 0,
             cardA, cardB: null, damageA: 15, damageB: 0,
-          });
+          };
+          roundTurns.push(turnResult);
         } else if (!cardA && cardB) {
           // Player passed/moved (no card), AI attacked — AI wins turn uncontested
-          roundTurns.push({
+          turnResult = {
             winner: 'B', margin: 30, effectiveA: 0, effectiveB: 20,
             cardA: null, cardB, damageA: 0, damageB: 15,
-          });
+          };
+          roundTurns.push(turnResult);
+        }
+
+        // Impact fx + the turn-result banner both need real time on screen —
+        // the old code showed them then fell straight into next iteration's
+        // view.update() with no await in between, so the DOM mutation was
+        // overwritten before the browser ever painted it (invisible flash).
+        // Awaiting here after triggering both is what actually makes them
+        // visible, paced to the ~350-400ms window asked for.
+        if (interactive && turnResult) {
+          this._showTurnResult(turnResult);
+          this._playImpactEffect(turnResult);
+          await this._delay(400);
+        }
+
+        if (finish) {
+          state.ended = true;
+          state.finishMethod = finish.method;
+          break;
         }
 
         state.turnOwner = state.turnOwner === 'A' ? 'B' : 'A';
@@ -240,9 +254,12 @@ export class CombatAdapter {
     // the player pick from a tier-based pool via _showCardReward (or auto-
     // pick a random option when non-interactive so simulateWeeks still
     // progresses the card pool).
+    // awardReward=false (luta IA-vs-IA no mundo): resolve o resultado mas não
+    // distribui carta de recompensa nem persiste no cardPool — NPCs não devem
+    // acumular loadout por vencer. Só a luta do jogador ganha prêmio.
     result.rewardCard = null;
     const playerWon = !result.isDraw && result.winnerId === result.fighterAId;
-    if (playerWon) {
+    if (playerWon && awardReward) {
       if (isTitleFight) {
         result.rewardCard = CardRewardService.getTitleReward();
       } else {
@@ -279,7 +296,7 @@ export class CombatAdapter {
     // MetaProgressionService was injected via setMetaProgressionService.
     // Fire-and-forget by design (addLegacyPoints doesn't await save()),
     // same as the rest of MetaProgressionService's mutators.
-    if (this.metaProgressionService && playerWon) {
+    if (this.metaProgressionService && playerWon && awardReward) {
       this.metaProgressionService.addLegacyPoints(
         this.metaProgressionService.constructor.computeLegacyPoints(result, isTitleFight)
       );
@@ -539,7 +556,50 @@ export class CombatAdapter {
     const cardB = turnResult.cardB?.name || 'nada';
     el.textContent = `Você jogou ${cardA} vs ${cardB} do oponente — ${winner} venceu o turno!`;
     el.classList.remove('hidden');
-    // Brief flash, then clear
-    setTimeout(() => el.classList.add('hidden'), 1500);
+    // No self-hide timeout needed — the next view.update() (after the
+    // _delay in the turn loop) rebuilds this element from scratch, hidden
+    // by default, which naturally clears it.
+  }
+
+  // Punch feedback for the turn that just resolved: the winning side's
+  // attack shakes (their own card if it's the player's, since the AI's
+  // side has no card DOM to target — its stamina-bar pulses instead), and
+  // a punch icon + damage number pop over the LOSING side's stamina bar,
+  // since that's the side eating the hit. Self-cleans via timeout rather
+  // than waiting for the next render, since a fight-ending turn is never
+  // followed by another render at all.
+  _playImpactEffect(turnResult) {
+    if (!this.container) return;
+    const loserSide = turnResult.winner === 'A' ? 'B' : 'A';
+    const dmg = Math.round(turnResult.winner === 'A' ? turnResult.damageA : turnResult.damageB);
+
+    const hitFx = this.container.querySelector(`.hit-fx[data-side="${loserSide}"]`);
+    if (hitFx) {
+      const dmgHtml = dmg > 0 ? `<span class="dmg-num">-${dmg}</span>` : '';
+      hitFx.innerHTML = `<span class="punch-icon">👊</span>${dmgHtml}`;
+      setTimeout(() => { hitFx.innerHTML = ''; }, 500);
+    }
+
+    if (turnResult.winner === 'A' && turnResult.cardA) {
+      const cardEl = this.container.querySelector(`.card-item[data-card-id="${turnResult.cardA.id}"]`);
+      this._restartAnimation(cardEl, 'card-strike');
+    } else if (turnResult.winner === 'B') {
+      const oppBar = this.container.querySelector('.stamina-bar[data-side="B"]');
+      this._restartAnimation(oppBar, 'side-strike');
+    }
+  }
+
+  // Toggling a class that's already present wouldn't restart its CSS
+  // animation (e.g. the same card striking twice in a row) — force a
+  // reflow between remove and re-add so the keyframe always plays fresh.
+  _restartAnimation(el, className) {
+    if (!el) return;
+    el.classList.remove(className);
+    void el.offsetWidth;
+    el.classList.add(className);
+  }
+
+  _delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }

@@ -764,6 +764,99 @@
   flex-wrap: wrap;
 }
 
+/* Fase 6 — dossiê como relatório: conhecido/desconhecido, ameaças, oportunidades */
+.scout-reads {
+  border-top: 1px dashed var(--border);
+  padding-top: 0.625rem;
+}
+
+.scout-coverage-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.scout-coverage-label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.scout-coverage-head .badge { margin-left: auto; }
+
+.scout-bar {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.scout-bar-fill {
+  height: 100%;
+  background: var(--gold);
+  transition: width 0.4s ease;
+}
+
+.scout-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+
+.scout-col {
+  padding: 0.5rem 0.625rem;
+  background: var(--mat);
+  border-radius: var(--radius);
+  border-left: 2px solid var(--border);
+}
+
+.scout-col--threats { border-left-color: var(--blue); }
+.scout-col--opps { border-left-color: var(--success); }
+
+.scout-col-title {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.35rem;
+}
+
+.scout-col--threats .scout-col-title { color: var(--blue-bright); }
+.scout-col--opps .scout-col-title { color: var(--success); }
+
+[data-theme="light"] .scout-col--threats .scout-col-title { color: var(--blue); }
+
+.scout-col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.scout-col li {
+  font-size: 0.75rem;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.scout-empty {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+}
+
+.scout-unknown {
+  margin-top: 0.5rem;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 /* ==========================================================================
    O que está em jogo — SITUAÇÃO -> RISCO -> RECOMPENSA -> CONSEQUÊNCIA
    O enquadramento da decisão central do core loop (Fase 1).

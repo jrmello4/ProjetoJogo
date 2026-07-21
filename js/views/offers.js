@@ -2,6 +2,7 @@ import { formatCurrency, getWeightClassShort, getWeightClassName, renderAttrRang
 import { TIER_LABELS, NEGOTIATION_CONFIG, TITLE_ROLE, GAME_PLANS, CARD_POSITION } from '../config/game-config.js';
 import { OFFER_STATUS } from '../models/fight-offer.js';
 import { PortraitService } from '../services/portrait-service.js';
+import { deriveScoutingReads } from '../services/scouting-report.js';
 
 const STATUS_LABELS = {
   [OFFER_STATUS.COMPLETED]: { label: 'Realizada', cls: 'badge-success' },
@@ -101,6 +102,47 @@ export class OffersView {
     `;
   }
 
+  // Fase 6 — o dossiê como relatório profissional: quanto você CONHECE vs o
+  // que ainda é ????, ameaças do adversário e oportunidades contra ele, com o
+  // grau de confiança da leitura (indício/provável/confirmado). A informação
+  // nunca é perfeita — é isso que gera tensão na escolha do plano.
+  static _renderScoutingReads(reads) {
+    if (!reads) return '';
+    const known = reads.coveragePct;
+    const confBadge = reads.level > 0
+      ? `<span class="badge ${reads.level >= 3 ? 'badge-success' : reads.level === 2 ? 'badge-warning' : 'badge-info'}">${e(reads.confidence)}</span>`
+      : '';
+    const list = (items) => items.length === 0
+      ? '<li class="scout-empty">????</li>'
+      : items.map(t => `<li>${e(t)}</li>`).join('');
+    const unknownLine = reads.unknown.length
+      ? `<div class="scout-unknown">🕵️ Ainda oculto: ${reads.unknown.map(u => e(u)).join(' · ')}</div>`
+      : '';
+    return `
+      <div class="scout-reads mt-3">
+        <div class="scout-coverage">
+          <div class="scout-coverage-head">
+            <span class="scout-coverage-label">Conhecido</span>
+            <span class="text-xs text-muted">${known}% · desconhecido ${100 - known}%</span>
+            ${confBadge}
+          </div>
+          <div class="scout-bar"><div class="scout-bar-fill" style="width:${known}%"></div></div>
+        </div>
+        <div class="scout-grid mt-2">
+          <div class="scout-col scout-col--threats">
+            <div class="scout-col-title">⚔️ Ameaças</div>
+            <ul>${list(reads.threats)}</ul>
+          </div>
+          <div class="scout-col scout-col--opps">
+            <div class="scout-col-title">🎯 Oportunidades</div>
+            <ul>${list(reads.opportunities)}</ul>
+          </div>
+        </div>
+        ${unknownLine}
+      </div>
+    `;
+  }
+
   // Dossiê do adversário. Sem estudar, tudo é faixa larga e ninguém sabe
   // como ele luta — e aí o plano de jogo vira aposta.
   static _renderDossier(offer, d) {
@@ -140,6 +182,7 @@ export class OffersView {
         </div>
 
         <div class="mt-3">${tendencies}${dna}</div>
+        ${this._renderScoutingReads(deriveScoutingReads(d))}
       </div>
       ${this._renderTheirRead(offer, d.theirRead)}
     `;

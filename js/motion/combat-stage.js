@@ -44,6 +44,7 @@ export class CombatStage {
 
   attach(root, fighterA = null, fighterB = null) {
     this.root = root;
+    this._pose = { A: POSES.IDLE, B: POSES.IDLE };
     if (fighterA) this._fighters.A = fighterA;
     if (fighterB) this._fighters.B = fighterB;
   }

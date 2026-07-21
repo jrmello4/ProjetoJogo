@@ -966,6 +966,20 @@ class App {
       setTimeout(() => this._showCinematicMoment(moment), 400);
     }
 
+    // Fase 13: estado da arena 3D reflete carreira
+    if (this.threeArena) {
+      const f = data.fighter;
+      let arenaState = 'idle';
+      if (f) {
+        if (f.titlesWon > 0) arenaState = 'champion';
+        else if ((f.winStreak || 0) >= 3) arenaState = 'streak';
+        else if (f.injury?.active) arenaState = 'danger';
+        else if (f.morale !== undefined && f.morale < 30) arenaState = 'danger';
+        else if (f.energy !== undefined && f.energy < 30) arenaState = 'tranquil';
+      }
+      this.threeArena.setState(arenaState);
+    }
+
     this._bindFighterClicks();
     this._bindEventClicks();
   }

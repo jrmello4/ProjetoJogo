@@ -219,7 +219,32 @@ export class OffersView {
     `;
   }
 
-  static render(pending, accepted, history, fighter, now, dossiers = {}, contractProposals = [], teammates = {}, rivalries = {}, readiness = {}, opponents = {}) {
+  // Fase 1 — "O que está em jogo". Três colunas (RECOMPENSA / RISCO /
+  // CONSEQUÊNCIA) traduzem o estado do jogo na decisão central do core loop:
+  // o que conquisto, com o que entro, o que perco. Dados vêm de
+  // computeFightStakes (fight-stakes.js); aqui só desenha.
+  static _renderStakes(stakes) {
+    if (!stakes) return '';
+    const col = (title, cls, items) => `
+      <div class="stakes-col stakes-col--${cls}">
+        <div class="stakes-col-title">${title}</div>
+        ${items.length === 0 ? '' : `<ul class="stakes-list">
+          ${items.map(i => `<li><span class="stakes-icon">${i.icon}</span>${e(i.text)}</li>`).join('')}
+        </ul>`}
+      </div>`;
+    return `
+      <div class="stakes-block mt-2" data-reveal>
+        <div class="stakes-header">⚖️ O que está em jogo</div>
+        <div class="stakes-grid">
+          ${col('Recompensa', 'reward', stakes.reward)}
+          ${col('Risco', 'risk', stakes.risk)}
+          ${col('Se perder', 'consequence', stakes.consequence)}
+        </div>
+      </div>
+    `;
+  }
+
+  static render(pending, accepted, history, fighter, now, dossiers = {}, contractProposals = [], teammates = {}, rivalries = {}, readiness = {}, opponents = {}, stakes = {}) {
     const fighterOf = () => fighter;
     // Retrato do oponente — SEMPRE do lutador completo (opponents map);
     // sem ele, cai num placeholder de projeção só como último recurso.
@@ -237,7 +262,6 @@ export class OffersView {
           const fighter = fighterOf(o);
           const weeksToFight = o.eventAbsWeek - now;
           const weeksToExpire = o.expiresAbsWeek - now;
-          const risky = fighter && o.opponentOverall != null && o.opponentOverall - fighter.overallRating >= 5;
 
           const titleLabel = o.titleRole === TITLE_ROLE.DEFENSE
             ? `Defesa de cinturão ${getWeightClassName(o.weightClass)}`
@@ -303,8 +327,7 @@ export class OffersView {
                   <button class="btn btn-sm btn-secondary offer-decline" data-id="${o.id}">Recusar</button>
                 </div>
               </div>
-              ${risky ? '<div class="text-xs mt-2" style="color:var(--accent)">⚠️ Adversário mais forte no papel — risco alto, recompensa de reputação maior.</div>' : ''}
-              ${fighter && fighter.fatigue >= 40 ? '<div class="text-xs mt-1" style="color:var(--gold)">⚡ Seu atleta ainda carrega fadiga — considere o tempo de recuperação.</div>' : ''}
+              ${this._renderStakes(stakes[o.id])}
 
               ${o.negotiated
                 ? '<div class="text-xs text-muted mt-2">Bolsa já negociada nesta oferta.</div>'

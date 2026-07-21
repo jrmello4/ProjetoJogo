@@ -15,6 +15,7 @@ import { renderCalendar } from './views/calendar.js';
 import { RankingsView } from './views/rankings.js';
 import { FinanceView } from './views/finance.js';
 import { RankingService } from './services/ranking.js';
+import { computeFightStakes } from './services/fight-stakes.js';
 import { TapeService } from './services/tape-service.js';
 import { ReadinessService } from './services/readiness-service.js';
 import { NotificationsView } from './views/notifications.js';
@@ -1216,7 +1217,25 @@ class App {
       }
     }
 
-    const html = OffersView.render(pending, accepted, history, fighter, now, dossiers, contractProposals, teammates, rivalries, readiness, opponents);
+    // Fase 1 — "O que está em jogo": enquadra cada oferta pendente em
+    // RECOMPENSA/RISCO/CONSEQUÊNCIA. O salto/recuo no ranking usa a posição
+    // divisional real (uma leitura de todos os lutadores por render).
+    const stakes = {};
+    if (pending.length > 0) {
+      const activeDivision = (await this.game.fighterCtrl.getAllFighters())
+        .filter(f => f.status !== 'retired' && f.weightClass === fighter.weightClass);
+      const divRankings = RankingService.calculateRankings(activeDivision);
+      const rankOf = (id) => divRankings.find(r => r.fighter.id === id)?.rank ?? null;
+      for (const o of pending) {
+        stakes[o.id] = computeFightStakes(fighter, o, {
+          playerRank: rankOf(fighter.id),
+          oppRank: rankOf(o.opponentId),
+          divisionSize: divRankings.length,
+        });
+      }
+    }
+
+    const html = OffersView.render(pending, accepted, history, fighter, now, dossiers, contractProposals, teammates, rivalries, readiness, opponents, stakes);
     await LayoutView.render(html);
 
     document.querySelectorAll('.study-opponent').forEach(btn => {

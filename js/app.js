@@ -107,7 +107,7 @@ function detectCinematicMoment(data) {
   let id = null;
   if (won === true && wins === 1 && total === 1) id = 'first_win';
   else if (won === false && losses === 1) id = 'first_loss';
-  else if (won === true && titlesWon === 1) id = 'first_title';
+  else if (won === true && titlesWon >= 1) id = 'first_title';
   else if (won === true && streak === 5) id = 'streak_5';
   else if (won === true && streak === 10) id = 'streak_10';
 
@@ -138,6 +138,7 @@ class App {
     this.monetizationService = new MonetizationService(this.game.db);
     this.threeArena = null;
     this.threeBackground = null;
+    this.shownMoments = new Set();
   }
 
   async init() {
@@ -963,9 +964,10 @@ class App {
     // Fase 9: collapsible sections
     DashboardView.initCollapsible();
 
-    // Fase 12: momento cinematográfico (milestones)
+    // Fase 12: momento cinematográfico (milestones) — só mostra 1x
     const moment = detectCinematicMoment(data);
-    if (moment) {
+    if (moment && !this.shownMoments.has(moment.id)) {
+      this.shownMoments.add(moment.id);
       setTimeout(() => this._showCinematicMoment(moment), 400);
     }
 
@@ -1008,12 +1010,16 @@ class App {
     requestAnimationFrame(() => overlay.classList.add('is-open'));
 
     const close = () => {
+      if (overlay.dataset.closing) return;
       overlay.dataset.closing = '1';
       overlay.querySelector('.cinematic-moment-card')?.classList.add('is-closing');
       setTimeout(() => overlay.remove(), 220);
     };
 
-    overlay.querySelector('.moment-continue').addEventListener('click', close);
+    overlay.querySelector('.moment-continue').addEventListener('click', (e) => {
+      e.stopPropagation();
+      close();
+    });
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) close();
     });

@@ -39,11 +39,10 @@ import { VisualIdentityService } from './services/visual-identity-service.js';
 import { AppearanceEditor } from './views/appearance-editor.js';
 import { SettingsView } from './views/settings.js';
 import { TutorialCoach } from './services/tutorial-coach.js';
-import { ThreeArena } from './three-arena.js';
-import { ThreeBackground } from './three-background.js';
+import { FightFeedbackService } from './services/fight-feedback-service.js';
 import { motion } from './motion/motion-engine.js';
-import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, ARCHETYPES, ORIGINS, absWeekToLabel, SYNERGY_CONFIG, FIGHTING_STYLES, PERKS, CHALLENGE_MODES } from './config/game-config.js';
-import { formatCurrency, getAdjacentWeightClasses, clamp, sanitizePlayerName, e } from './utils/helpers.js';
+import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, ARCHETYPES, ORIGINS, absWeekToLabel, FIGHTING_STYLES, PERKS, CHALLENGE_MODES } from './config/game-config.js';
+import { formatCurrency, getAdjacentWeightClasses, sanitizePlayerName, e } from './utils/helpers.js';
 import { validateCharCreateStep } from './utils/char-create-validate.js';
 import { CAMP_CONFIG, HYPE_PURSE_RATIO, absWeek } from './config/game-config.js';
 
@@ -106,11 +105,7 @@ class App {
 
     // Decorativo — uma falha de WebGL aqui está no caminho síncrono do boot
     // e não pode impedir o resto do app de carregar.
-    try {
-      this.threeBackground = new ThreeBackground('mainContent');
-    } catch (err) {
-      console.warn('ThreeBackground falhou ao iniciar (WebGL indisponível?):', err);
-    }
+    this._initThreeBackground();
 
     window.addEventListener('navigate', (e) => {
       this.navigateTo(e.detail.view);
@@ -765,7 +760,7 @@ class App {
     const html = DashboardView.render(data, weekLabel);
     await LayoutView.render(html);
 
-    this.initThreeArena();
+    this.initThreeArena(data.fighter);
     this._updateNavBadges(data.pendingOffers?.length || 0);
 
     document.getElementById('weekAdvanceBtn')?.addEventListener('click', () => this.advanceWeek());
@@ -887,7 +882,7 @@ class App {
     this._bindEventClicks();
   }
 
-  initThreeArena() {
+  initThreeArena(fighter = null) {
     const container = document.getElementById('octagonArena');
     if (!container) return;
 
@@ -899,18 +894,34 @@ class App {
     const oldCanvases = container.querySelectorAll('canvas');
     oldCanvases.forEach(c => c.remove());
 
-    requestAnimationFrame(() => {
+    requestAnimationFrame(async () => {
       // WebGL pode falhar em hardware/driver incomum (VM, GPU sem suporte,
       // contexto perdido) — o octógono 3D é decorativo, uma falha aqui não
       // pode derrubar o resto da tela nem sujar o console com erro não
       // tratado.
       try {
+        const { ThreeArena } = await import('./three-arena.js');
+        if (!document.getElementById('octagonArena')) return;
         this.threeArena = new ThreeArena('octagonArena');
+        this.threeArena.setFightState({
+          fatigue: Math.max(0, Math.min(1, (fighter?.fatigue || 0) / 100)),
+          danger: fighter?.injury ? 0.45 : 0,
+          critical: fighter?.injury?.stage === 'rest',
+        });
       } catch (err) {
         console.warn('ThreeArena falhou ao iniciar (WebGL indisponível?):', err);
       }
       motion.refresh();
     });
+  }
+
+  async _initThreeBackground() {
+    try {
+      const { ThreeBackground } = await import('./three-background.js');
+      this.threeBackground = new ThreeBackground('mainContent');
+    } catch (err) {
+      console.warn('ThreeBackground indisponível; seguindo sem cenário 3D.', err);
+    }
   }
 
   // ===== Tick semanal: o coração do jogo =====
@@ -1028,42 +1039,6 @@ class App {
     }
 
     this.renderDashboard();
-  }
-
-  // §C.2 — ajusta coachSynergy a partir do tally da luta ao vivo que acabou
-  // de acontecer: cada round em que a instrução foi SEGUIDA e o round foi
-  // VENCIDO soma; cada round em que foi IGNORADA e o round foi PERDIDO
-  // subtrai — ambos escalados por GROWTH_RATE_BY_FACILITY (academia pequena
-  // = atenção individual = sinergia cresce/cai mais rápido). Só chamado pelo
-  // caminho AO VIVO (advanceWeek) — simulateWeeks() não tem cornerHooks, logo
-  // nunca preenche cornerTally, e este método nunca é chamado por lá
-  // (simplificação aceita pelo spec §C.2/pedido explícito da tarefa).
-  //
-  // Fetch-mutate-save PRÓPRIO e isolado: busca o Fighter fresco (pós-luta,
-  // já com todas as mutações que WorldService/GameController salvaram
-  // durante processWeek) em vez de reusar alguma variável local mais antiga
-  // — ver a nota de app.js/game-controller.js sobre esse bug já ter
-  // acontecido de verdade neste projeto.
-  async _applyCoachSynergyChange(fighterId, cornerTally) {
-    let followedAndWon = 0;
-    let ignoredAndLost = 0;
-    for (const t of cornerTally) {
-      if (t.followed && t.won) followedAndWon++;
-      else if (!t.followed && t.lost) ignoredAndLost++;
-    }
-    if (followedAndWon === 0 && ignoredAndLost === 0) return;
-
-    const fighter = await this.game.fighterCtrl.getFighter(fighterId);
-    if (!fighter) return;
-    const academy = await this.game.getAcademy(fighter.academyId);
-    const growthRate = SYNERGY_CONFIG.GROWTH_RATE_BY_FACILITY[(academy?.facilityLevel || 1) - 1] ?? 1;
-
-    const delta = Math.round(
-      followedAndWon * SYNERGY_CONFIG.GAIN_ON_INSTRUCTION_FOLLOWED_AND_WON * growthRate +
-      ignoredAndLost * SYNERGY_CONFIG.LOSS_ON_INSTRUCTION_IGNORED_AND_LOST * growthRate
-    );
-    fighter.coachSynergy = clamp(fighter.coachSynergy + delta, 0, 100);
-    await this.game.fighterCtrl.updateFighter(fighter);
   }
 
   // ===== Simular Período =====
@@ -1522,8 +1497,18 @@ class App {
     let roundIdx = 0;
     let beatIdx = 0;
     let cancelled = false;
-    let tl = gsap.timeline();
+    // O CDN de animação é um aprimoramento, nunca pré-requisito para o
+    // resultado da luta. A transmissão ainda precisa terminar se ele cair.
+    const gsap = window.gsap;
+    let tl = gsap?.timeline() || null;
     const monetizationPromise = this.monetizationService.getState();
+    const playerResult = (allResults || []).find(result =>
+      playerFighterIds?.has?.(result.fighterAId) || playerFighterIds?.has?.(result.fighterBId)
+    ) || allResults?.[0] || null;
+    const winnerSide = playerResult?.winnerId === fighterA?.id
+      ? 'A'
+      : playerResult?.winnerId === fighterB?.id ? 'B' : null;
+    let arenaFeedback = null;
 
     const faceOff = document.getElementById('hubFaceOff');
     let threeFaceOff = null;
@@ -1531,14 +1516,20 @@ class App {
       import('./three-faceoff.js').then(mod => {
         if (!cancelled && faceOff) {
           threeFaceOff = new mod.ThreeFaceOff('hubFaceOff', fighterA, fighterB);
+          threeFaceOff.setFightState?.(arenaFeedback || {});
         }
       }).catch(() => {});
     } catch {}
 
+    const applyArenaFeedback = () => {
+      arenaFeedback = FightFeedbackService.fromRound(playerResult?.rounds?.[roundIdx], arenaFeedback);
+      threeFaceOff?.setFightState?.(arenaFeedback);
+    };
+
     const finish = async () => {
       cancelled = true;
-      tl.kill();
-      tl = gsap.timeline();
+      tl?.kill();
+      tl = gsap?.timeline() || null;
 
       rounds.forEach(r => r.style.display = 'block');
       rounds.forEach(r => {
@@ -1567,14 +1558,18 @@ class App {
 
       if (summary) {
         summary.style.display = 'block';
-        tl.to('#hubResultIcon', { opacity: 1, scale: 1, duration: 0.4, ease: 'back.out(2)' }, 0)
-          .to('#hubResultText', { opacity: 1, y: 0, duration: 0.3 }, '-=0.2')
-          .to('#hubResultMethod', { opacity: 1, duration: 0.3 }, '-=0.15')
-          .to('#hubScorecards', { opacity: 1, duration: 0.3 }, '-=0.1')
-          .to('#hubPurseDisplay', { opacity: 1, y: 0, duration: 0.3 }, '-=0.05')
-          .to('#hubDamageWarning', { opacity: 1, duration: 0.3 }, '-=0.05')
-          .to('#hubActions', { opacity: 1, y: 0, duration: 0.3 }, '-=0.05')
-          .to('#hubAdSlot', { opacity: 1, duration: 0.3 }, '-=0.05');
+        if (tl) {
+          tl.to('#hubResultIcon', { opacity: 1, scale: 1, duration: 0.4, ease: 'back.out(2)' }, 0)
+            .to('#hubResultText', { opacity: 1, y: 0, duration: 0.3 }, '-=0.2')
+            .to('#hubResultMethod', { opacity: 1, duration: 0.3 }, '-=0.15')
+            .to('#hubScorecards', { opacity: 1, duration: 0.3 }, '-=0.1')
+            .to('#hubPurseDisplay', { opacity: 1, y: 0, duration: 0.3 }, '-=0.05')
+            .to('#hubDamageWarning', { opacity: 1, duration: 0.3 }, '-=0.05')
+            .to('#hubActions', { opacity: 1, y: 0, duration: 0.3 }, '-=0.05')
+            .to('#hubAdSlot', { opacity: 1, duration: 0.3 }, '-=0.05');
+        } else {
+          summary.querySelectorAll('[style*="opacity:0"]').forEach(el => { el.style.opacity = '1'; });
+        }
         AdService.mount('hubAdSlotInner');
 
         // Cosmético de apoiador (js/services/monetization-service.js) —
@@ -1601,6 +1596,7 @@ class App {
           beatIdx = 0;
           if (roundIdx >= rounds.length) { finish(); return; }
           rounds[roundIdx].style.display = 'block';
+          applyArenaFeedback();
           if (statusText) statusText.textContent = `Round ${roundIdx + 1} de ${rounds.length}`;
           gsap.delayedCall(0.6, showBeat);
         });
@@ -1617,6 +1613,7 @@ class App {
         gsap.to(faceOff || document.getElementById('liveHubRounds'), {
           x: '+=6', duration: 0.04, repeat: 4, yoyo: true, ease: 'power1.inOut',
         });
+        threeFaceOff?.setFightState?.({ ...arenaFeedback, danger: 1, critical: true });
         if (threeFaceOff?.onKnockdown) threeFaceOff.onKnockdown();
       } else if (beatType === 'finish') {
         AudioService.play('thud');
@@ -1628,6 +1625,9 @@ class App {
         flash.style.cssText = 'position:fixed;inset:0;background:rgba(232,35,74,0.3);pointer-events:none;z-index:999';
         document.body.appendChild(flash);
         gsap.to(flash, { opacity: 0, duration: 0.6, onComplete: () => flash.remove() });
+        threeFaceOff?.setFightState?.({
+          ...arenaFeedback, danger: 1, critical: true, finish: true, winnerSide,
+        });
         if (threeFaceOff?.onFinish) threeFaceOff.onFinish();
       }
 
@@ -1638,6 +1638,14 @@ class App {
 
     if (rounds.length === 0 || cancelled) { finish(); return; }
 
+    if (!gsap) {
+      if (statusCard) statusCard.style.opacity = '1';
+      rounds[0].style.display = 'block';
+      applyArenaFeedback();
+      finish();
+      return;
+    }
+
     tl.to(statusCard, { opacity: 1, duration: 0.3 }, 0)
       .to(title, { opacity: 1, y: 0, duration: 0.4, ease: 'back.out(1.2)' }, '-=0.1')
       .to(subtitle, { opacity: 1, duration: 0.3 }, '-=0.15');
@@ -1646,6 +1654,7 @@ class App {
       if (!cancelled) {
         AudioService.play('bell');
         rounds[0].style.display = 'block';
+        applyArenaFeedback();
         if (statusText) statusText.textContent = `Round 1 de ${rounds.length}`;
       }
     });
@@ -1660,6 +1669,8 @@ class App {
   // no fluxo do documento, pra nunca empurrar layout.
   _fireConfetti(anchorEl) {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const gsap = window.gsap;
+    if (!gsap) return;
     const rect = anchorEl.getBoundingClientRect();
     const colors = ['#f3efe9', '#c9a227', '#8e857c', '#ef5f6b'];
 
@@ -2205,7 +2216,11 @@ class App {
   async renderRivalries() {
     const rivalries = await this.rivalryService.getAllActive();
     const fighters = await this.game.fighterCtrl.getAllFighters();
-    const html = RivalriesView.render(rivalries, fighters);
+    const player = await this.game.getPlayerFighter();
+    const archived = player
+      ? (await this.rivalryService.getRivalryHistory(player.id)).filter(rivalry => !rivalry.active)
+      : [];
+    const html = RivalriesView.render(rivalries, fighters, archived);
     await LayoutView.render(html);
   }
 
@@ -2646,3 +2661,15 @@ const app = new App();
 app.init();
 
 window.app = app;
+
+// Ferramenta opt-in para validar carreira sem expor controles de desenvolvimento
+// a jogadores comuns. Abra com ?debug e use redCornerDebug no console.
+if (new URLSearchParams(window.location.search).has('debug')) {
+  window.redCornerDebug = Object.freeze({
+    snapshot: () => app.game.getDebugSnapshot(),
+    player: () => app.game.getPlayerFighter(),
+    simulateWeeks: (weeks = 4) => app.game.simulateWeeks(
+      Math.max(1, Math.min(52, Math.floor(Number(weeks) || 4)))
+    ),
+  });
+}

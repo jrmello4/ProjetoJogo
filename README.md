@@ -28,7 +28,7 @@ O mundo é simulado por baixo: promoções controladas pela IA realizam os próp
 | **Escolha de academia** | Sem dono de academia — você escolhe onde treinar, a qualquer momento. Academia grande tem treino melhor mas te trata como número; pequena cresce sinergia com o técnico mais rápido |
 | **Empresário** | Negocia sua bolsa em troca de um corte. Agressivo abre portas mais cedo mas queima pontes com promoções; leal nunca te trai mas tem pior faro pra oportunidades |
 | **Sinergia técnico-atleta** | Confiança no córner cresce seguindo o conselho e vencendo, cai ignorando e perdendo. Sinergia baixa pode virar sugestão errada no meio do round |
-| **Córner ao vivo** | Instrução a cada round: pressionar, recuar, levar pro chão. Cada uma cobra fôlego ou expõe o queixo |
+| **Córner ao vivo** | Entre rounds, aceitar ou recusar o conselho muda a luta; seguir e vencer fortalece a sinergia técnico-atleta |
 | **Psicologia de momento crítico** | Título, revanche, sequência em risco: a pressão sobe de verdade, e DNA como `bigEventNervous`/`pressurePerformer` responde a ela na pele |
 | **Lesões com sequelas** | Lesão grave pode deixar marca permanente — teto de atributo reduzido pro resto da carreira, às vezes com um ganho mental compensando |
 | **Custo de vida pessoal** | Subir o padrão de vida no auge sente bem, mas é compromisso semanal que continua existindo numa fase de baixa |
@@ -61,8 +61,26 @@ pode servir um `.js` antigo **sem erro visível** depois de editar o arquivo.
 ## Stack
 
 - **JavaScript puro (ES Modules)** — sem framework, sem build, sem npm
-- **IndexedDB** para o save (migrações aditivas via `gameState.meta.patches`)
+- **IndexedDB** para o save — importação atômica, validação de IDs e migrações aditivas versionadas (`gameState.meta.schemaVersion`)
+- **Career Event Bus** — consequências de luta reagem a `FIGHT_COMPLETED`, sem acoplamento com a tela
 - **Three.js** na arena do pôster · **GSAP + Lenis** nas animações
+
+## Qualidade
+
+```bash
+npm run lint
+npm test
+npm run balance
+```
+
+O projeto inclui testes de combate, simulação de carreira, persistência,
+migração de schema, rivalidades e eventos de domínio. Recursos visuais remotos
+são opcionais: se Three.js ou GSAP não carregarem, o loop de carreira continua.
+
+Para inspecionar uma carreira durante desenvolvimento, abra
+`http://localhost:8341/?debug`. O console expõe `redCornerDebug.snapshot()`,
+`redCornerDebug.player()` e `redCornerDebug.simulateWeeks(4)`; esse painel não
+aparece no jogo normal.
 
 ## Design
 

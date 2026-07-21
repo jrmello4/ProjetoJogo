@@ -120,7 +120,16 @@ export class CombatEngine {
       .filter(Boolean);
   }
 
-  playCard(side, cardId) {
+  /**
+   * @param {string} side
+   * @param {string} cardId
+   * @param {{ applyMove?: boolean }} [opts] — applyMove defaults true.
+   *   When false, cooldown/uses still consume but moveTo + partner sync
+   *   are deferred (adapter applies after both sides have acted so a
+   *   defense card can still be legal against a same-beat takedown).
+   */
+  playCard(side, cardId, opts = {}) {
+    const applyMove = opts.applyMove !== false;
     const s = this.state;
     const card = ACTIVE_CARDS[cardId];
     if (!card) return { error: 'unknownCard' };
@@ -153,13 +162,28 @@ export class CombatEngine {
       uses[cardId] = (uses[cardId] ?? card.maxUses) - 1;
     }
 
-    // Handle movement
-    if (card.moveTo) {
+    // Handle movement + partner sync (takedown → opponent on bottom, etc.)
+    if (applyMove && card.moveTo) {
       fighter.position = card.moveTo;
+      this._syncPartnerPosition(side, card.moveTo);
     }
 
     s.turnLog.push({ round: s.currentRound, turn: s.currentTurn, side, cardId });
-    return { success: true, card };
+    return { success: true, card, pendingMove: card.moveTo || null };
+  }
+
+  /**
+   * Apply a card's moveTo + partner sync after both sides have acted.
+   * No-op if the card has no moveTo.
+   */
+  applyCardMove(side, cardId) {
+    const card = ACTIVE_CARDS[cardId];
+    if (!card?.moveTo) return { success: false };
+    const s = this.state;
+    const fighter = side === 'A' ? s.fighterA : s.fighterB;
+    fighter.position = card.moveTo;
+    this._syncPartnerPosition(side, card.moveTo);
+    return { success: true, moveTo: card.moveTo };
   }
 
   moveManual(side, targetPosition) {
@@ -170,8 +194,39 @@ export class CombatEngine {
       return { error: 'invalidTransition', from: fighter.position, to: targetPosition };
     }
     fighter.position = targetPosition;
+    this._syncPartnerPosition(side, targetPosition);
     s.turnLog.push({ round: s.currentRound, turn: s.currentTurn, side, move: targetPosition });
     return { success: true };
+  }
+
+  /**
+   * Keep both fighters in a coherent shared phase.
+   * - Top control ⇒ partner on guard (bottom)
+   * - Guard control ⇒ partner on top
+   * - Standing up to clinch from the mat ⇒ partner also stands to clinch
+   * - Entering clinch from range ⇒ partner joins clinch
+   * Standing-range transitions (distance↔range) only move the actor.
+   */
+  _syncPartnerPosition(side, targetPosition) {
+    const s = this.state;
+    if (!s) return;
+    const other = side === 'A' ? s.fighterB : s.fighterA;
+    const isGround = (p) => p === POSITIONS.GROUND_TOP || p === POSITIONS.GROUND_GUARD;
+
+    if (targetPosition === POSITIONS.GROUND_TOP) {
+      other.position = POSITIONS.GROUND_GUARD;
+      return;
+    }
+    if (targetPosition === POSITIONS.GROUND_GUARD) {
+      other.position = POSITIONS.GROUND_TOP;
+      return;
+    }
+    if (targetPosition === POSITIONS.CLINCH) {
+      // Stand-up or clinch entry: both share the clinch pocket
+      if (isGround(other.position) || other.position === POSITIONS.RANGE || other.position === POSITIONS.DISTANCE) {
+        other.position = POSITIONS.CLINCH;
+      }
+    }
   }
 
   _addRoundScore(scoreA, scoreB) {

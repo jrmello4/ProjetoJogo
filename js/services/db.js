@@ -132,6 +132,33 @@ export class DB {
     });
   }
 
+  // Substitui várias stores numa única transação. É usado na importação de
+  // save: ou todos os dados do arquivo entram juntos, ou nenhum dado atual é
+  // perdido caso uma escrita falhe no meio do caminho.
+  async replaceStores(recordsByStore) {
+    const storeNames = Object.keys(recordsByStore);
+    if (storeNames.length === 0) return;
+
+    return new Promise((resolve, reject) => {
+      let tx;
+      try {
+        tx = this.db.transaction(storeNames, 'readwrite');
+        for (const storeName of storeNames) {
+          const store = tx.objectStore(storeName);
+          store.clear();
+          for (const item of recordsByStore[storeName]) store.put(item);
+        }
+      } catch (error) {
+        reject(error);
+        return;
+      }
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error('Falha ao substituir dados do save.'));
+      tx.onabort = () => reject(tx.error || new Error('Importação de save abortada.'));
+    });
+  }
+
   async getIndex(storeName, indexName, value) {
     return this._tx(storeName, (tx, store) => store.index(indexName).getAll(value));
   }

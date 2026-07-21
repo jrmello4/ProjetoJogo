@@ -8,10 +8,13 @@ export class Rivalry {
     this.history = data.history || [];
     this.active = data.active !== false;
     this.createdAt = data.createdAt || new Date().toISOString();
+    this.createdAtAbsWeek = data.createdAtAbsWeek ?? null;
+    this.lastHeatAbsWeek = data.lastHeatAbsWeek ?? this.createdAtAbsWeek;
   }
 
-  increaseIntensity(amount = 1) {
+  increaseIntensity(amount = 1, atAbsWeek = null) {
     this.intensity = Math.min(10, this.intensity + amount);
+    if (atAbsWeek != null) this.lastHeatAbsWeek = atAbsWeek;
   }
 
   addEvent(type, description) {

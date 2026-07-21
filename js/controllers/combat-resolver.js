@@ -1,5 +1,5 @@
 // js/controllers/combat-resolver.js
-import { ACTIVE_CARDS, PASSIVE_CARDS } from '../config/card-config.js';
+import { ACTIVE_CARDS } from '../config/card-config.js';
 
 export class CombatResolver {
   // Calculate damage from a card based on fighter attributes

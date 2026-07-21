@@ -98,6 +98,7 @@ export class CombatAdapter {
     }
 
     const roundTurns = [];
+    const cornerTally = [];
 
     for (let r = 1; r <= state.maxRounds; r++) {
       if (state.ended) break;
@@ -126,11 +127,20 @@ export class CombatAdapter {
           ? await this._waitForPlayerAction(state)
           : this._selectAiSideAction('A');
 
+        // Snapshot stances BEFORE either side mutates position — stage
+        // animations start from here and land on post-resolve positions.
+        // Card moveTo is DEFERRED until both sides have acted so a
+        // defense card remains legal against a same-beat takedown.
+        const preExchangePosA = state.fighterA.position;
+        const preExchangePosB = state.fighterB.position;
+        let moveSide = null;
+        let moveTo = null;
+
         if (playerAction.type === 'card') {
-          const preMovePosA = state.fighterA.position;
-          this.engine.playCard('A', playerAction.cardId);
-          this._maybeResistTakedown('A', playerAction.cardId, preMovePosA);
+          this.engine.playCard('A', playerAction.cardId, { applyMove: false });
         } else if (playerAction.type === 'move') {
+          moveSide = 'A';
+          moveTo = playerAction.position;
           this.engine.moveManual('A', playerAction.position);
         }
         // 'pass' = do nothing
@@ -149,17 +159,23 @@ export class CombatAdapter {
         // does NOT also play a card (aiCard stays null) — that naturally
         // routes into the existing cardA && !cardB / uncontested-player-
         // attack branch below, already correct and tested.
+        //
+        // Card selection uses the (possibly post-manual-move) positions;
+        // deferred card moves mean a standing defense is still available
+        // against a deferred takedown from the same beat.
         const availB = this.engine.getAvailableCards(state, 'B');
         const moveTargetB = AICombat.selectMoveAction(availB, state);
         let aiCard = null;
         if (moveTargetB) {
+          if (!moveSide) {
+            moveSide = 'B';
+            moveTo = moveTargetB;
+          }
           this.engine.moveManual('B', moveTargetB);
         } else {
           aiCard = AICombat.selectCard(availB, state, []);
           if (aiCard) {
-            const preMovePosB = state.fighterB.position;
-            this.engine.playCard('B', aiCard.id);
-            this._maybeResistTakedown('B', aiCard.id, preMovePosB);
+            this.engine.playCard('B', aiCard.id, { applyMove: false });
           }
         }
 
@@ -168,31 +184,78 @@ export class CombatAdapter {
         const cardA = playerAction.type === 'card' ? ACTIVE_CARDS[playerAction.cardId] : null;
         const cardB = aiCard || null;
 
+        // Defense vs takedown: neither shoot lands (no moveTo applied).
+        // solidBase passive can also stuff a deferred takedown.
+        const aShootStuffedByCard = cardA?.type === 'takedown' && cardB?.type === 'defense';
+        const bShootStuffedByCard = cardB?.type === 'takedown' && cardA?.type === 'defense';
+        const aShootStuffedByPassive =
+          !aShootStuffedByCard && cardA?.type === 'takedown' &&
+          this._rollSolidBaseStuff('B', preExchangePosB);
+        const bShootStuffedByPassive =
+          !bShootStuffedByCard && cardB?.type === 'takedown' &&
+          this._rollSolidBaseStuff('A', preExchangePosA);
+        const takedownStuffed =
+          aShootStuffedByCard || bShootStuffedByCard ||
+          aShootStuffedByPassive || bShootStuffedByPassive;
+
+        // Apply deferred moveTo + partner ground sync (manual moves already on).
+        this._applyDeferredCardMoves(cardA, cardB, {
+          skipA: aShootStuffedByCard || aShootStuffedByPassive,
+          skipB: bShootStuffedByCard || bShootStuffedByPassive,
+        });
+
+        let turnResult = null;
         if (cardA && cardB) {
-          const turnResult = CombatResolver.resolveTurn(state, cardA.id, cardB.id);
+          turnResult = CombatResolver.resolveTurn(state, cardA.id, cardB.id);
           roundTurns.push(turnResult);
+        } else if (cardA && !cardB) {
+          // Player attacked, AI had no card — player wins turn uncontested
+          turnResult = {
+            winner: 'A', margin: 30, effectiveA: 20, effectiveB: 0,
+            cardA, cardB: null, damageA: 15, damageB: 0,
+          };
+          roundTurns.push(turnResult);
+        } else if (!cardA && cardB) {
+          // Player passed/moved (no card), AI attacked — AI wins turn uncontested
+          turnResult = {
+            winner: 'B', margin: 30, effectiveA: 0, effectiveB: 20,
+            cardA: null, cardB, damageA: 0, damageB: 15,
+          };
+          roundTurns.push(turnResult);
+        }
 
-          if (interactive) this._showTurnResult(turnResult);
+        // Visual beat — only when a live player is watching. Blocks the
+        // next input until jab/queda/sprawl/chão sequence finishes.
+        if (interactive && this.container) {
+          await this.view.playExchange({
+            cardA,
+            cardB,
+            posA: state.fighterA.position,
+            posB: state.fighterB.position,
+            prePosA: preExchangePosA,
+            prePosB: preExchangePosB,
+            winner: turnResult?.winner ?? null,
+            takedownStuffed,
+            moveSide: !cardA && !cardB ? moveSide : null,
+            moveTo: !cardA && !cardB ? moveTo : null,
+            // damageA = damage dealt BY A (lands on B), and vice-versa
+            damageA: turnResult?.damageA ?? 0,
+            damageB: turnResult?.damageB ?? 0,
+          });
+          if (turnResult) {
+            this._showTurnResult(turnResult, takedownStuffed);
+            this._flashStaminaHit(turnResult);
+          }
+          this.view.update(this.container, state);
+        }
 
-          // Check for finish
+        if (turnResult && cardA && cardB) {
           const finish = CombatResolver.checkFinish(state, turnResult, r);
           if (finish) {
             state.ended = true;
             state.finishMethod = finish.method;
             break;
           }
-        } else if (cardA && !cardB) {
-          // Player attacked, AI had no card — player wins turn uncontested
-          roundTurns.push({
-            winner: 'A', margin: 30, effectiveA: 20, effectiveB: 0,
-            cardA, cardB: null, damageA: 15, damageB: 0,
-          });
-        } else if (!cardA && cardB) {
-          // Player passed/moved (no card), AI attacked — AI wins turn uncontested
-          roundTurns.push({
-            winner: 'B', margin: 30, effectiveA: 0, effectiveB: 20,
-            cardA: null, cardB, damageA: 0, damageB: 15,
-          });
         }
 
         state.turnOwner = state.turnOwner === 'A' ? 'B' : 'A';
@@ -221,6 +284,11 @@ export class CombatAdapter {
         if (interactive && this.container) {
           const skillEntry = this._pickRandomCoachSkill();
           const accepted = await this._showCornerOffer(skillEntry);
+          cornerTally.push({
+            round: r,
+            followed: accepted,
+            skill: skillEntry.name,
+          });
           if (accepted) {
             this._applyCoachSkill(skillEntry, state);
           }
@@ -233,6 +301,7 @@ export class CombatAdapter {
     }
 
     const result = this.engine._buildResult();
+    result.cornerTally = cornerTally;
 
     // Post-fight card reward — only the player (side A) can earn a card,
     // and only on a win (loss/draw leaves rewardCard null). Title fights
@@ -456,35 +525,32 @@ export class CombatAdapter {
     return BASE_DECAY * (1 - marathon.effect.value);
   }
 
-  // solidBase (takedownDefenseBonus) — 20% (passive's `value`) chance to
-  // negate a takedown card's position change when the defender (the side
-  // that did NOT play the card) holds solidBase and is currently in
-  // POSITIONS.RANGE. Implemented as a revert-after-playCard step: playCard
-  // already applies `card.moveTo` unconditionally and has no "skip move"
-  // flag, so capturing the mover's pre-call position and restoring it on a
-  // successful defense roll is the smallest change that works, and avoids
-  // touching combat-engine.js at all. Note that in the current position
-  // model, playCard only ever moves the CARD OWNER's own position (a
-  // takedown moves its player to GROUND_TOP — representing them taking top
-  // position); the opponent's position field is never touched by it. So
-  // "negating the position change" concretely means the attacker fails to
-  // advance to GROUND_TOP and the exchange stays at range — the closest
-  // faithful mapping of "defender stays in RANGE" onto this per-fighter-
-  // independent position model. Cooldown/uses are already consumed by the
-  // playCard call that ran before this — a resisted takedown still costs
-  // the attacker resources, per the finding's explicit call-out.
-  _maybeResistTakedown(attackerSide, cardId, preMovePosition) {
-    const card = ACTIVE_CARDS[cardId];
-    if (!card || card.type !== 'takedown') return;
+  /**
+   * solidBase (takedownDefenseBonus) — roll only. Does not mutate state;
+   * deferred moves are simply skipped when this returns true.
+   * @param {'A'|'B'} defenderSide
+   * @param {string} defenderPrePos position before the exchange
+   */
+  _rollSolidBaseStuff(defenderSide, defenderPrePos) {
     const state = this.engine.state;
-    const attackerFighter = attackerSide === 'A' ? state.fighterA : state.fighterB;
-    const defenderFighter = attackerSide === 'A' ? state.fighterB : state.fighterA;
-    const defenderPassives = attackerSide === 'A' ? state.passivesB : state.passivesA;
+    const defenderPassives = defenderSide === 'A' ? state.passivesA : state.passivesB;
     const solidBase = (defenderPassives || []).find(p => p.effect?.type === 'takedownDefenseBonus');
-    if (!solidBase) return;
-    if (defenderFighter.position !== solidBase.effect.position) return;
-    if (Math.random() < solidBase.effect.value) {
-      attackerFighter.position = preMovePosition;
+    if (!solidBase) return false;
+    if (defenderPrePos !== solidBase.effect.position) return false;
+    return Math.random() < solidBase.effect.value;
+  }
+
+  /**
+   * Apply deferred card.moveTo after both sides acted. Skips stuffed
+   * takedowns. When both land non-conflicting moves, A applies first then B
+   * (partner sync from the later call wins if both would set ground).
+   */
+  _applyDeferredCardMoves(cardA, cardB, { skipA = false, skipB = false } = {}) {
+    if (cardA?.moveTo && !skipA) {
+      this.engine.applyCardMove('A', cardA.id);
+    }
+    if (cardB?.moveTo && !skipB) {
+      this.engine.applyCardMove('B', cardB.id);
     }
   }
 
@@ -530,16 +596,59 @@ export class CombatAdapter {
     return side === 'A' ? totalA < totalB : totalB < totalA;
   }
 
-  _showTurnResult(turnResult) {
+  _showTurnResult(turnResult, takedownStuffed = false) {
     if (!this.container) return;
     const el = this.container.querySelector('.turn-result');
     if (!el) return;
     const winner = turnResult.winner === 'A' ? 'Você' : 'Oponente';
     const cardA = turnResult.cardA?.name || 'nada';
     const cardB = turnResult.cardB?.name || 'nada';
-    el.textContent = `Você jogou ${cardA} vs ${cardB} do oponente — ${winner} venceu o turno!`;
+    let text = `Você jogou ${cardA} vs ${cardB} do oponente — ${winner} venceu o turno!`;
+    if (takedownStuffed) {
+      text += ' · Queda defendida!';
+    } else {
+      const td = turnResult.cardA?.type === 'takedown' || turnResult.cardB?.type === 'takedown';
+      if (td) {
+        const pos = this.engine.state?.fighterA?.position || '';
+        if (String(pos).startsWith('ground')) text += ' · Luta vai ao chão!';
+      }
+    }
+    el.textContent = text;
     el.classList.remove('hidden');
     // Brief flash, then clear
-    setTimeout(() => el.classList.add('hidden'), 1500);
+    setTimeout(() => el.classList.add('hidden'), 1800);
+  }
+
+  /**
+   * Pulse stamina bars after an exchange — red flash on the side that
+   * absorbed damage, with a brief width-jump already handled by CSS
+   * transition on the fill width update.
+   */
+  _flashStaminaHit(turnResult) {
+    if (!this.container || !turnResult) return;
+    const bars = this.container.querySelectorAll('.stamina-bar');
+    if (!bars.length) return;
+    // bars[0] = A, bars[1] = B
+    const pulse = (idx, heavy) => {
+      const bar = bars[idx];
+      if (!bar) return;
+      const fill = bar.querySelector('.stamina-fill');
+      if (!fill) return;
+      fill.classList.remove('stamina-hit', 'stamina-hit-heavy');
+      void fill.offsetWidth;
+      fill.classList.add(heavy ? 'stamina-hit-heavy' : 'stamina-hit');
+      setTimeout(() => fill.classList.remove('stamina-hit', 'stamina-hit-heavy'), 450);
+    };
+    // damageA is damage dealt by A → B takes the hit
+    if ((turnResult.damageA || 0) > 0) pulse(1, (turnResult.damageA || 0) >= 25);
+    if ((turnResult.damageB || 0) > 0) pulse(0, (turnResult.damageB || 0) >= 25);
+    // Also shake the header strip on heavy exchanges
+    const header = this.container.querySelector('.combat-header');
+    if (header && ((turnResult.damageA || 0) >= 25 || (turnResult.damageB || 0) >= 25)) {
+      header.classList.remove('combat-header-shake');
+      void header.offsetWidth;
+      header.classList.add('combat-header-shake');
+      setTimeout(() => header.classList.remove('combat-header-shake'), 400);
+    }
   }
 }

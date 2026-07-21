@@ -10,6 +10,7 @@ import { DataGenerator } from './data-generator.js';
 import { HallOfFame } from './hall-of-fame.js';
 import { CrowdService } from './crowd-service.js';
 import { VisualIdentityService } from './visual-identity-service.js';
+import { CAREER_EVENT_TYPES } from './career-event-bus.js';
 import { generateId, getWeightClassName, formatWeeks } from '../utils/helpers.js';
 import {
   ACADEMIES,
@@ -38,7 +39,7 @@ import {
 // Motor do mundo vivo: cada promoção de IA agenda e realiza os próprios
 // eventos. Lutas do jogador entram nos cards via ofertas aceitas.
 export class WorldService {
-  constructor(db, fighterCtrl, notifService, titleService = null, scoutingService = null, contractService = null, managerService = null, careerLogService = null, rivalryService = null) {
+  constructor(db, fighterCtrl, notifService, titleService = null, scoutingService = null, contractService = null, managerService = null, careerLogService = null, rivalryService = null, careerEventBus = null) {
     this.db = db;
     this.fighterCtrl = fighterCtrl;
     this.notifService = notifService;
@@ -48,6 +49,7 @@ export class WorldService {
     this.managerService = managerService;
     this.careerLogService = careerLogService;
     this.rivalryService = rivalryService;
+    this.careerEventBus = careerEventBus;
   }
 
   // Fase 3 — reúne o contexto que decide o quanto o adversário conhece você.
@@ -164,7 +166,7 @@ export class WorldService {
     // Decaimento de rivalidade (item "sempre o mesmo cara") — sem isso a
     // rivalidade mais quente de anos atrás nunca solta o topo do sorteio.
     if (this.rivalryService && absWeekNow % RIVALRY_CONFIG.DECAY_INTERVAL_WEEKS === 0) {
-      await this.rivalryService.decayAll();
+      await this.rivalryService.decayAll(RIVALRY_CONFIG.DECAY_AMOUNT, absWeekNow);
     }
 
     return { playerEvents };
@@ -469,6 +471,21 @@ export class WorldService {
         // sabe mais sobre ele do que qualquer olheiro. Tarde demais.
         if (this.scoutingService) await this.scoutingService.observeAfterFight(fighterB.id);
         await this._settlePlayerFight(fight, result, promo, absWeekNow, titleOutcome);
+      }
+
+      if (this.careerEventBus) {
+        await this.careerEventBus.emit(CAREER_EVENT_TYPES.FIGHT_COMPLETED, {
+          eventId,
+          absWeek: absWeekNow,
+          promotionId: promo.id,
+          promotionName: promo.name,
+          playerFighterId,
+          fighterAId: fighterA.id,
+          fighterBId: fighterB.id,
+          isMainCard: fight.card === 'main',
+          cornerTally: result.cornerTally || [],
+          result,
+        });
       }
     }
 

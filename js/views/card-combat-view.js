@@ -1,5 +1,6 @@
 // js/views/card-combat-view.js
-import { ACTIVE_CARDS, PASSIVE_CARDS, POSITIONS, POSITION_TRANSITIONS, getCardIllustration } from '../config/card-config.js';
+import { ACTIVE_CARDS, POSITIONS, POSITION_TRANSITIONS, getCardIllustration } from '../config/card-config.js';
+import { CombatStage } from '../motion/combat-stage.js';
 
 // Canonical position name map — shared across all position-display methods
 const POSITION_NAMES = {
@@ -13,40 +14,71 @@ const POSITION_NAMES = {
 export class CardCombatView {
   constructor() {
     this.handlers = null;
+    this.stage = new CombatStage();
   }
 
   render(container, engineState, actions) {
     this.handlers = actions;
+    const fa = engineState.fighterA.ref;
+    const fb = engineState.fighterB.ref;
+
     container.innerHTML = `
       <div class="combat-container">
-        <div class="combat-header">
-          <div class="position-tracker">${this._renderPositionTracker(engineState)}</div>
-          <div class="round-display">Round ${engineState.currentRound} / ${engineState.maxRounds}</div>
-          <div class="stamina-display">
-            <div class="stamina-bar">
-              <label>${engineState.fighterA.ref.name}</label>
-              <div class="stamina-fill" style="width:${engineState.fighterA.stamina}%"></div>
-            </div>
-            <div class="stamina-bar">
-              <label>${engineState.fighterB.ref.name}</label>
-              <div class="stamina-fill opponent" style="width:${engineState.fighterB.stamina}%"></div>
-            </div>
-          </div>
+        <div class="combat-header" data-combat-header>
+          ${this._headerHTML(engineState)}
         </div>
-        <div class="card-hand">
+        ${CombatStage.buildHTML(fa, fb)}
+        <div class="card-hand" data-combat-hand>
           ${this._renderCardHand(engineState, 'A')}
         </div>
-        <div class="action-bar">
+        <div class="action-bar" data-combat-actions>
           ${this._renderActionButtons(engineState)}
         </div>
-        <div class="turn-result hidden"></div>
-        <div class="turn-log">
+        <div class="turn-result hidden" data-combat-result></div>
+        <div class="turn-log" data-combat-log>
           ${this._renderTurnLog(engineState)}
         </div>
       </div>
     `;
 
-    // Bind card click events
+    const stageEl = container.querySelector('[data-combat-stage]');
+    this.stage.attach(stageEl, fa, fb);
+    this.stage.setPositions(engineState.fighterA.position, engineState.fighterB.position);
+
+    this._bindInteractions(container);
+  }
+
+  /**
+   * Targeted update — keeps the combat stage DOM alive so animations
+   * and portraits are not destroyed between turns.
+   */
+  update(container, engineState) {
+    if (!container.querySelector('.combat-container') || !container.querySelector('[data-combat-stage]')) {
+      this.render(container, engineState, this.handlers);
+      return;
+    }
+
+    const header = container.querySelector('[data-combat-header]');
+    if (header) header.innerHTML = this._headerHTML(engineState);
+
+    const hand = container.querySelector('[data-combat-hand]');
+    if (hand) hand.innerHTML = this._renderCardHand(engineState, 'A');
+
+    const actions = container.querySelector('[data-combat-actions]');
+    if (actions) actions.innerHTML = this._renderActionButtons(engineState);
+
+    const log = container.querySelector('[data-combat-log]');
+    if (log) log.innerHTML = this._renderTurnLog(engineState);
+
+    // Only snap positions when not mid-animation (stage owns transitions during playExchange)
+    if (!this.stage._playing) {
+      this.stage.setPositions(engineState.fighterA.position, engineState.fighterB.position);
+    }
+
+    this._bindInteractions(container);
+  }
+
+  _bindInteractions(container) {
     container.querySelectorAll('.card-item:not(.disabled)').forEach(el => {
       el.addEventListener('click', () => {
         const cardId = el.dataset.cardId;
@@ -54,7 +86,6 @@ export class CardCombatView {
       });
     });
 
-    // Bind move buttons
     container.querySelectorAll('.move-btn').forEach(el => {
       el.addEventListener('click', () => {
         const pos = el.dataset.position;
@@ -62,13 +93,29 @@ export class CardCombatView {
       });
     });
 
-    // Bind pass button
     const passBtn = container.querySelector('.pass-btn');
     if (passBtn) {
       passBtn.addEventListener('click', () => {
         if (this.handlers?.onPass) this.handlers.onPass();
       });
     }
+  }
+
+  _headerHTML(engineState) {
+    return `
+      <div class="position-tracker">${this._renderPositionTracker(engineState)}</div>
+      <div class="round-display">Round ${engineState.currentRound} / ${engineState.maxRounds}</div>
+      <div class="stamina-display">
+        <div class="stamina-bar">
+          <label>${engineState.fighterA.ref.name}</label>
+          <div class="stamina-fill" style="width:${engineState.fighterA.stamina}%"></div>
+        </div>
+        <div class="stamina-bar">
+          <label>${engineState.fighterB.ref.name}</label>
+          <div class="stamina-fill opponent" style="width:${engineState.fighterB.stamina}%"></div>
+        </div>
+      </div>
+    `;
   }
 
   _renderPositionTracker(state) {
@@ -135,7 +182,6 @@ export class CardCombatView {
       [POSITIONS.GROUND_TOP]: 'Levantar (Chão → Clinch)',
       [POSITIONS.GROUND_GUARD]: 'Levantar (Chão → Clinch)',
     };
-    // Show only valid transitions from current position
     return `
       <button class="pass-btn">Passar Turno</button>
       ${allowed.map(pos => `<button class="move-btn" data-position="${pos}">Ir para ${posNames[pos] || pos}</button>`).join('')}
@@ -151,16 +197,22 @@ export class CardCombatView {
         ${lastFew.map(entry => {
           const card = entry.cardId ? ACTIVE_CARDS[entry.cardId] : null;
           const text = card ? `${entry.side === 'A' ? 'Jogador' : 'IA'} usou ${card.name}` :
-            entry.move ? `${entry.side === 'A' ? 'Jogador' : 'IA'} moveu para ${entry.move}` : '';
+            entry.move ? `${entry.side === 'A' ? 'Jogador' : 'IA'} moveu para ${POSITION_NAMES[entry.move] || entry.move}` : '';
           return `<div class="turn-log-entry">${text}</div>`;
         }).join('')}
       </div>
     `;
   }
 
-  update(container, engineState) {
-    // Re-render the whole view — in Phase 2 optimize with targeted updates
-    const actions = this.handlers;
-    this.render(container, engineState, actions);
+  /**
+   * Proxy to the stage for the adapter — plays the visual exchange and
+   * resolves when the animation sequence finishes.
+   */
+  playExchange(opts) {
+    return this.stage.playExchange(opts);
+  }
+
+  setStagePositions(posA, posB) {
+    this.stage.setPositions(posA, posB);
   }
 }

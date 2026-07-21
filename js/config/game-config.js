@@ -908,6 +908,7 @@ export const RIVALRY_CONFIG = {
   // pra trás esfria e libera espaço pra um rival novo aparecer.
   DECAY_INTERVAL_WEEKS: 8,
   DECAY_AMOUNT: 1,
+  NEW_RIVALRY_DECAY_GRACE_WEEKS: 20,
 };
 
 // Presets de simulação de período (fast-forward)

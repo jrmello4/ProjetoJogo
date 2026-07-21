@@ -167,7 +167,8 @@ export class FighterProfileView {
 
     const contractHtml = fighter.promotionContract?.status === 'active'
       ? `
-        <div class="card">
+        <div class="card contract-dossier">
+          <div class="document-kicker">REGISTRO PROMOCIONAL</div>
           <div class="card-header">
             <span class="card-title">Contrato · ${e(fighter.promotionContract.promotionName)}</span>
           </div>
@@ -189,7 +190,8 @@ export class FighterProfileView {
       `
       : fighter.promotionContract?.status === 'expired'
         ? `
-        <div class="card">
+        <div class="card contract-dossier">
+          <div class="document-kicker">REGISTRO PROMOCIONAL</div>
           <div class="card-header">
             <span class="card-title">Contrato</span>
           </div>
@@ -197,6 +199,19 @@ export class FighterProfileView {
         </div>
       `
         : '';
+
+    const injury = fighter.injury;
+    const medicalStatusHtml = injury
+      ? `
+        <div class="card medical-dossier">
+          <div class="document-kicker">PRONTUÁRIO MÉDICO ATIVO</div>
+          <div class="card-header"><span class="card-title">Afastamento em curso</span></div>
+          <div class="text-sm font-bold">${e(injury.description || injury.type || 'Lesão em acompanhamento')}</div>
+          <div class="text-xs text-muted mt-2">Fase: ${e({ rest: 'repouso', rehab: 'reabilitação', return: 'retorno gradual' }[injury.stage] || 'avaliação')}</div>
+          ${injury.restUntilAbsWeek ? `<div class="text-xs text-muted">Liberação prevista a partir da semana ${Number(injury.restUntilAbsWeek)}</div>` : ''}
+        </div>
+      `
+      : '';
 
     // Antes não existia jeito nenhum de encerrar a carreira por vontade
     // própria — só o prompt automático de fim de carreira (idade/janela de
@@ -407,6 +422,7 @@ export class FighterProfileView {
         </div>
       </div>
 
+      ${medicalStatusHtml}
       ${contractHtml}
 
       <!-- DNA Traits — §B.1: pro próprio jogador, só o que já foi descoberto -->
@@ -448,7 +464,8 @@ export class FighterProfileView {
 
       <!-- Sequelas permanentes (§B.2) -->
       ${(fighter.permanentScars || []).length > 0 ? `
-        <div class="card mt-4">
+        <div class="card mt-4 medical-dossier">
+          <div class="document-kicker">PRONTUÁRIO MÉDICO</div>
           <div class="card-header">
             <span class="card-title">Danos Permanentes</span>
           </div>
@@ -464,7 +481,8 @@ export class FighterProfileView {
 
       <!-- P10.1: Sequelas mecânicas de lesões -->
       ${(fighter.sequelae || []).length > 0 ? `
-        <div class="card mt-4">
+        <div class="card mt-4 medical-dossier">
+          <div class="document-kicker">PRONTUÁRIO MÉDICO</div>
           <div class="card-header">
             <span class="card-title">Sequelas de Combate</span>
           </div>

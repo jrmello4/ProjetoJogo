@@ -1,5 +1,6 @@
 const STORES = ['fighters', 'organization', 'events', 'fights', 'rivalries', 'hallOfFame', 'offers'];
 const SLOT_COUNT = 6;
+const SAVE_VERSION = 4;
 
 export class SaveService {
   constructor(db) {
@@ -46,7 +47,7 @@ export class SaveService {
   }
 
   async exportSave() {
-    const data = { exportedAt: new Date().toISOString(), version: 3 };
+    const data = { exportedAt: new Date().toISOString(), version: SAVE_VERSION };
     for (const store of STORES) {
       data[store] = await this.db.getAll(store);
     }
@@ -61,20 +62,63 @@ export class SaveService {
     } catch {
       throw new Error('Arquivo de save corrompido — não foi possível ler os dados.');
     }
-    for (const store of STORES) {
-      if (!Array.isArray(data[store])) {
-        throw new Error('Arquivo de save inválido — dados do store "' + store + '" ausentes ou mal formatados.');
-      }
-    }
-    for (const store of STORES) {
-      await this.db.clear(store);
-      const items = data[store] || [];
-      if (items.length > 0) await this.db.batchPut(store, items);
-    }
-    await this.db.clear('gameState');
-    const gameStates = Array.isArray(data.gameState) ? data.gameState : [data.gameState].filter(Boolean);
-    if (gameStates.length > 0) await this.db.batchPut('gameState', gameStates);
+    const normalized = this._validateAndNormalize(data);
+    await this.db.replaceStores(normalized);
     return true;
+  }
+
+  _validateAndNormalize(data) {
+    const version = data.version ?? 1;
+    if (!Number.isInteger(version) || version < 1 || version > SAVE_VERSION) {
+      throw new Error(`Arquivo de save incompatível (versão ${String(version)}).`);
+    }
+
+    const normalized = {};
+    for (const store of STORES) {
+      normalized[store] = this._validateRecords(store, data[store]);
+    }
+    const gameStates = this._validateRecords('gameState', data.gameState);
+    if (!gameStates.some(record => record.id === 'state')) {
+      throw new Error('Arquivo de save inválido — estado principal da carreira ausente.');
+    }
+
+    // Saves antigos não tinham meta/career. Os dois documentos são aditivos;
+    // o GameController executa a migração real no próximo boot.
+    if (!gameStates.some(record => record.id === 'meta')) {
+      gameStates.push({
+        id: 'meta', mode: 'career-1-fighter', schemaVersion: 0,
+        patches: [], importedFromSaveVersion: version,
+      });
+    }
+    if (!gameStates.some(record => record.id === 'career')) {
+      gameStates.push({ id: 'career', playerFighterId: null });
+    }
+
+    const career = gameStates.find(record => record.id === 'career');
+    if (career?.playerFighterId && !normalized.fighters.some(fighter => fighter.id === career.playerFighterId)) {
+      throw new Error('Arquivo de save inválido — lutador da carreira não existe no roster.');
+    }
+
+    normalized.gameState = gameStates;
+    return normalized;
+  }
+
+  _validateRecords(store, records) {
+    if (!Array.isArray(records)) {
+      throw new Error('Arquivo de save inválido — dados do store "' + store + '" ausentes ou mal formatados.');
+    }
+
+    const ids = new Set();
+    for (const record of records) {
+      if (!record || typeof record !== 'object' || record.id == null || record.id === '') {
+        throw new Error('Arquivo de save inválido — registro sem id em "' + store + '".');
+      }
+      if (ids.has(record.id)) {
+        throw new Error('Arquivo de save inválido — id duplicado em "' + store + '": ' + record.id);
+      }
+      ids.add(record.id);
+    }
+    return records;
   }
 
   async resetGame() {

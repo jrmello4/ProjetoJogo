@@ -44,6 +44,12 @@ export class ThreeFaceOff {
     this.renderer = null;
     this.redSpot = null;
     this.blueSpot = null;
+    this.fighterGroups = { A: null, B: null };
+    this.feedbackState = {
+      dominance: 0, fatigue: 0, danger: 0, critical: false, turnaround: false,
+      finish: false, winnerSide: null,
+    };
+    this._isShaking = false;
     this.clock = new THREE.Clock();
     this.disposed = false;
     this._rafId = null;
@@ -73,8 +79,8 @@ export class ThreeFaceOff {
     this.container.appendChild(this.renderer.domElement);
 
     this.createLights();
-    this.createFighterSilhouette(-1.5, this.redColor);  // Red corner = fighterA
-    this.createFighterSilhouette(1.5, this.blueColor);  // Blue corner = fighterB
+    this.createFighterSilhouette(-1.5, this.redColor, 'A');  // Red corner = fighterA
+    this.createFighterSilhouette(1.5, this.blueColor, 'B');  // Blue corner = fighterB
     this.createGround();
     this.createParticles();
 
@@ -106,7 +112,7 @@ export class ThreeFaceOff {
     this.scene.add(fill);
   }
 
-  createFighterSilhouette(xPos, color) {
+  createFighterSilhouette(xPos, color, side) {
     const group = new THREE.Group();
 
     const mat = new THREE.MeshStandardMaterial({
@@ -167,6 +173,7 @@ export class ThreeFaceOff {
     group.add(glow);
 
     group.position.x = xPos;
+    this.fighterGroups[side] = group;
     this.scene.add(group);
   }
 
@@ -226,8 +233,26 @@ export class ThreeFaceOff {
 
   // === Reações a eventos da luta ===
 
+  // Estado descritivo da luta. Nunca recebe decis\u00f5es do motor de combate:
+  // s\u00f3 resultados j\u00e1 acontecidos, para tornar transmiss\u00e3o leg\u00edvel.
+  setFightState(state = {}) {
+    const bounded = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
+    this.feedbackState = {
+      ...this.feedbackState,
+      dominance: bounded(state.dominance ?? this.feedbackState.dominance, -1, 1),
+      fatigue: bounded(state.fatigue ?? this.feedbackState.fatigue, 0, 1),
+      danger: bounded(state.danger ?? this.feedbackState.danger, 0, 1),
+      critical: state.critical ?? this.feedbackState.critical,
+      turnaround: state.turnaround ?? this.feedbackState.turnaround,
+      finish: state.finish ?? this.feedbackState.finish,
+      winnerSide: state.winnerSide ?? this.feedbackState.winnerSide,
+    };
+  }
+
   onKnockdown() {
     if (this.disposed || !this.redSpot || !this.blueSpot) return;
+    this.setFightState({ danger: 1, critical: true });
+    this._isShaking = true;
     // Flash momentâneo — intensifica os spots
     this.redSpot.intensity = 8;
     this.blueSpot.intensity = 8;
@@ -238,8 +263,7 @@ export class ThreeFaceOff {
         if (shakeCount++ > 6 || this.disposed) {
           this.camera.position.x = 0;
           this.camera.position.y = 2;
-          this.redSpot.intensity = 3;
-          this.blueSpot.intensity = 3;
+          this._isShaking = false;
           return;
         }
         this.camera.position.x = (Math.random() - 0.5) * 0.3;
@@ -252,6 +276,8 @@ export class ThreeFaceOff {
 
   onFinish() {
     if (this.disposed) return;
+    this.setFightState({ danger: 1, critical: true, finish: true });
+    this._isShaking = true;
     // Flash mais intenso
     if (this.redSpot) this.redSpot.intensity = 10;
     if (this.blueSpot) this.blueSpot.intensity = 10;
@@ -269,8 +295,7 @@ export class ThreeFaceOff {
             this.camera.position.x = 0;
             this.camera.position.y = 2;
           }
-          if (this.redSpot) this.redSpot.intensity = 3;
-          if (this.blueSpot) this.blueSpot.intensity = 3;
+          this._isShaking = false;
         }, 500);
       };
       shake();
@@ -301,10 +326,33 @@ export class ThreeFaceOff {
     const elapsed = this.clock.getElapsedTime();
 
     // Subtle camera sway (se não estiver em shake)
-    if (this.camera && Math.abs(this.camera.position.x) < 0.1) {
+    if (this.camera && !this._isShaking) {
       this.camera.position.x = Math.sin(elapsed * 0.3) * 0.5;
       this.camera.lookAt(0, 1.2, 0);
     }
+
+    const feedback = this.feedbackState;
+    const redControl = Math.max(0, feedback.dominance);
+    const blueControl = Math.max(0, -feedback.dominance);
+    const criticalBoost = feedback.critical ? 0.8 : 0;
+    const redTarget = 3 + redControl * 2.4 + criticalBoost;
+    const blueTarget = 3 + blueControl * 2.4 + criticalBoost;
+    if (this.redSpot) this.redSpot.intensity += (redTarget - this.redSpot.intensity) * 0.1;
+    if (this.blueSpot) this.blueSpot.intensity += (blueTarget - this.blueSpot.intensity) * 0.1;
+
+    const updateFighter = (group, control, side) => {
+      if (!group) return;
+      const won = feedback.finish && feedback.winnerSide === side;
+      const lost = feedback.finish && feedback.winnerSide && feedback.winnerSide !== side;
+      const targetScale = 1 + control * 0.09 - feedback.fatigue * 0.035 + (won ? 0.11 : 0) - (lost ? 0.07 : 0);
+      const targetY = control * 0.08 + (won ? 0.1 : 0) - (lost ? 0.06 : 0);
+      group.scale.x += (targetScale - group.scale.x) * 0.08;
+      group.scale.y += (targetScale - group.scale.y) * 0.08;
+      group.scale.z += (targetScale - group.scale.z) * 0.08;
+      group.position.y += (targetY - group.position.y) * 0.08;
+    };
+    updateFighter(this.fighterGroups.A, redControl, 'A');
+    updateFighter(this.fighterGroups.B, blueControl, 'B');
 
     // Animate particles
     if (this.particles) {
@@ -314,6 +362,9 @@ export class ThreeFaceOff {
         if (positions[i + 1] > 3) positions[i + 1] = 0;
       }
       this.particles.geometry.attributes.position.needsUpdate = true;
+      const particleMaterial = this.particles.material;
+      particleMaterial.size += (0.02 + feedback.danger * 0.025 - particleMaterial.size) * 0.08;
+      particleMaterial.opacity += (0.5 + (feedback.critical ? 0.2 : 0) - particleMaterial.opacity) * 0.08;
     }
 
     this.renderer.render(this.scene, this.camera);

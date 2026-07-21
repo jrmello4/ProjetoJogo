@@ -20,6 +20,8 @@ export class ThreeArena {
     this.cageMesh = null;
     this.particles = null;
     this.spotLights = [];
+    this.arenaLights = { red: null, warm: null, rim: null };
+    this.feedbackState = { dominance: 0, fatigue: 0, danger: 0, critical: false };
     this.mouseX = 0;
     this.mouseY = 0;
     this.targetRotY = 0;
@@ -156,6 +158,7 @@ export class ThreeArena {
     const rim = new THREE.PointLight(0x2f6bbf, 0.3, 15);
     rim.position.set(-5, 4, -5);
     this.scene.add(rim);
+    this.arenaLights = { red: spotRed, warm: spotWarm, rim };
   }
 
   createOctagon() {
@@ -380,6 +383,19 @@ export class ThreeArena {
     return shape;
   }
 
+  // API comum com o face-off: o cenário reage a estado já decidido pelo
+  // simulador, sem jamais influenciar placar, fadiga ou resultado.
+  setFightState(state = {}) {
+    const bounded = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
+    this.feedbackState = {
+      ...this.feedbackState,
+      dominance: bounded(state.dominance ?? this.feedbackState.dominance, -1, 1),
+      fatigue: bounded(state.fatigue ?? this.feedbackState.fatigue, 0, 1),
+      danger: bounded(state.danger ?? this.feedbackState.danger, 0, 1),
+      critical: state.critical ?? this.feedbackState.critical,
+    };
+  }
+
   onResize() {
     if (!this.container || !this.renderer) return;
     const { width, height } = this.container.getBoundingClientRect();
@@ -435,6 +451,22 @@ export class ThreeArena {
       this.camera.lookAt(0, 0, 0);
     }
 
+    const feedback = this.feedbackState;
+    const redControl = Math.max(0, feedback.dominance);
+    const blueControl = Math.max(0, -feedback.dominance);
+    if (this.arenaLights.red) {
+      const target = 2 + redControl * 1.3 + feedback.danger * 0.7;
+      this.arenaLights.red.intensity += (target - this.arenaLights.red.intensity) * 0.05;
+    }
+    if (this.arenaLights.warm) {
+      const target = 0.5 + feedback.danger * 0.55 + (feedback.critical ? 0.3 : 0);
+      this.arenaLights.warm.intensity += (target - this.arenaLights.warm.intensity) * 0.05;
+    }
+    if (this.arenaLights.rim) {
+      const target = 0.3 + blueControl * 0.9 + feedback.fatigue * 0.2;
+      this.arenaLights.rim.intensity += (target - this.arenaLights.rim.intensity) * 0.05;
+    }
+
     // Animate particles
     if (this.particles) {
       const positions = this.particles.geometry.attributes.position.array;
@@ -446,6 +478,9 @@ export class ThreeArena {
       }
       this.particles.geometry.attributes.position.needsUpdate = true;
       this.particles.rotation.y += 0.001;
+      const particleMaterial = this.particles.material;
+      particleMaterial.size += (0.03 + feedback.danger * 0.02 - particleMaterial.size) * 0.05;
+      particleMaterial.opacity += (0.6 + (feedback.critical ? 0.15 : 0) - particleMaterial.opacity) * 0.05;
     }
 
     this.renderer.render(this.scene, this.camera);

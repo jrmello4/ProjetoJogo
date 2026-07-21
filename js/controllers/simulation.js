@@ -495,19 +495,25 @@ export class SimulationEngine {
 
     // Épico C: novos atributos expandidos
     const a = fighter.attributes;
+    // Atributos já entram em técnica, striking e grappling. Usá-los de novo
+    // em seis multiplicadores absolutos fazia +10 em tudo virar vitória quase
+    // certa. Mantemos a diferença relevante, mas comprimimos-a em torno de
+    // 50 para que preparo, estilo, cards e a noite da luta continuem importando.
+    const softSkill = (value) => 50 + ((value ?? 50) - 50) * 0.55;
+    const relativeFactor = (value, divisor = 500) => 1 + ((value ?? 50) - 50) / divisor;
 
     // Fôlego: recovery ajuda a manter stamina entre rounds
-    const recoveryBonus = 1 + (a.recovery ?? 50) / 200;
+    const recoveryBonus = relativeFactor(a.recovery);
     const adjustedStamina = staminaEffect * recoveryBonus;
 
     // Plano de jogo (a luta inteira) × instrução de córner (este round)
-    const technique = fighter.techniqueScore * fatiguePenalty * adjustedStamina;
-    const cardio = a.cardio * fatiguePenalty * moraleFactor * adjustedStamina * game.cardioMod;
+    const technique = softSkill(fighter.techniqueScore) * fatiguePenalty * adjustedStamina;
+    const cardio = softSkill(a.cardio) * fatiguePenalty * moraleFactor * adjustedStamina * game.cardioMod;
 
     // Perk: cardioRegeneration restaura um pouco de stamina
     const cardioEffective = cardio * (1 + (mods.cardioRegeneration || 0));
 
-    const iq = a.fightIQ * determinationFactor;
+    const iq = softSkill(a.fightIQ) * determinationFactor;
 
     // Striking: weighted average from moveset proficiency (spec Seção 2)
     // Cada golpe do moveset contribui com seu damageMult (que já inclui proficiência)
@@ -521,43 +527,43 @@ export class SimulationEngine {
     // Perk: strikingLateRound melhora striking nos rounds finais
     const strikingLateBonus = mods.strikingLateRound || 1;
 
-    const strikingPower = 1 + (a.power ?? 50) / 200;
-    const strikingDefense = 1 + ((a.footwork ?? 50) + (a.headMovement ?? 50)) / 400;
-    const strikingSpeed = 1 + (a.speed ?? 50) / 200;
-    const aggressionMod = 1 + ((a.aggression ?? 50) - 50) / 200;
-    const clinchFactor = 1 + (a.clinch ?? 50) / 300;
+    const strikingPower = relativeFactor(a.power);
+    const strikingDefense = 1 + (((a.footwork ?? 50) - 50) + ((a.headMovement ?? 50) - 50)) / 900;
+    const strikingSpeed = relativeFactor(a.speed);
+    const aggressionMod = relativeFactor(a.aggression);
+    const clinchFactor = relativeFactor(a.clinch, 600);
 
     // Perk: powerMultiplier amplifica potência
     const powerMult = mods.powerMultiplier || 1;
 
-    const striking = fighter.strikingScore * fatiguePenalty * adjustedStamina
+    const striking = softSkill(fighter.strikingScore) * fatiguePenalty * adjustedStamina
       * corner.strikingMod * game.strikingMod
       * strikingPower * strikingSpeed * aggressionMod * strikingDefense * clinchFactor
       * effectiveStrikingMult * strikingLateBonus * powerMult;
 
     // Grappling: wrestling/bjj + takedowns, takedownDefense, groundControl, submissionOffense, strength
-    const tdPower = 1 + (a.takedowns ?? 50) / 200;
-    const tdDefense = 1 + (a.takedownDefense ?? 50) / 300;
-    const groundBonus = 1 + (a.groundControl ?? 50) / 300;
-    const strengthMod = 1 + (a.strength ?? 50) / 300;
+    const tdPower = relativeFactor(a.takedowns);
+    const tdDefense = relativeFactor(a.takedownDefense, 600);
+    const groundBonus = relativeFactor(a.groundControl, 600);
+    const strengthMod = relativeFactor(a.strength, 600);
     // subOff/subDef entram no baseScore via submissionOffense/submissionDefense
     // já devolvidos abaixo pro subAdvantage de _checkRoundFinish — aqui só
     // reforçam o próprio grappling score de quem tem as duas pontas fortes.
-    const subOff = (a.submissionOffense ?? 50) / 100;
-    const subDef = (a.submissionDefense ?? 50) / 100;
+    const subOff = a.submissionOffense ?? 50;
+    const subDef = a.submissionDefense ?? 50;
 
-    const grappling = fighter.grapplingScore * fatiguePenalty * adjustedStamina
+    const grappling = softSkill(fighter.grapplingScore) * fatiguePenalty * adjustedStamina
       * corner.grapplingMod * game.grapplingMod
-      * tdPower * tdDefense * groundBonus * strengthMod * (1 + (subOff + subDef) / 4);
+      * tdPower * tdDefense * groundBonus * strengthMod * (1 + ((subOff - 50) + (subDef - 50)) / 600);
 
     // Chin + durability (novo): resistência a nocautes
-    const chin = a.chin * (1 + ((a.durability ?? 50) - 50) / 200);
+    const chin = softSkill(a.chin) * relativeFactor(a.durability, 500);
 
     // Adaptability: melhora o plano de jogo quanto mais dura a luta
-    const adaptBonus = 1 + ((a.adaptability ?? 50) - 50) / 300;
+    const adaptBonus = relativeFactor(a.adaptability, 500);
 
     // Composure: ajuda em big events e decisões apertadas
-    const composureFactor = 1 + ((a.composure ?? 50) - 50) / 200;
+    const composureFactor = relativeFactor(a.composure, 400);
 
     // Perk: composureLateRounds protege performance nos rounds finais
     const composureLateBonus = mods.composureLateRounds || 1;
@@ -573,9 +579,9 @@ export class SimulationEngine {
       chin * 0.05 +
       styleAdvantage * 5 +
       // Novos atributos contribuem para o score base
-      (a.power ?? 50) * 0.02 +
-      (a.speed ?? 50) * 0.02 +
-      (a.strength ?? 50) * 0.01;
+      softSkill(a.power) * 0.02 +
+      softSkill(a.speed) * 0.02 +
+      softSkill(a.strength) * 0.01;
 
     const noise = Gaussian.random(0, 9);
     // A leitura do adversário: acertar o plano paga, errar cobra.

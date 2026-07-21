@@ -72,7 +72,7 @@ export class MotionEngine {
 
   /** Page enter — called after view HTML is injected */
   animatePageEnter(container) {
-    if (!container) return;
+    if (!container || !gsap || !ScrollTrigger) return;
 
     // Never animate the container's own opacity. A render that overlaps this
     // one calls gsap.killTweensOf(container) and would strand it at opacity 0
@@ -105,6 +105,7 @@ export class MotionEngine {
   }
 
   _staggerCards(container) {
+    if (!gsap) return;
     const cards = container.querySelectorAll('.card, .stat-card');
     if (!cards.length) return;
 
@@ -124,6 +125,7 @@ export class MotionEngine {
   }
 
   _bindScrollReveals(container) {
+    if (!gsap || !ScrollTrigger) return;
     this._clearScrollTriggers();
 
     container.querySelectorAll('[data-reveal]').forEach((el) => {
@@ -163,6 +165,7 @@ export class MotionEngine {
   }
 
   _bindParallax(container) {
+    if (!gsap || !ScrollTrigger) return;
     container.querySelectorAll('[data-parallax]').forEach((el) => {
       const speed = parseFloat(el.dataset.parallax) || 0.15;
       const trigger = ScrollTrigger.create({
@@ -179,6 +182,10 @@ export class MotionEngine {
   }
 
   animateStatCount(el, end, duration = 800, formatter = (n) => n.toLocaleString('pt-BR')) {
+    if (!gsap) {
+      el.textContent = formatter(end);
+      return;
+    }
     const obj = { val: 0 };
     gsap.to(obj, {
       val: end,
@@ -191,7 +198,7 @@ export class MotionEngine {
   }
 
   animateNavIndicator(activeLink) {
-    if (!activeLink) return;
+    if (!activeLink || !gsap) return;
     gsap.fromTo(
       activeLink,
       { scale: 0.95 },
@@ -208,7 +215,7 @@ export class MotionEngine {
   }
 
   refresh() {
-    ScrollTrigger.refresh();
+    ScrollTrigger?.refresh();
   }
 
   _clearScrollTriggers() {
@@ -218,7 +225,7 @@ export class MotionEngine {
 
   dispose() {
     this._clearScrollTriggers();
-    if (this._tickerFn) gsap.ticker.remove(this._tickerFn);
+    if (this._tickerFn && gsap) gsap.ticker.remove(this._tickerFn);
     this.lenis?.destroy();
     this.lenis = null;
   }

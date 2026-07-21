@@ -48,6 +48,57 @@ describe('CombatEngine', () => {
     expect(loadout.active).toContain('overhand');
     expect(loadout.active).toContain('highKick');
   });
+
+  it('takedown moveTo puts attacker on top and opponent on guard', () => {
+    const engine = new CombatEngine();
+    const fighterA = createFighter(1, 'Player');
+    const fighterB = createFighter(2, 'Opponent');
+    const loadout = getDefaultLoadout('grappler');
+    engine.state = engine._initState(fighterA, fighterB, false, loadout, loadout);
+    // doubleLeg requires RANGE
+    engine.state.fighterA.position = 'range';
+    engine.state.fighterB.position = 'range';
+
+    const result = engine.playCard('A', 'doubleLeg');
+    expect(result.success).toBe(true);
+    expect(engine.state.fighterA.position).toBe('groundTop');
+    expect(engine.state.fighterB.position).toBe('groundGuard');
+  });
+
+  it('deferred playCard does not move until applyCardMove', () => {
+    const engine = new CombatEngine();
+    const fighterA = createFighter(1, 'Player');
+    const fighterB = createFighter(2, 'Opponent');
+    const loadout = getDefaultLoadout('grappler');
+    engine.state = engine._initState(fighterA, fighterB, false, loadout, loadout);
+    engine.state.fighterA.position = 'range';
+    engine.state.fighterB.position = 'range';
+
+    const result = engine.playCard('A', 'doubleLeg', { applyMove: false });
+    expect(result.success).toBe(true);
+    expect(result.pendingMove).toBe('groundTop');
+    expect(engine.state.fighterA.position).toBe('range');
+    expect(engine.state.fighterB.position).toBe('range');
+
+    engine.applyCardMove('A', 'doubleLeg');
+    expect(engine.state.fighterA.position).toBe('groundTop');
+    expect(engine.state.fighterB.position).toBe('groundGuard');
+  });
+
+  it('stand-up to clinch brings partner off the mat', () => {
+    const engine = new CombatEngine();
+    const fighterA = createFighter(1, 'Player');
+    const fighterB = createFighter(2, 'Opponent');
+    const loadout = getDefaultLoadout('balanced');
+    engine.state = engine._initState(fighterA, fighterB, false, loadout, loadout);
+    engine.state.fighterA.position = 'groundTop';
+    engine.state.fighterB.position = 'groundGuard';
+
+    const result = engine.moveManual('A', 'clinch');
+    expect(result.success).toBe(true);
+    expect(engine.state.fighterA.position).toBe('clinch');
+    expect(engine.state.fighterB.position).toBe('clinch');
+  });
 });
 
 describe('CombatResolver', () => {

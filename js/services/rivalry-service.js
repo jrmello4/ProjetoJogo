@@ -27,17 +27,21 @@ export class RivalryService {
     return found ? new Rivalry(found) : null;
   }
 
-  async createRivalry(fighterAId, fighterBId, type = 'competitive') {
+  async createRivalry(fighterAId, fighterBId, type = 'competitive', options = {}) {
     const existing = await this.getRivalryBetween(fighterAId, fighterBId);
     if (existing) return existing;
+
+    const { atAbsWeek = null, initialIntensity = 2 } = options;
 
     const rivalry = new Rivalry({
       id: 'rvl-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
       fighterAId,
       fighterBId,
-      intensity: 1,
+      intensity: initialIntensity,
       type,
-      history: [{ type: 'created', description: 'Rivalidade formada após luta' }],
+      createdAtAbsWeek: atAbsWeek,
+      lastHeatAbsWeek: atAbsWeek,
+      history: [{ type: 'created', description: 'Rivalidade formada após luta', absWeek: atAbsWeek }],
     });
 
     await this.db.put('rivalries', rivalry);
@@ -57,7 +61,7 @@ export class RivalryService {
     if (existing) {
       // Wrap plain DB object in Rivalry instance
       const rivalry = new Rivalry(existing);
-      rivalry.increaseIntensity(1);
+      rivalry.increaseIntensity(1, atAbsWeek);
       rivalry.addEvent('rematch', `Rematch — ${result.winnerName} venceu`);
 
       // §D.3 — uma rivalidade que ainda não tem identidade própria
@@ -80,7 +84,7 @@ export class RivalryService {
     if (shouldCreate) {
       const fallback = isClose ? 'competitive' : 'personal';
       const type = await this._deriveType(fighterA.id, fighterB.id, result, atAbsWeek, fallback);
-      const rivalry = await this.createRivalry(fighterA.id, fighterB.id, type);
+      const rivalry = await this.createRivalry(fighterA.id, fighterB.id, type, { atAbsWeek });
 
       if (this.careerLogService && atAbsWeek != null) {
         const isPlayerA = fighterA.id === playerFighterId;
@@ -137,13 +141,25 @@ export class RivalryService {
   // Chamado do WorldService a cada RIVALRY_CONFIG.DECAY_INTERVAL_WEEKS.
   // Desativa (`active = false`) quem chega a 0 — deixa de monopolizar
   // seleção, mas o histórico continua no banco.
-  async decayAll(amount = RIVALRY_CONFIG.DECAY_AMOUNT) {
+  async decayAll(amount = RIVALRY_CONFIG.DECAY_AMOUNT, absWeekNow = null) {
     const active = await this.getAllActive();
     for (const rivalry of active) {
+      const lastHeat = rivalry.lastHeatAbsWeek ?? rivalry.createdAtAbsWeek;
+      if (absWeekNow != null && lastHeat != null && absWeekNow - lastHeat <= RIVALRY_CONFIG.NEW_RIVALRY_DECAY_GRACE_WEEKS) {
+        continue;
+      }
       rivalry.intensity = Math.max(0, rivalry.intensity - amount);
       if (rivalry.intensity <= 0) rivalry.active = false;
       await this.db.put('rivalries', rivalry);
     }
+  }
+
+  async getRivalryHistory(fighterId) {
+    const all = await this.db.getAll('rivalries');
+    return all
+      .filter(r => r.fighterAId === fighterId || r.fighterBId === fighterId)
+      .map(r => new Rivalry(r))
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   }
 
   // Épico F1: a provocação na coletiva de imprensa esquenta a rivalidade

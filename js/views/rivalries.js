@@ -1,81 +1,78 @@
-// §D.3 — origem/identidade da rivalidade: rótulo curto + ícone pra dar
-// contexto rápido ao lado da intensidade. 'personal' é o tipo legado (nascido
-// de hype de coletiva, ver RivalryService.addPressConferenceHeat) — não faz
-// parte da derivação nova, mas ainda pode existir em rivalidades já salvas.
 import { e } from '../utils/helpers.js';
+
 const RIVALRY_TYPE_INFO = {
-  grudge: { icon: '🔥', label: 'Grudge' },
-  robbery: { icon: '⚖️', label: 'Roubada' },
-  competitive: { icon: '🥊', label: 'Competitiva' },
-  personal: { icon: '😤', label: 'Pessoal' },
+  grudge: { icon: 'Fogo', label: 'Grudge' },
+  robbery: { icon: 'Juizes', label: 'Roubada' },
+  competitive: { icon: 'Ranking', label: 'Competitiva' },
+  personal: { icon: 'Pessoal', label: 'Pessoal' },
 };
 
 function rivalryTypeInfo(type) {
-  return RIVALRY_TYPE_INFO[type] || { icon: '🥊', label: type || 'Competitiva' };
+  return RIVALRY_TYPE_INFO[type] || { icon: 'Ranking', label: type || 'Competitiva' };
 }
 
 export class RivalriesView {
-  static render(rivalries, fighters) {
-    if (rivalries.length === 0) {
-      return `
-        <div class="page-header">
-          <h2>Rivalidades</h2>
-          <p>Conflitos e rivalidades entre lutadores</p>
-        </div>
-        <div class="empty-state">
-          <p>Nenhuma rivalidade ativa. Rivalidades se formam após lutas intensas.</p>
-        </div>
-      `;
-    }
-
+  static render(rivalries = [], fighters = [], archived = []) {
     const getFighterName = (id) => {
-      const f = fighters.find(f => f.id === id);
-      return f ? f.name : 'Desconhecido';
+      const fighter = fighters.find(item => item.id === id);
+      return fighter ? fighter.name : 'Desconhecido';
     };
+
+    const renderDossier = (rivalry, { archived: isArchived = false } = {}) => {
+      const typeInfo = rivalryTypeInfo(rivalry.type);
+      const history = rivalry.history || [];
+      const intensity = Math.max(0, Math.min(10, Number(rivalry.intensity) || 0));
+      const lastEvent = history[history.length - 1];
+      return `
+        <article class="card rivalry-dossier ${isArchived ? 'rivalry-dossier--archived' : ''}">
+          <div class="document-kicker">${isArchived ? 'ARQUIVO DE CONFLITOS' : 'DOSSIÊ DE CONFLITO'}</div>
+          <div class="flex items-center justify-between mb-3">
+            <span class="badge ${intensity >= 7 ? 'badge-danger' : intensity >= 4 ? 'badge-warning' : 'badge-info'}">
+              ${e(rivalry.intensityLabel || 'Rivalidade')} (${intensity}/10)
+            </span>
+            <span class="text-xs text-muted" title="Origem da rivalidade">${e(typeInfo.icon)} · ${e(typeInfo.label)}</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <div class="text-center"><div class="font-bold">${e(getFighterName(rivalry.fighterAId))}</div></div>
+            <div class="text-danger font-bold">VS</div>
+            <div class="text-center"><div class="font-bold">${e(getFighterName(rivalry.fighterBId))}</div></div>
+          </div>
+          <div class="progress-bar mt-2" style="height:8px">
+            <div class="progress-fill ${intensity >= 7 ? 'low' : intensity >= 4 ? 'medium' : 'high'}" style="width:${intensity * 10}%"></div>
+          </div>
+          <div class="text-xs text-muted mt-2">
+            ${history.length} eventos · ${lastEvent ? e(lastEvent.description || lastEvent.type || '') : 'Sem eventos registrados'}
+          </div>
+          ${history.length ? `
+          <div class="rivalry-history mt-2">
+            <div class="text-xs text-muted mb-1">Linha do arco</div>
+            ${history.slice(-4).reverse().map(event => `
+              <div class="text-xs rivalry-history__entry">• ${e(event.description || event.type || '')}</div>
+            `).join('')}
+          </div>` : ''}
+        </article>
+      `;
+    };
+
+    const activeHtml = rivalries.length
+      ? `<div class="grid grid-cols-2 gap-4">${rivalries.map(rivalry => renderDossier(rivalry)).join('')}</div>`
+      : `<div class="empty-state"><p>Nenhuma rivalidade ativa. Rivalidades se formam apos lutas intensas.</p></div>`;
+    const archiveHtml = archived.length
+      ? `
+        <section class="rivalry-archive">
+          <div class="section-label mt-4">Arquivo de Rivalidades Encerradas</div>
+          <p class="text-xs text-muted mb-2">Conflitos encerrados continuam na memoria da carreira.</p>
+          <div class="grid grid-cols-2 gap-4">${archived.slice(0, 8).map(rivalry => renderDossier(rivalry, { archived: true })).join('')}</div>
+        </section>`
+      : '';
 
     return `
       <div class="page-header">
         <h2>Rivalidades</h2>
-        <p>${rivalries.length} rivalidades ativas</p>
+        <p>${rivalries.length} ativas${archived.length ? ` · ${archived.length} no arquivo` : ''}</p>
       </div>
-
-      <div class="grid grid-cols-2 gap-4">
-        ${rivalries.map(r => {
-          const typeInfo = rivalryTypeInfo(r.type);
-          return `
-          <div class="card">
-            <div class="flex items-center justify-between mb-3">
-              <span class="badge ${r.intensity >= 7 ? 'badge-danger' : r.intensity >= 4 ? 'badge-warning' : 'badge-info'}">
-                ${e(r.intensityLabel)} (${r.intensity}/10)
-              </span>
-              <span class="text-xs text-muted" title="Origem da rivalidade">${typeInfo.icon} ${e(typeInfo.label)}</span>
-            </div>
-            <div class="flex items-center justify-between">
-              <div class="text-center">
-                <div class="font-bold">${e(getFighterName(r.fighterAId))}</div>
-              </div>
-              <div class="text-danger font-bold">⚔️</div>
-              <div class="text-center">
-                <div class="font-bold">${e(getFighterName(r.fighterBId))}</div>
-              </div>
-            </div>
-            <div class="progress-bar mt-2" style="height:8px">
-              <div class="progress-fill ${r.intensity >= 7 ? 'low' : r.intensity >= 4 ? 'medium' : 'high'}" style="width:${r.intensity * 10}%"></div>
-            </div>
-            <div class="text-xs text-muted mt-2">
-              ${r.history.length} eventos · ${r.history.length > 0 ? e(r.history[r.history.length - 1].description) : ''}
-            </div>
-            ${r.history?.length ? `
-            <div class="mt-2" style="border-top:1px solid var(--border);padding-top:0.5rem;max-height:7rem;overflow:auto">
-              <div class="text-xs text-muted mb-1">📖 Arco</div>
-              ${r.history.slice(-4).reverse().map(h => `
-                <div class="text-xs" style="line-height:1.35;margin-bottom:0.25rem">• ${e(h.description || h.type || '')}</div>
-              `).join('')}
-            </div>` : ''}
-          </div>
-        `;
-        }).join('')}
-      </div>
+      ${activeHtml}
+      ${archiveHtml}
     `;
   }
 }

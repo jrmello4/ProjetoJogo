@@ -39,13 +39,20 @@ describe('Balanceamento do motor de simulação', () => {
     const boosted = Object.fromEntries(Object.entries(BASE_ATTRS).map(([k, v]) => [k, v + 5]));
     const rate = await winRate(600, boosted);
     expect(rate).toBeGreaterThan(0.55); // favorito real
-    expect(rate).toBeLessThan(0.92); // mas não determinístico
+    expect(rate).toBeLessThan(0.78); // favorito, mas ainda bem vulnerável à zebra
   }, 20000);
 
-  it('vantagem moderada (+10 em tudo) não satura em 100% garantido', async () => {
+  it('vantagem moderada (+10 em tudo) é clara sem virar domínio', async () => {
     const boosted = Object.fromEntries(Object.entries(BASE_ATTRS).map(([k, v]) => [k, v + 10]));
     const rate = await winRate(600, boosted);
-    expect(rate).toBeGreaterThan(0.7);
-    expect(rate).toBeLessThan(1); // underdog tem que ter chance, mesmo pequena
+    expect(rate).toBeGreaterThan(0.62);
+    expect(rate).toBeLessThan(0.85);
+  }, 20000);
+
+  it('vantagem grande (+20 em tudo) ainda deixa espaço real para upset', async () => {
+    const boosted = Object.fromEntries(Object.entries(BASE_ATTRS).map(([k, v]) => [k, v + 20]));
+    const rate = await winRate(600, boosted);
+    expect(rate).toBeGreaterThan(0.74);
+    expect(rate).toBeLessThan(0.95);
   }, 20000);
 });

@@ -1442,14 +1442,15 @@ tbody tr:hover td { background: var(--bg-hover); }
 .combat-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 16px;
-  max-width: 860px;
+  gap: 14px;
+  padding: 14px 16px 18px;
+  max-width: 920px;
   margin: 0 auto;
   background:
-    radial-gradient(ellipse at 50% 0%, rgba(200, 32, 47, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 0%, rgba(200, 32, 47, 0.07) 0%, transparent 48%),
     var(--canvas);
   border-radius: 2px;
+  border: 1px solid var(--border);
 }
 
 .combat-header {
@@ -1839,4 +1840,68 @@ tbody tr:hover td { background: var(--bg-hover); }
 .turn-log-entry {
   padding: 2px 0;
   border-bottom: 1px solid var(--border);
+}
+
+/* Dossiês: informação de carreira deve parecer registro, não card genérico. */
+.document-kicker {
+  margin-bottom: 0.55rem;
+  color: var(--ash);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.rivalry-dossier,
+.contract-dossier,
+.medical-dossier {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(200, 32, 47, 0.12), transparent 26%),
+    var(--mat);
+  border-left: 3px solid var(--red);
+}
+
+.rivalry-dossier::after,
+.contract-dossier::after,
+.medical-dossier::after {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.7rem;
+  color: rgba(243, 239, 233, 0.1);
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.12em;
+  pointer-events: none;
+}
+
+.rivalry-dossier::after { content: 'RED CORNER FILE'; }
+.contract-dossier::after { content: 'PROMOTION FILE'; }
+.medical-dossier::after { content: 'MEDICAL FILE'; }
+
+.rivalry-dossier--archived {
+  border-left-color: var(--ash);
+  filter: saturate(0.65);
+}
+
+.rivalry-history {
+  max-height: 7rem;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+}
+
+.rivalry-history__entry {
+  line-height: 1.35;
+  margin-bottom: 0.25rem;
+}
+
+[data-theme="light"] .rivalry-dossier,
+[data-theme="light"] .contract-dossier,
+[data-theme="light"] .medical-dossier {
+  background:
+    linear-gradient(90deg, rgba(171, 25, 38, 0.08), transparent 26%),
+    var(--mat);
 }

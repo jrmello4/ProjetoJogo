@@ -2,7 +2,6 @@ import { DB } from '../services/db.js';
 import { AudioService } from '../services/audio-service.js';
 import { motion } from '../motion/motion-engine.js';
 import { riveManager } from '../motion/rive-manager.js';
-import { gsap } from 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/+esm';
 
 export class LayoutView {
   static _renderSeq = 0;
@@ -24,7 +23,7 @@ export class LayoutView {
         // concorrente que mate essa tween deixaria o contêiner preso em
         // opacity:0 — tela em branco com o HTML já no DOM. A entrada é
         // toda feita pelos filhos (data-reveal) via animatePageEnter.
-        gsap.killTweensOf(mainContent);
+        window.gsap?.killTweensOf(mainContent);
 
         mainContent.innerHTML = content;
         motion.scrollToTop();
@@ -41,6 +40,7 @@ export class LayoutView {
   }
 
   static _animateStats(container) {
+    const gsap = window.gsap;
     container.querySelectorAll('.stat-value').forEach((el) => {
       const text = el.textContent.trim();
 
@@ -78,7 +78,8 @@ export class LayoutView {
       const width = fill.style.width;
       if (width) {
         fill.style.width = '0%';
-        gsap.to(fill, { width, duration: 1, ease: 'power3.out', delay: 0.3 });
+        if (gsap) gsap.to(fill, { width, duration: 1, ease: 'power3.out', delay: 0.3 });
+        else fill.style.width = width;
       }
     });
 

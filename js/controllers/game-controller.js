@@ -17,6 +17,7 @@ import { ContractService } from '../services/contract-service.js';
 import { TrainingPartnersService } from '../services/training-partners-service.js';
 import { ManagerService } from '../services/manager-service.js';
 import { CareerLogService } from '../services/career-log-service.js';
+import { CareerEventBus, CAREER_EVENT_TYPES } from '../services/career-event-bus.js';
 import { RivalryService } from '../services/rivalry-service.js';
 import { StyleService } from '../services/style-service.js';
 import { SocialMediaService } from '../services/social-media-service.js';
@@ -47,6 +48,7 @@ import {
   CAMP_CONFIG,
   WEIGH_IN_CONFIG,
   RIVALRY_CONFIG,
+  SYNERGY_CONFIG,
   PARTNER_CONFIG,
   DNA_DISCOVERY_MAGNITUDE,
   READINESS_CONFIG,
@@ -63,7 +65,7 @@ import { LEVEL_CONFIG, MOVES, WEEKLY_ACTIVITIES, INJURY_CONFIG, OFFER_CONFIG } f
 const WORLD_MODE = 'career-1-fighter';
 // v4: carreira de 1 lutador — Academy substitui Gym/RivalGym, economia
 // pessoal, sem elenco. Ver docs/superpowers/specs/2026-07-13-carreira-sistemica-1-lutador-design.md
-const WORLD_SCHEMA = 4;
+const WORLD_SCHEMA = 5;
 
 // Orquestrador da carreira: o jogador É o lutador, do primeiro contrato à
 // aposentadoria. As promoções são IA e o mundo gira sozinho a cada semana.
@@ -82,6 +84,7 @@ export class GameController {
     this.contractService = null;
     this.managerService = null;
     this.careerLogService = null;
+    this.careerEventBus = null;
     this.rivalryService = null;
     this.socialMediaService = null;
     this.podcastService = null;
@@ -89,6 +92,7 @@ export class GameController {
     this.financeCtrl = null;
     this.narrativeCtrl = null;
     this.careerCtrl = null;
+    this.lastWeekDebug = null;
   }
 
   async init() {
@@ -99,6 +103,7 @@ export class GameController {
     this.seasonService = new SeasonService(this.db);
     this.notifService = new NotificationService(this.db);
     this.careerLogService = new CareerLogService(this.db);
+    this.careerEventBus = new CareerEventBus();
     this.titleService = new TitleService(this.db, this.fighterCtrl, this.notifService);
     this.scoutingService = new ScoutingService(this.db, this.notifService);
     this.contractService = new ContractService(this.db, this.fighterCtrl, this.notifService);
@@ -107,7 +112,7 @@ export class GameController {
     this.partnersService = new TrainingPartnersService(this.db, this.fighterCtrl, this.notifService, this.careerLogService);
     // Construído depois do RivalryService: _computePressureLevel precisa de
     // rivalryService para pressão extra em revanche 'grudge'.
-    this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.scoutingService, this.contractService, this.managerService, this.careerLogService, this.rivalryService);
+    this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.scoutingService, this.contractService, this.managerService, this.careerLogService, this.rivalryService, this.careerEventBus);
     this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.contractService, this.rivalryService);
     this.sponsorService = new SponsorService(this.db, this.notifService, this.careerLogService);
     this.socialMediaService = new SocialMediaService(this.db, this.notifService);
@@ -119,10 +124,13 @@ export class GameController {
     this.narrativeCtrl = new NarrativeController(this.db, this.fighterCtrl, this.notifService, this.careerLogService, this.rivalryService, this.partnersService, this.socialMediaService, this.seasonService, this.worldService);
     this.careerCtrl = new CareerController(this.db, this.fighterCtrl, this.notifService, this.careerLogService, this.seasonService, this.titleService);
 
-    const meta = await this.db.get('gameState', 'meta');
-    if (!meta || meta.mode !== WORLD_MODE || meta.schemaVersion !== WORLD_SCHEMA) {
+    this._registerCareerEventHandlers();
+
+    let meta = await this.db.get('gameState', 'meta');
+    if (!meta) {
       await this._bootstrapNewWorld();
     } else {
+      meta = await this._migrateWorld(meta);
       await this._applyPatches(meta);
     }
 
@@ -146,6 +154,115 @@ export class GameController {
       fighter.campProcessedThisWeek = false;
       await this.fighterCtrl.updateFighter(fighter);
     }
+  }
+
+  // Migrações são aditivas e nunca reinicializam uma carreira existente.
+  // A versão anterior apagava todo o mundo quando o schema mudava; agora um
+  // save antigo preserva roster, cartel e história, recebendo somente os docs
+  // e campos que a versão nova precisa.
+  async _migrateWorld(meta) {
+    const sourceVersion = Number.isInteger(meta.schemaVersion) ? meta.schemaVersion : 0;
+    if (sourceVersion > WORLD_SCHEMA) {
+      throw new Error(`Este save usa schema ${sourceVersion}, mais novo que o suportado (${WORLD_SCHEMA}). Atualize o jogo antes de abrir esta carreira.`);
+    }
+
+    let migrated = {
+      ...meta,
+      id: 'meta',
+      mode: meta.mode || WORLD_MODE,
+      schemaVersion: sourceVersion,
+      patches: Array.isArray(meta.patches) ? meta.patches : [],
+      migrationHistory: Array.isArray(meta.migrationHistory) ? meta.migrationHistory : [],
+    };
+
+    while (migrated.schemaVersion < WORLD_SCHEMA) {
+      const from = migrated.schemaVersion;
+      await this._applySchemaMigration(from);
+      migrated = {
+        ...migrated,
+        schemaVersion: from + 1,
+        migrationHistory: [...migrated.migrationHistory, {
+          from,
+          to: from + 1,
+          appliedAt: new Date().toISOString(),
+        }],
+      };
+      await this.db.put('gameState', migrated);
+    }
+
+    // Normaliza metadados mesmo quando a carreira já estava no schema atual.
+    await this.db.put('gameState', migrated);
+    return migrated;
+  }
+
+  async _applySchemaMigration(fromVersion) {
+    // Schemas anteriores usavam documentos opcionais. Garantir a base é
+    // seguro e torna a migração idempotente; nenhum dado existente é limpo.
+    if (fromVersion <= 4) {
+      const state = await this.db.get('gameState', 'state');
+      if (!state) {
+        await this.db.put('gameState', {
+          id: 'state', week: 1, year: 1, totalEvents: 0,
+          startedAt: new Date().toISOString(),
+        });
+      }
+      const milestones = await this.db.get('gameState', 'milestones');
+      if (!milestones) await this.db.put('gameState', { id: 'milestones' });
+      const career = await this.db.get('gameState', 'career');
+      if (!career) await this.db.put('gameState', { id: 'career', playerFighterId: null });
+    }
+  }
+
+  _registerCareerEventHandlers() {
+    this.careerEventBus.subscribe(CAREER_EVENT_TYPES.FIGHT_COMPLETED, async ({ payload }) => {
+      if (!payload.playerFighterId) return;
+      const isPlayerFight = payload.fighterAId === payload.playerFighterId || payload.fighterBId === payload.playerFighterId;
+      if (!isPlayerFight) return;
+
+      const fighterA = await this.fighterCtrl.getFighter(payload.fighterAId);
+      const fighterB = await this.fighterCtrl.getFighter(payload.fighterBId);
+      if (fighterA && fighterB) {
+        await this.rivalryService.checkPostFight(
+          fighterA,
+          fighterB,
+          payload.result,
+          payload.isMainCard,
+          payload.absWeek,
+          payload.playerFighterId,
+        );
+      }
+
+      await this._applyCoachSynergyFromFight(payload);
+    });
+  }
+
+  async _applyCoachSynergyFromFight(payload) {
+    const tally = payload.cornerTally || [];
+    if (tally.length === 0 || payload.fighterAId !== payload.playerFighterId) return;
+
+    const won = !payload.result.isDraw && payload.result.winnerId === payload.playerFighterId;
+    const fighter = await this.fighterCtrl.getFighter(payload.playerFighterId);
+    if (!fighter) return;
+    const academy = await this.getAcademy(fighter.academyId);
+    const growthRate = SYNERGY_CONFIG.GROWTH_RATE_BY_FACILITY[(academy?.facilityLevel || 1) - 1] ?? 1;
+    const followed = tally.filter(entry => entry.followed).length;
+    const ignored = tally.filter(entry => !entry.followed).length;
+    const delta = Math.round(
+      (won ? followed * SYNERGY_CONFIG.GAIN_ON_INSTRUCTION_FOLLOWED_AND_WON : 0) * growthRate +
+      (!won && !payload.result.isDraw ? ignored * SYNERGY_CONFIG.LOSS_ON_INSTRUCTION_IGNORED_AND_LOST : 0) * growthRate,
+    );
+    if (delta === 0) return;
+
+    fighter.coachSynergy = clamp((fighter.coachSynergy || 0) + delta, 0, 100);
+    await this.fighterCtrl.updateFighter(fighter);
+  }
+
+  getDebugSnapshot() {
+    return {
+      lastWeek: this.lastWeekDebug,
+      events: this.careerEventBus?.getStats() || null,
+      recentEvents: this.careerEventBus?.recent(20) || [],
+    };
   }
 
   // ===== Bootstrap do mundo =====
@@ -431,6 +548,7 @@ export class GameController {
   // ===== Tick semanal =====
   // Ordem importa: mundo gira -> ofertas expiram/chegam -> economia -> treino.
   async processWeek(cornerHooks = null) {
+    const tickStartedAt = Date.now();
     const nextWeekState = await this.seasonService.peekNextWeek();
     const now = absWeek(nextWeekState);
     const preFight = await this.getPlayerFighter();
@@ -448,23 +566,6 @@ export class GameController {
     await this._autoResolveDueWeighIn(now, preFight);
 
     const world = await this.worldService.processWeek(now, nextWeekState.startedAt, preFightId, cornerHooks);
-
-    // §D.3 — criação/atualização de rivalidade tem que rodar aqui (dentro de
-    // processWeek), não só no advanceWeek() ao vivo do app.js, senão o
-    // fast-forward (simulateWeeks -> processWeek em loop) nunca cria nem
-    // deriva tipo de rivalidade nenhuma. checkPostFight só LÊ os Fighters
-    // passados (id) e escreve na store 'rivalries' — nunca chama
-    // fighterCtrl.updateFighter, então não corre o risco de pisar em cima
-    // do fetch-mutate-save do WorldService feito logo acima.
-    for (const evt of world.playerEvents) {
-      for (const result of evt.playerResults) {
-        const fighterA = await this.fighterCtrl.getFighter(result.fighterAId);
-        const fighterB = await this.fighterCtrl.getFighter(result.fighterBId);
-        if (fighterA && fighterB) {
-          await this.rivalryService.checkPostFight(fighterA, fighterB, result, result.card === 'main', now, preFightId);
-        }
-      }
-    }
 
     // Rebusca DEPOIS do tick do mundo — WorldService busca e salva sua
     // PRÓPRIA instância do lutador ao resolver a luta (record, popularidade,
@@ -840,6 +941,14 @@ export class GameController {
     }
 
     const finalState = await this.seasonService.commitWeekAdvance(nextWeekState.week, nextWeekState.year);
+    const durationMs = Date.now() - tickStartedAt;
+    this.lastWeekDebug = {
+      absWeek: now,
+      durationMs,
+      playerFightCount: world.playerEvents.reduce((sum, event) => sum + event.playerResults.length, 0),
+      offersCreated: offersCreated.length,
+    };
+    await this.careerEventBus.emit(CAREER_EVENT_TYPES.WEEK_PROCESSED, this.lastWeekDebug);
 
     return { state: finalState, now, world, offersCreated, economy, milestonesUnlocked, campResults, sponsorActivity };
   }

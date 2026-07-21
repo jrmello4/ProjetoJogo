@@ -8,10 +8,11 @@ import { TapeService } from './tape-service.js';
 import { ReadinessService } from './readiness-service.js';
 import { DataGenerator } from './data-generator.js';
 import { HallOfFame } from './hall-of-fame.js';
+import { InjuryService } from './injury-service.js';
 import { CrowdService } from './crowd-service.js';
 import { VisualIdentityService } from './visual-identity-service.js';
 import { CAREER_EVENT } from './career-events.js';
-import { generateId, getWeightClassName, formatWeeks } from '../utils/helpers.js';
+import { generateId, getWeightClassName } from '../utils/helpers.js';
 import {
   ACADEMIES,
   WORLD_CONFIG,
@@ -23,17 +24,11 @@ import {
   PROMOTIONS,
   OFFER_CONFIG,
   TIER_MOVEMENT_CONFIG,
-  PERMANENT_SCAR_TABLE,
-  DNA_DISCOVERY_CONFIG,
   RIVALRY_CONFIG,
   GAME_PLANS,
   TAPE_CONFIG,
-  INJURY_CONFIG,
   WEIGHT_BULLY_CONFIG,
-  CONSECUTIVE_KO_CONFIG,
   absWeekToDate,
-  computeSuspensionWeeks,
-  rollInjurySeverity,
 } from '../config/game-config.js';
 
 // Motor do mundo vivo: cada promoção de IA agenda e realiza os próprios
@@ -50,6 +45,7 @@ export class WorldService {
     this.careerLogService = careerLogService;
     this.rivalryService = rivalryService;
     this.careerEvents = careerEvents;
+    this.injuryService = new InjuryService(db, careerLogService, notifService);
   }
 
   // Fase 3 — reúne o contexto que decide o quanto o adversário conhece você.
@@ -133,7 +129,7 @@ export class WorldService {
   // prepareCardFight(container) para montar a UI de cartas dentro de
   // _runEvent; simulateWeeks passa null e o CombatAdapter resolve com IA.
   async processWeek(absWeekNow, startedAt, playerFighterId, cornerHooks = null) {
-    await this._recoverInjuries(absWeekNow, playerFighterId);
+    await this.injuryService.recoverInjuries(absWeekNow, playerFighterId);
     if (this.titleService) await this.titleService.reconcileBelts();
 
     const promotions = await this.getPromotions();
@@ -421,10 +417,10 @@ export class WorldService {
         fighterB.registerPromoResult(promo.id, result.winnerId === fighterB.id);
       }
 
-      await this._rollInjury(fighterA, result, absWeekNow, playerFighterId);
-      await this._rollInjury(fighterB, result, absWeekNow, playerFighterId);
-      this._applySuspension(fighterA, result, absWeekNow);
-      this._applySuspension(fighterB, result, absWeekNow);
+      await this.injuryService.rollInjury(fighterA, result, absWeekNow, playerFighterId);
+      await this.injuryService.rollInjury(fighterB, result, absWeekNow, playerFighterId);
+      this.injuryService.applySuspension(fighterA, result, absWeekNow);
+      this.injuryService.applySuspension(fighterB, result, absWeekNow);
 
       await this.fighterCtrl.updateFighter(fighterA);
       await this.fighterCtrl.updateFighter(fighterB);
@@ -1004,154 +1000,6 @@ export class WorldService {
     fighterB.attributes.strength = Math.min(99, strengthBefore + bonus);
     fighterB.applyWeightCutImpact(WEIGHT_BULLY_CONFIG.CARDIO_IMPACT_MULT);
     return { power: fighterB.attributes.power - powerBefore, strength: fighterB.attributes.strength - strengthBefore };
-  }
-
-  // Suspensão médica pós-luta: aplicada a TODOS os lutadores (jogador e IA)
-  // para respeitar o afastamento mínimo entre lutas real do MMA.
-  _applySuspension(fighter, result, absWeekNow) {
-    const won = result.winnerId === fighter.id;
-    const weeks = computeSuspensionWeeks(result.method, won);
-    const suspendedUntil = absWeekNow + weeks;
-    const injuryRestUntil = fighter.injury?.restUntilAbsWeek || fighter.injury?.untilAbsWeek || 0;
-    fighter.availableFromAbsWeek = Math.max(suspendedUntil, injuryRestUntil);
-  }
-
-  async _rollInjury(fighter, result, absWeekNow, playerFighterId) {
-    const won = result.winnerId === fighter.id;
-    const isFinish = result.method && !result.method.startsWith('Decision');
-
-    let chance = won ? WORLD_CONFIG.INJURY_CHANCE_WINNER : WORLD_CONFIG.INJURY_CHANCE_LOSER;
-    if (!won && isFinish) chance += WORLD_CONFIG.INJURY_CHANCE_FINISH_BONUS;
-    if (fighter.hasDNA('injuryProne')) chance += WORLD_CONFIG.INJURY_CHANCE_PRONE_BONUS;
-
-    // Relatório médico (ABC/NSAC/CABMMA): nocautes consecutivos acumulam
-    // risco de verdade — exame neurológico extra a partir do 2º seguido,
-    // recomendação de aposentadoria a partir do 3º. Só o lutador do jogador
-    // (mesmo escopo de sequelae/permanentScars).
-    const isKoTkoLoss = !won && result.method && (result.method.startsWith('KO') || result.method.startsWith('TKO'));
-    if (fighter.id === playerFighterId) {
-      fighter.consecutiveKoTkoLosses = isKoTkoLoss ? (fighter.consecutiveKoTkoLosses || 0) + 1 : 0;
-    }
-
-    if (Math.random() >= chance) return;
-
-    const severity = rollInjurySeverity();
-    let weeks = severity.weeks;
-
-    // Exame neurológico extra some junto com o resto da lesão desta luta —
-    // não é uma segunda suspensão separada, é a MESMA lesão levando mais
-    // tempo pra liberar porque a comissão exige exame antes de autorizar.
-    let examNote = '';
-    if (fighter.id === playerFighterId && isKoTkoLoss && fighter.consecutiveKoTkoLosses >= CONSECUTIVE_KO_CONFIG.EXAM_THRESHOLD) {
-      weeks += CONSECUTIVE_KO_CONFIG.EXAM_EXTRA_WEEKS;
-      examNote = ` — exame neurológico obrigatório após ${fighter.consecutiveKoTkoLosses} nocautes seguidos`;
-      if (this.careerLogService) {
-        await this.careerLogService.publish(fighter.id, 'consecutive_ko_exam', absWeekNow, 65, {
-          count: fighter.consecutiveKoTkoLosses,
-        });
-      }
-    }
-    if (fighter.id === playerFighterId && isKoTkoLoss && fighter.consecutiveKoTkoLosses >= CONSECUTIVE_KO_CONFIG.RETIREMENT_WARNING_THRESHOLD) {
-      await this.notifService.add('danger', '🧠 Recomendação Médica',
-        `${fighter.consecutiveKoTkoLosses} nocautes seguidos. Times médicos recomendam fortemente considerar a aposentadoria — o risco acumulado é real.`);
-    }
-
-    // P2.2: new injury format with stages
-    fighter.injury = {
-      stage: 'rest',
-      restUntilAbsWeek: absWeekNow + weeks,
-      rehabEndAbsWeek: 0,
-      type: severity.type,
-      description: `${severity.label} — ${formatWeeks(weeks)}${examNote}`,
-      rehabCost: 0,
-      rehabChosen: false,
-      resumeStatus: fighter.status,
-    };
-    fighter.status = 'injured';
-
-    // §B.1 — injuryProne se descobre na 2ª lesão em menos de 52 semanas.
-    // O check roda ANTES do incremento: injuryCount >= 1 significa "já havia
-    // lesão anterior" e lastInjuryAbsWeek é a semana dela. Incrementar antes
-    // faria o trait revelar já na 1ª lesão da carreira.
-    if (fighter.hasDNA('injuryProne') && !fighter.isDiscovered('injuryProne')
-      && fighter.injuryCount >= 1
-      && (absWeekNow - fighter.lastInjuryAbsWeek) < DNA_DISCOVERY_CONFIG.INJURY_PRONE_WINDOW_WEEKS) {
-      fighter.discoverTrait('injuryProne');
-    }
-    fighter.injuryCount = (fighter.injuryCount || 0) + 1;
-    fighter.lastInjuryAbsWeek = absWeekNow;
-
-    // §B.2 — lesão mais severa (mais semanas fora) rola chance de sequela
-    // permanente: reduz o TETO de alguns atributos pro resto da carreira,
-    // com uma pequena compensação mental (a dor ensina a lutar diferente).
-    const scarChance = weeks >= WORLD_CONFIG.SCAR_SEVERE_WEEKS_THRESHOLD
-      ? WORLD_CONFIG.SCAR_CHANCE_SEVERE
-      : WORLD_CONFIG.SCAR_CHANCE_LIGHT;
-    if (Math.random() < scarChance) {
-      const template = PERMANENT_SCAR_TABLE[Math.floor(Math.random() * PERMANENT_SCAR_TABLE.length)];
-      fighter.permanentScars.push({
-        bodyPart: template.bodyPart,
-        attributeCeilings: { ...template.attributeCeilings },
-        compensation: { ...template.compensation },
-        fromFightId: result.id,
-        atAbsWeek: absWeekNow,
-      });
-      for (const [attr, bonus] of Object.entries(template.compensation)) {
-        fighter.attributes[attr] = Math.min(fighter.effectiveCeiling(attr), (fighter.attributes[attr] || 50) + bonus);
-      }
-      // §F — só a sequela do lutador do jogador vira "momento marcante";
-      // _rollInjury roda pra todo lutador de toda luta do mundo.
-      if (this.careerLogService && fighter.id === playerFighterId) {
-        await this.careerLogService.publish(fighter.id, 'permanent_scar', absWeekNow, 55, { bodyPart: template.bodyPart });
-      }
-    }
-
-    // P10.1 — Sequelas de KO/TKO ou lesões graves (só para o jogador)
-    if (fighter.id === playerFighterId && !won && isFinish) {
-      const method = result.method || '';
-      if (Math.random() < INJURY_CONFIG.SEVERE_INJURY_CHANCE) {
-        let attr = null;
-        let desc = '';
-        if (method.startsWith('KO')) {
-          attr = 'chin';
-          desc = 'Sequela de nocaute';
-        } else if (method.startsWith('TKO')) {
-          attr = Math.random() < 0.5 ? 'speed' : 'chin';
-          desc = attr === 'speed' ? 'Lesão articular grave' : 'Sequela de TKO';
-        } else if (method === 'Submission') {
-          attr = 'speed';
-          desc = 'Lesão em articulação';
-        }
-        if (attr) {
-          fighter.applySequelae(attr, desc);
-          if (this.careerLogService) {
-            const seq = fighter.sequelae?.[fighter.sequelae.length - 1];
-            await this.careerLogService.publish(fighter.id, 'sequela', absWeekNow, 60, {
-              attr,
-              reduction: seq?.reduction,
-              description: desc,
-            });
-          }
-        }
-      }
-    }
-  }
-
-  async _recoverInjuries(absWeekNow, playerFighterId) {
-    const injured = await this.db.getIndex('fighters', 'status', 'injured');
-    for (const data of injured) {
-      if (!data.injury) continue;
-      // P2.2: support both old format (untilAbsWeek) and new (restUntilAbsWeek)
-      const healWeek = data.injury.restUntilAbsWeek || data.injury.untilAbsWeek || 0;
-      if (healWeek > absWeekNow) continue;
-      const fighter = new Fighter(data);
-      fighter.status = fighter.injury.resumeStatus || 'roster';
-      fighter.injury = null;
-      await this.db.put('fighters', fighter);
-      if (fighter.id === playerFighterId) {
-        await this.notifService.add('success', 'Recuperado', `${fighter.name} está liberado pelo departamento médico.`);
-      }
-    }
   }
 
   async _refillFreeAgents() {

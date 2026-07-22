@@ -11,6 +11,55 @@ const POSITION_NAMES = {
   [POSITIONS.GROUND_GUARD]: 'Chão (Guarda)',
 };
 
+// Category header shown on each card — icon doubles as the art fallback
+// glyph, label is the stamped tag ("coach shorthand" for the card type).
+const CARD_CATEGORY = {
+  strike: { icon: '👊', label: 'ATAQUE' },
+  takedown: { icon: '🤼', label: 'QUEDA' },
+  submission: { icon: '🔒', label: 'FINALIZAÇÃO' },
+  defense: { icon: '🛡️', label: 'DEFESA' },
+};
+
+// Short position labels for the meta readout — full names overflow the
+// narrow card, so the tactical chip uses coach shorthand instead.
+const POSITION_SHORT = {
+  [POSITIONS.DISTANCE]: 'DIST',
+  [POSITIONS.RANGE]: 'ALC',
+  [POSITIONS.CLINCH]: 'CLIN',
+  [POSITIONS.GROUND_TOP]: 'CHÃO↑',
+  [POSITIONS.GROUND_GUARD]: 'CHÃO↓',
+};
+
+// PRIORIDADE — derived from the card's real tags (not a stored field).
+// Heavy/power/risky reads as a high-commitment play; light/fast as a
+// low-risk poke; everything else sits in the middle. Colour-coded box.
+function derivePriority(card) {
+  const t = card.tags || [];
+  if (t.includes('heavy') || t.includes('power') || t.includes('risky')) return { label: 'ALTA', cls: 'prio-high' };
+  if (t.includes('light') || t.includes('fast')) return { label: 'BAIXA', cls: 'prio-low' };
+  return { label: 'MÉDIA', cls: 'prio-mid' };
+}
+
+// EFEITO — a 1-2 word tactical essence pulled from the card's real tags,
+// same spirit as the coach scribbling the point of the technique. Order
+// matters: the most defining tag wins.
+const TAG_EFFECT = [
+  ['risky', 'Alto risco'],
+  ['power', 'Nocaute'],
+  ['heavy', 'Impacto alto'],
+  ['engage', 'Fecha distância'],
+  ['grappling', 'Domínio'],
+  ['fast', 'Rápido'],
+  ['light', 'Ágil'],
+];
+function deriveEffect(card) {
+  const t = card.tags || [];
+  for (const [tag, label] of TAG_EFFECT) if (t.includes(tag)) return label;
+  if (card.type === 'defense') return 'Defende';
+  if (card.type === 'submission') return 'Finaliza';
+  return 'Técnica';
+}
+
 export class CardCombatView {
   constructor() {
     this.handlers = null;
@@ -145,27 +194,54 @@ export class CardCombatView {
       const wrongPos = !card.positions.includes(fighter.position);
       const disabled = onCooldown || noUses || wrongPos;
 
-      // Notebook card anatomy: top (name+cost) · middle (illustration) · bottom (meta)
+      // Notebook card anatomy (coach page): category header + cost stamp ·
+      // taped technique photo · title with marker underline · handwritten
+      // blue note · labelled tactical stat boxes · DMG stamp + EFEITO note.
       const cost = card.staminaCost ?? card.cost ?? Math.max(1, Math.round((card.baseDamage || 10) / 12));
       const artSrc = getCardIllustration(card);
-      const fallbackIcon = card.type === 'takedown' ? '⬇️' : card.type === 'submission' ? '🔒' : card.type === 'defense' ? '🛡️' : '👊';
+      const category = CARD_CATEGORY[card.type] || { icon: '👊', label: card.type };
       const artHtml = artSrc
         ? `<img class="card-art-img" src="${artSrc}" alt="" width="120" height="96" loading="lazy" draggable="false" />`
-        : `<span class="card-art-fallback" aria-hidden="true">${fallbackIcon}</span>`;
+        : `<span class="card-art-fallback" aria-hidden="true">${category.icon}</span>`;
+      // Alcance box shows a single legible token: 1-2 positions listed,
+      // 3+ collapsed to a count (full list in the title tooltip).
+      const posList = card.positions.map(p => POSITION_SHORT[p] || p);
+      const posShort = posList.length > 2 ? `${posList.length} POS` : posList.join('/');
+      const posTitle = card.positions.map(p => POSITION_NAMES[p] || p).join(', ');
+      const priority = derivePriority(card);
+      // Movement IS the effect when a card repositions you; otherwise fall
+      // back to the tag-derived tactical essence.
+      const effect = card.moveTo ? `Move → ${POSITION_SHORT[card.moveTo] || card.moveTo}` : deriveEffect(card);
+      const cdVal = onCooldown ? `${cooldowns[id]}T` : (card.cooldown > 1 ? `${card.cooldown}T` : '—');
+      const usesVal = card.maxUses !== Infinity ? `${remaining ?? card.maxUses}/${card.maxUses}` : '∞';
       return `
         <div class="card-item mastery-basic ${disabled ? 'disabled' : ''} ${card.type}" data-card-id="${card.id}">
-          <div class="card-art">${artHtml}</div>
-          <div class="card-top">
-            <div class="card-name">${card.name}</div>
-            <div class="card-cost" title="Custo">${cost}</div>
+          <span class="card-hole h1"></span><span class="card-hole h2"></span>
+          <div class="card-category-bar">
+            <span class="cat-icon" aria-hidden="true">${category.icon}</span>
+            <span class="cat-label">${category.label}</span>
+            <span class="card-cost" title="Custo de stamina"><b>${cost}</b><small>CUSTO</small></span>
           </div>
-          <div class="card-desc">${card.description}</div>
-          <div class="card-meta">
-            <span class="card-pos">${card.positions.map(p => POSITION_NAMES[p]).join('/')}</span>
-            <span class="card-dmg">DMG ${card.baseDamage}</span>
-            ${onCooldown ? `<span class="card-cd">CD ${cooldowns[id]}</span>` : ''}
-            ${card.maxUses !== Infinity ? `<span class="card-uses">${remaining ?? card.maxUses}/${card.maxUses}</span>` : ''}
-            ${card.moveTo ? `<span class="card-move">→ ${POSITION_NAMES[card.moveTo]}</span>` : ''}
+          <div class="card-art">
+            ${artHtml}
+          </div>
+          <span class="card-tape tape-r"></span>
+          <div class="card-body">
+            <div class="card-name">${card.name}</div>
+            <div class="card-desc">${card.description}</div>
+            <div class="card-stats">
+              <div class="stat"><span class="stat-label">Alcance</span><span class="stat-val" title="${posTitle}">${posShort}</span></div>
+              <div class="stat"><span class="stat-label">Usos</span><span class="stat-val">${usesVal}</span></div>
+              <div class="stat"><span class="stat-label">Recarga</span><span class="stat-val">${cdVal}</span></div>
+            </div>
+            <div class="card-footer">
+              <span class="card-dmg" title="Dano base">DMG ${card.baseDamage}</span>
+              <span class="card-priority ${priority.cls}" title="Prioridade">${priority.label}</span>
+            </div>
+            <div class="card-effect">
+              <span class="eff-label">Efeito</span>
+              <span class="eff-val">${effect}</span>
+            </div>
           </div>
         </div>
       `;

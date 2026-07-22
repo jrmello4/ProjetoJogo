@@ -1,5 +1,45 @@
 import * as THREE from 'three';
 
+// Definições de estado visual (F13) — cada estado define valores-alvo
+// para luzes, emissão e partículas. O animate() faz lerp suave entre eles.
+const STATE_DEFS = {
+  idle: {
+    redIntensity: 2, warmIntensity: 0.5, rimIntensity: 0.3,
+    floorEmissive: 0x000000, floorEmissiveIntensity: 0,
+    centerEmissiveIntensity: 0.15, centerColor: 0xc8202f,
+    edgeOpacity: 0.6, beamOpacity: 0.02,
+    particleSpeed: 0.002, rotateSpeed: 0.003,
+  },
+  champion: {
+    redIntensity: 2.5, warmIntensity: 1.2, rimIntensity: 0.8,
+    floorEmissive: 0xc9a227, floorEmissiveIntensity: 0.3,
+    centerEmissiveIntensity: 0.5, centerColor: 0xc9a227,
+    edgeOpacity: 0.9, beamOpacity: 0.06,
+    particleSpeed: 0.004, rotateSpeed: 0.005,
+  },
+  streak: {
+    redIntensity: 3, warmIntensity: 0.8, rimIntensity: 0.4,
+    floorEmissive: 0xc8202f, floorEmissiveIntensity: 0.2,
+    centerEmissiveIntensity: 0.4, centerColor: 0xff4444,
+    edgeOpacity: 0.8, beamOpacity: 0.05,
+    particleSpeed: 0.005, rotateSpeed: 0.004,
+  },
+  danger: {
+    redIntensity: 1, warmIntensity: 0.2, rimIntensity: 0.5,
+    floorEmissive: 0x880000, floorEmissiveIntensity: 0.15,
+    centerEmissiveIntensity: 0.3, centerColor: 0xcc0000,
+    edgeOpacity: 0.4, beamOpacity: 0.01,
+    particleSpeed: 0.001, rotateSpeed: 0.001,
+  },
+  tranquil: {
+    redIntensity: 1.2, warmIntensity: 0.3, rimIntensity: 0.6,
+    floorEmissive: 0x2f6bbf, floorEmissiveIntensity: 0.15,
+    centerEmissiveIntensity: 0.2, centerColor: 0x2f6bbf,
+    edgeOpacity: 0.5, beamOpacity: 0.02,
+    particleSpeed: 0.001, rotateSpeed: 0.002,
+  },
+};
+
 /**
  * MMA Manager — 3D Octagon Arena
  * Renders an interactive 3D octagon cage on a canvas element.
@@ -34,6 +74,12 @@ export class ThreeArena {
     this._rafId = null;
     this._lastFrame = 0;
     this._windowListeners = [];
+
+    // F13 — estado reativo da arena
+    this._state = { current: 'idle', target: 'idle' };
+    this._stateLerp = 1; // 1 = fully at target
+    this._dynMaterials = {};
+
     this.init();
   }
 
@@ -146,6 +192,7 @@ export class ThreeArena {
     spotRed.shadow.mapSize.set(512, 512);
     this.scene.add(spotRed);
     this.scene.add(spotRed.target);
+    this._redSpot = spotRed;
 
     // Warm fill from side
     const spotWarm = new THREE.SpotLight(0xc9a227, 0.5, 20, Math.PI / 8, 0.8, 1);
@@ -153,6 +200,7 @@ export class ThreeArena {
     spotWarm.target.position.set(0, 0, 0);
     this.scene.add(spotWarm);
     this.scene.add(spotWarm.target);
+    this._warmSpot = spotWarm;
 
     // Cool rim light
     const rim = new THREE.PointLight(0x2f6bbf, 0.3, 15);
@@ -191,6 +239,7 @@ export class ThreeArena {
     innerMesh.receiveShadow = true;
     innerMesh.position.y = 0.1;
     group.add(innerMesh);
+    this._floorMat = innerMat;
 
     // Center circle — logo area
     const circleGeo = new THREE.CircleGeometry(0.8, 32);
@@ -205,6 +254,7 @@ export class ThreeArena {
     circle.rotation.x = -Math.PI / 2;
     circle.position.y = 0.12;
     group.add(circle);
+    this._centerMat = circleMat;
 
     // Octagon edge lines (glowing)
     const edgePoints = [];
@@ -221,6 +271,7 @@ export class ThreeArena {
     });
     const edgeLine = new THREE.Line(edgeGeo, edgeMat);
     group.add(edgeLine);
+    this._edgeMat = edgeMat;
 
     this.octagon = group;
     this.scene.add(group);
@@ -365,6 +416,55 @@ export class ThreeArena {
     beam.position.y = 4;
     beam.rotation.x = Math.PI;
     this.scene.add(beam);
+    this._beamMat = beamMat;
+  }
+
+  /** F13: define o estado visual da arena (idle|champion|streak|danger|tranquil) */
+  setState(id) {
+    if (STATE_DEFS[id]) {
+      this._state.target = id;
+      this._stateLerp = 0;
+    }
+  }
+
+  _applyState(delta) {
+    if (this._stateLerp >= 1) return;
+    this._stateLerp = Math.min(1, this._stateLerp + delta * 2);
+    const t = this._stateLerp;
+    const from = STATE_DEFS[this._state.current];
+    const to = STATE_DEFS[this._state.target];
+    if (!from || !to) return;
+
+    const lerp = (a, b) => a + (b - a) * t;
+    const lerpColor = (ca, cb) => {
+      const ra = (ca >> 16) & 0xff, ga = (ca >> 8) & 0xff, ba = ca & 0xff;
+      const rb = (cb >> 16) & 0xff, gb = (cb >> 8) & 0xff, bb = cb & 0xff;
+      return (Math.round(lerp(ra, rb)) << 16) | (Math.round(lerp(ga, gb)) << 8) | Math.round(lerp(ba, bb));
+    };
+
+    if (this._redSpot) this._redSpot.intensity = lerp(from.redIntensity, to.redIntensity);
+    if (this._warmSpot) this._warmSpot.intensity = lerp(from.warmIntensity, to.warmIntensity);
+
+    if (this._floorMat) {
+      this._floorMat.emissive.setHex(lerpColor(from.floorEmissive, to.floorEmissive));
+      this._floorMat.emissiveIntensity = lerp(from.floorEmissiveIntensity, to.floorEmissiveIntensity);
+    }
+    if (this._centerMat) {
+      this._centerMat.color.setHex(lerpColor(from.centerColor, to.centerColor));
+      this._centerMat.emissiveIntensity = lerp(from.centerEmissiveIntensity, to.centerEmissiveIntensity);
+    }
+    if (this._edgeMat) this._edgeMat.opacity = lerp(from.edgeOpacity, to.edgeOpacity);
+    if (this._beamMat) this._beamMat.opacity = lerp(from.beamOpacity, to.beamOpacity);
+
+    if (this.autoRotate) {
+      this.targetRotY += lerp(from.rotateSpeed, to.rotateSpeed);
+    }
+
+    if (this.particles) this._particleVelocity = lerp(from.particleSpeed, to.particleSpeed);
+
+    if (this._stateLerp >= 1) {
+      this._state.current = this._state.target;
+    }
   }
 
   createOctagonShape(radius) {
@@ -451,6 +551,8 @@ export class ThreeArena {
       this.camera.lookAt(0, 0, 0);
     }
 
+    this._applyState(0.016);
+
     const feedback = this.feedbackState;
     const redControl = Math.max(0, feedback.dominance);
     const blueControl = Math.max(0, -feedback.dominance);
@@ -467,11 +569,12 @@ export class ThreeArena {
       this.arenaLights.rim.intensity += (target - this.arenaLights.rim.intensity) * 0.05;
     }
 
-    // Animate particles
+    // Animate particles — velocidade dinâmica (F13)
     if (this.particles) {
+      const speed = this._particleVelocity ?? 0.002;
       const positions = this.particles.geometry.attributes.position.array;
       for (let i = 0; i < positions.length; i += 3) {
-        positions[i + 1] += 0.002;
+        positions[i + 1] += speed;
         if (positions[i + 1] > 4) {
           positions[i + 1] = 0;
         }
@@ -483,6 +586,7 @@ export class ThreeArena {
       particleMaterial.opacity += (0.6 + (feedback.critical ? 0.15 : 0) - particleMaterial.opacity) * 0.05;
     }
 
+    // F13: transição suave de estado visual
     this.renderer.render(this.scene, this.camera);
   }
 

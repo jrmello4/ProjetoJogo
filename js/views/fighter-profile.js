@@ -5,10 +5,24 @@ import { CrowdService } from '../services/crowd-service.js';
 import { PortraitService } from '../services/portrait-service.js';
 import { VisualIdentityService } from '../services/visual-identity-service.js';
 
+const CAREER_STAGES_LABELS = {
+  rookie: 'Iniciante', prospect: 'Prospecto', journeyman: 'Circuito',
+  star: 'Estrela', champion: 'Campeão', ex_champion: 'Ex-campeão',
+  veteran: 'Veterano', legend: 'Lenda', retired: 'Aposentado',
+  fallen: 'Declínio', coach: 'Treinador', mogul: 'Empresário',
+};
+
 export class FighterProfileView {
   // Linha do tempo de momentos — texto cru no label; e() só na saída.
-  static _renderMomentsTimeline(moments) {
+  static _renderMomentsTimeline(moments, careerStartedAt = null) {
     if (!moments?.length) return '';
+    const dateLabel = (atAbsWeek) => {
+      if (!careerStartedAt || atAbsWeek == null) return `sem ${atAbsWeek ?? '—'}`;
+      const start = new Date(careerStartedAt);
+      if (Number.isNaN(start.getTime())) return `sem ${atAbsWeek}`;
+      start.setUTCDate(start.getUTCDate() + Math.max(0, atAbsWeek - 1) * 7);
+      return start.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    };
     const label = (m) => {
       const d = m.data || {};
       switch (m.type) {
@@ -22,21 +36,22 @@ export class FighterProfileView {
         case 'viral': return 'Post viral';
         case 'year_review': return `Retrospectiva ano ${d.yearNumber || ''}`;
         case 'dna_discovered': return d.traitLabel || 'Traço revelado';
+        case 'fight_completed': {
+          const outcome = d.won === true ? 'Vitória' : d.won === false ? 'Derrota' : 'Empate';
+          return `${outcome}${d.opponentName ? ` · ${d.opponentName}` : ''}${d.method ? ` · ${d.method}` : ''}`;
+        }
         default: return String(m.type || 'Momento').replace(/_/g, ' ');
       }
     };
     return `
-      <div class="card mb-4" data-reveal>
-        <div class="card-header">
-          <span class="card-title">🎞️ Momentos marcantes</span>
-        </div>
-        <div class="timeline">
-          ${moments.slice(0, 10).map(m => `
-            <div class="timeline-item">
-              <div class="timeline-date">sem ${m.atAbsWeek ?? '—'} · mag ${m.magnitude ?? 0}</div>
-              <div class="timeline-content">
-                <span class="text-sm font-bold">${e(label(m))}</span>
-              </div>
+      <div class="archive-doc mb-4" data-reveal>
+        <span class="archive-tab">📁 Arquivo da Carreira</span>
+        <span class="archive-stamp" aria-hidden="true">Registro</span>
+        <div class="archive-entries">
+          ${moments.slice(0, 30).map(m => `
+            <div class="archive-entry">
+              <span class="archive-entry-date">${e(dateLabel(m.atAbsWeek))}</span>
+              <span class="archive-entry-text">${e(label(m))}</span>
             </div>
           `).join('')}
         </div>
@@ -87,7 +102,7 @@ export class FighterProfileView {
     `;
   }
 
-  // ctx opcional: { topMoments, rivalryInfo, forceBio }
+  // ctx opcional: { topMoments, recentMoments, careerStartedAt, rivalryInfo, forceBio }
   static render(fighter, fightHistory = [], isPlayer = false, ctx = {}) {
     if (!fighter) return '<div class="empty-state"><p>Lutador não encontrado.</p></div>';
     const displayHistory = fightHistory.length > 0 ? fightHistory : (fighter.fights || []);
@@ -122,7 +137,7 @@ export class FighterProfileView {
         </div>
         <p class="text-xs text-muted mt-2">Heat alto = vilão que vende. Popularidade alta + pouco heat = herói da torcida.</p>
       </div>` : '';
-    const momentsHtml = this._renderMomentsTimeline(ctx.topMoments || ctx.recentMoments || []);
+    const momentsHtml = this._renderMomentsTimeline(ctx.recentMoments || ctx.topMoments || [], ctx.careerStartedAt);
 
     const attrBars = (attrs, label, colorClass) => {
       return `
@@ -660,6 +675,47 @@ export class FighterProfileView {
             </div>
           ` : '';
         })() : ''}
+      </div>
+
+      <!-- F10: Evolução do lutador — estágios da carreira -->
+      <div class="card mt-4">
+        <div class="card-header">
+          <span class="card-title">📈 Evolução na Carreira</span>
+        </div>
+        ${(() => {
+          const total = fighter.totalFights ?? ((fighter.record?.wins || 0) + (fighter.record?.losses || 0));
+          const titlesWon = fighter.titlesWon || 0;
+          const pop = fighter.popularity || 0;
+
+          const stageIds = ['rookie'];
+          if (total >= 3) stageIds.push('prospect');
+          if (total >= 8) stageIds.push('journeyman');
+          if (pop >= 50 || total >= 12 || titlesWon > 0) stageIds.push('star');
+          if (titlesWon > 0) stageIds.push('champion');
+
+          const currentStage = VisualIdentityService.describeIdentity(fighter).stageId;
+          const currentIdx = stageIds.indexOf(currentStage);
+          if (currentIdx === -1) stageIds.push(currentStage);
+
+          return `
+            <div class="evolution-bar">
+              ${stageIds.map((sid, i) => {
+                const isCurrent = sid === currentStage;
+                return `
+                  <div class="evolution-node ${isCurrent ? 'is-current' : ''}">
+                    <div class="evolution-node-dot"></div>
+                    <div class="evolution-node-label">${CAREER_STAGES_LABELS[sid] || sid}</div>
+                    <div class="evolution-node-date">${isCurrent ? 'atual' : ''}</div>
+                  </div>
+                  ${i < stageIds.length - 1 ? `<div class="evolution-line ${i < currentIdx ? 'is-filled' : ''}"></div>` : ''}
+                `;
+              }).join('')}
+            </div>
+            <div class="text-xs text-muted" style="padding:0 0.5rem 0.5rem">
+              ${currentIdx === stageIds.length - 1 ? 'Você está no topo da sua trajetória atual.' : `Próximo marco: ${CAREER_STAGES_LABELS[stageIds[currentIdx + 1]] || stageIds[currentIdx + 1]}`}
+            </div>
+          `;
+        })()}
       </div>
 
       <!-- G3: Gráfico de carreira (OVR ao longo das lutas) -->

@@ -220,7 +220,7 @@ export class Fighter {
     return this.totalFights > 0 ? (this.record.wins / this.totalFights) * 100 : 0;
   }
 
-  // fights[0] é a luta mais recente (unshift no SimulationEngine)
+  // fights[0] é a luta mais recente (unshift em FightOutcome._updateFighter)
   get winStreak() {
     let streak = 0;
     for (const f of this.fights) {

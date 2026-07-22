@@ -764,6 +764,603 @@
   flex-wrap: wrap;
 }
 
+/* Fase 6 — dossiê como relatório: conhecido/desconhecido, ameaças, oportunidades */
+.scout-reads {
+  border-top: 1px dashed var(--border);
+  padding-top: 0.625rem;
+}
+
+.scout-coverage-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.scout-coverage-label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.scout-coverage-head .badge { margin-left: auto; }
+
+.scout-bar {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.scout-bar-fill {
+  height: 100%;
+  background: var(--gold);
+  transition: width 0.4s ease;
+}
+
+.scout-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+
+.scout-col {
+  padding: 0.5rem 0.625rem;
+  background: var(--mat);
+  border-radius: var(--radius);
+  border-left: 2px solid var(--border);
+}
+
+.scout-col--threats { border-left-color: var(--blue); }
+.scout-col--opps { border-left-color: var(--success); }
+
+.scout-col-title {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.35rem;
+}
+
+.scout-col--threats .scout-col-title { color: var(--blue-bright); }
+.scout-col--opps .scout-col-title { color: var(--success); }
+
+[data-theme="light"] .scout-col--threats .scout-col-title { color: var(--blue); }
+
+.scout-col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.scout-col li {
+  font-size: 0.75rem;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.scout-empty {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+}
+
+.scout-unknown {
+  margin-top: 0.5rem;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ==========================================================================
+   Sistema de documentos (Fase 8) — cada sistema é um artefato da carreira.
+   Lesão -> prontuário/ficha médica.
+   ========================================================================== */
+
+.med-record {
+  position: relative;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.med-record-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.875rem;
+  border-bottom: 1px dashed var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.med-record-fields { padding: 0.5rem 0.875rem; }
+
+.med-field {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.med-field:last-child { border-bottom: none; }
+
+.med-field-label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.med-field-value {
+  font-size: 0.8125rem;
+  color: var(--text);
+  text-align: right;
+  font-weight: 600;
+}
+
+.med-stamp {
+  position: absolute;
+  top: 2.9rem;
+  right: 0.75rem;
+  border: 2px solid var(--danger);
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  transform: rotate(-8deg);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.med-treatment {
+  padding: 0.75rem 0.875rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.med-treatment-title {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.med-treatment-opt { text-align: left; }
+
+/* Contrato -> documento jurídico */
+.legal-doc {
+  position: relative;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--gold);
+  border-radius: var(--radius);
+  padding: 0.875rem 1rem;
+}
+
+.legal-doc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.legal-doc-title {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.legal-doc-seal { font-size: 1.4rem; color: var(--gold); opacity: 0.7; }
+
+.legal-doc-parties {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+  margin-bottom: 0.6rem;
+}
+
+.legal-label {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-right: 0.35rem;
+}
+
+.legal-clauses {
+  margin: 0 0 0.75rem;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.legal-clauses li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+  border-bottom: 1px dotted var(--border);
+  padding-bottom: 0.25rem;
+}
+
+.legal-clause-k { color: var(--text-muted); }
+.legal-clause-v { font-weight: 600; text-align: right; }
+
+.legal-doc-sign {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+}
+
+.legal-sign-line {
+  font-family: var(--font-hand, cursive);
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--text-muted);
+  padding: 0 2.5rem 0.1rem 0;
+}
+
+/* Rivalidade -> recorte de jornal */
+.news-clip {
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.875rem 1rem;
+}
+
+.news-masthead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  border-bottom: 3px double var(--text-muted);
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.news-outlet {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.news-edition {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.news-headline {
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.2;
+  margin: 0 0 0.25rem;
+  letter-spacing: -0.01em;
+}
+
+.news-byline {
+  font-size: 0.6875rem;
+  font-style: italic;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.news-para {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  margin: 0 0 0.4rem;
+  text-align: justify;
+}
+
+.news-para--muted { color: var(--text-muted); font-style: italic; }
+
+.news-meter {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 0.25rem;
+}
+
+.news-meter-fill { height: 100%; background: var(--danger); }
+
+/* Treinamento -> quadro tático (lousa do técnico, look único proposital) */
+.tactical-board {
+  position: relative;
+  background: linear-gradient(160deg, #1e2b26, #14201b);
+  border: 1px solid #2f4038;
+  border-radius: var(--radius);
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1rem;
+  box-shadow: inset 0 0 42px rgba(0, 0, 0, 0.42);
+  overflow: hidden;
+}
+
+.tactical-board-tape {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-2deg);
+  width: 92px;
+  height: 20px;
+  background: var(--card-tape, rgba(224, 207, 168, 0.85));
+  opacity: 0.85;
+}
+
+.tactical-board-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #7fae97;
+}
+
+.tactical-board-title {
+  font-family: var(--font-hand, cursive);
+  font-size: 1.65rem;
+  color: #eef5f0;
+  margin: 0.1rem 0 0.2rem;
+  line-height: 1.1;
+}
+
+.tactical-board-sub {
+  font-size: 0.8125rem;
+  color: #a9c4b8;
+  margin: 0;
+}
+
+/* Notícia -> tale of the tape (head-to-head da mídia) */
+.tape-compare {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  text-align: center;
+}
+
+.tape-name {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.tape-record { font-size: 1.15rem; font-weight: 800; line-height: 1.2; }
+.tape-meta { font-size: 0.6875rem; color: var(--text-muted); }
+.tape-side--rival .tape-record { color: var(--blue-bright); }
+[data-theme="light"] .tape-side--rival .tape-record { color: var(--blue); }
+.tape-vs { font-size: 1.25rem; font-weight: 800; color: var(--text-muted); }
+
+/* Histórico -> arquivo de carreira (pasta/dossiê com aba e selo) */
+.archive-doc {
+  position: relative;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.4rem 1rem 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.archive-tab {
+  position: absolute;
+  top: -0.7rem;
+  left: 0.9rem;
+  background: var(--gold);
+  color: #1a1205;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.7rem;
+  border-radius: 4px 4px 0 0;
+}
+
+.archive-stamp {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: 1.5px solid var(--text-muted);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  transform: rotate(-5deg);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.archive-entries { display: flex; flex-direction: column; }
+
+.archive-entry {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+  padding: 0.4rem 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.archive-entry:last-child { border-bottom: none; }
+
+.archive-entry-date {
+  flex-shrink: 0;
+  width: 6.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+}
+
+.archive-entry-text { font-size: 0.8125rem; font-weight: 600; }
+
+/* Aposentadoria -> documento histórico (certificado de indução) */
+.cert-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 0.75rem;
+}
+
+/* ==========================================================================
+   O que está em jogo — SITUAÇÃO -> RISCO -> RECOMPENSA -> CONSEQUÊNCIA
+   O enquadramento da decisão central do core loop (Fase 1).
+   ========================================================================== */
+
+.stakes-block {
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.875rem;
+}
+
+.stakes-header {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.stakes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.5rem;
+}
+
+.stakes-col {
+  padding: 0.5rem 0.625rem;
+  background: var(--mat);
+  border-radius: var(--radius);
+  border-left: 2px solid var(--border);
+}
+
+.stakes-col--reward { border-left-color: var(--success); }
+.stakes-col--risk { border-left-color: var(--warning); }
+.stakes-col--consequence { border-left-color: var(--danger); }
+
+.stakes-col-title {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.35rem;
+}
+
+.stakes-col--reward .stakes-col-title { color: var(--success); }
+.stakes-col--risk .stakes-col-title { color: var(--warning); }
+.stakes-col--consequence .stakes-col-title { color: var(--danger); }
+
+.stakes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.stakes-list li {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--text);
+  display: flex;
+  gap: 0.4rem;
+  align-items: flex-start;
+}
+
+.stakes-icon { flex-shrink: 0; }
+
+/* ==========================================================================
+   Feed "Últimos Acontecimentos" — a carreira viva no topo do dashboard (Fase 2)
+   ========================================================================== */
+
+.recent-feed { padding: 0.5rem 0.875rem; }
+
+.feed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.feed-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.feed-item:last-child { border-bottom: none; }
+
+.feed-icon {
+  flex-shrink: 0;
+  font-size: 1.05rem;
+  width: 1.5rem;
+  text-align: center;
+}
+
+.feed-text {
+  flex: 1;
+  font-size: 0.8125rem;
+  color: var(--text);
+  min-width: 0;
+}
+
+.feed-when {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
 /* ==========================================================================
    Plano de jogo — a decisão que ganha a luta antes do primeiro soco
    ========================================================================== */
@@ -1467,4 +2064,668 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .tutorial-coach-hole,
   .tutorial-coach-callout { transition: none; }
+}
+
+/* ==========================================================================
+   Fase 9 — UI em Camadas: Drawer lateral, decision overlays, collapsible
+   ========================================================================== */
+
+/* --- Drawer lateral (desliza da direita) --- */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+.drawer-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: min(480px, 100vw);
+  height: 100vh;
+  height: 100dvh;
+  z-index: 41;
+  background: var(--canvas);
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 24px rgba(0,0,0,0.2);
+  transform: translateX(100%);
+  transition: transform 0.3s var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.drawer.is-open {
+  transform: translateX(0);
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.drawer-header h3 {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 92, 'wght' 700;
+  font-size: 1.1rem;
+  margin: 0;
+}
+.drawer-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+  line-height: 1;
+  border-radius: 4px;
+}
+.drawer-close:hover {
+  color: var(--text);
+  background: var(--mat);
+}
+
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem;
+}
+
+/* --- Decision overlay (substitui cards inline de decisão) --- */
+.decision-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+.decision-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.decision-card {
+  background: var(--mat);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--gold);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: var(--shadow-lg, 0 8px 32px rgba(0,0,0,0.3));
+  width: min(520px, calc(100vw - 2rem));
+  max-height: 80vh;
+  overflow-y: auto;
+  animation: decisionSlideIn 0.22s var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+.decision-card.is-closing {
+  animation: decisionSlideOut 0.15s var(--ease-out-expo) both;
+}
+
+.decision-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 92, 'wght' 700;
+  font-size: 1rem;
+}
+
+.decision-card-body {
+  padding: 1.25rem;
+}
+.decision-card-body p {
+  margin: 0 0 1rem 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.decision-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.decision-card-actions .btn {
+  text-align: left;
+  justify-content: flex-start;
+}
+
+@keyframes decisionSlideIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes decisionSlideOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(16px) scale(0.97); }
+}
+
+/* --- Collapsible sections --- */
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  padding: 0.5rem 0;
+}
+.collapsible-header:hover {
+  opacity: 0.8;
+}
+.collapsible-toggle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+.collapsible-header.is-open .collapsible-toggle {
+  transform: rotate(180deg);
+}
+.collapsible-body {
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.25s ease;
+  max-height: 0;
+  opacity: 0;
+}
+.collapsible-body.is-open {
+  max-height: 6000px;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer,
+  .drawer-backdrop,
+  .decision-card,
+  .collapsible-body,
+  .collapsible-toggle { transition: none; }
+  .decision-card { animation: none; }
+  .decision-card.is-closing { animation: none; }
+}
+
+/* ==========================================================================
+   Fase 11 — Consequências Narrativas
+   ========================================================================== */
+.chain-card {
+  background: var(--mat);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+  padding: 0.75rem 1rem;
+  position: relative;
+}
+.chain-card--win { border-left: 3px solid #22c55e; }
+.chain-card--loss { border-left: 3px solid #ef4444; }
+
+.chain-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.chain-title {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 92, 'wght' 700;
+  font-size: 0.85rem;
+}
+.chain-opponent {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.chain-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.chain-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+}
+.chain-item:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+.chain-item-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.chain-item-text {
+  flex: 1;
+}
+.chain-item-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.chain-item-desc {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-top: 1px;
+}
+
+/* ==========================================================================
+   Fase 12 — Momentos Cinematográficos
+   ========================================================================== */
+.cinematic-moment-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.7);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+.cinematic-moment-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cinematic-moment-card {
+  background: linear-gradient(135deg, #1a1a2a 0%, #2a1a3a 100%);
+  border: 1px solid rgba(201, 162, 39, 0.3);
+  border-top: 3px solid var(--gold);
+  border-radius: 16px;
+  box-shadow: 0 12px 48px rgba(0,0,0,0.5);
+  width: min(480px, calc(100vw - 2rem));
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  animation: momentIn 0.4s var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+.cinematic-moment-card.is-closing {
+  animation: momentOut 0.2s var(--ease-out-expo) both;
+}
+
+@keyframes momentIn {
+  from { opacity: 0; transform: translateY(30px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes momentOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(20px) scale(0.97); }
+}
+
+.moment-icon {
+  font-size: 3rem;
+  line-height: 1;
+  margin-bottom: 0.75rem;
+  display: block;
+}
+.moment-title {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 92, 'wght' 800;
+  font-size: 1.6rem;
+  line-height: 1.2;
+  color: #fff;
+  margin-bottom: 0.5rem;
+}
+.moment-subtitle {
+  font-size: 0.75rem;
+  color: var(--gold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+.moment-description {
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.7);
+  line-height: 1.6;
+  margin-bottom: 1.5rem;
+  max-width: 380px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.moment-continue {
+  background: var(--gold);
+  color: #1a1a1a;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 2rem;
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 92, 'wght' 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.moment-continue:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(201, 162, 39, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cinematic-moment-overlay,
+  .cinematic-moment-card { transition: none; animation: none; }
+}
+
+/* ==========================================================================
+   Fase 10 — Progressão Visual: stage badges, journey, evolution timeline
+   ========================================================================== */
+
+/* --- Stage badges --- */
+.stage-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 100px;
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 92, 'wght' 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  border: 1px solid;
+}
+.stage-badge--rookie      { background: #e8e0d4; color: #6b5e50; border-color: #c4b8a8; }
+.stage-badge--prospect    { background: #d4e8f0; color: #1a6b8a; border-color: #8cc4d8; }
+.stage-badge--journeyman  { background: #e0dce0; color: #5a4e5a; border-color: #b0a8b0; }
+.stage-badge--star        { background: #f0e0b0; color: #7a5a00; border-color: #d4b84a; }
+.stage-badge--champion    { background: #f5d700; color: #1a1a1a; border-color: #b8a000; }
+.stage-badge--ex_champion { background: #d0c8b0; color: #5a4e3a; border-color: #a09878; }
+.stage-badge--veteran     { background: #d0c8c0; color: #4a3e3a; border-color: #988880; }
+.stage-badge--legend      { background: #c8102e; color: #fff; border-color: #9a0c22; }
+.stage-badge--retired     { background: #c0b8b0; color: #3a2e2a; border-color: #8a8078; }
+.stage-badge--fallen      { background: #3a2e2a; color: #e0d4c8; border-color: #5a4e4a; }
+.stage-badge--coach       { background: #2a5a4a; color: #c8e0d4; border-color: #3a7a6a; }
+.stage-badge--mogul       { background: #1a1a2a; color: #d4c8a0; border-color: #3a3a5a; }
+
+/* --- Journey section --- */
+.journey-section {
+  background: var(--mat);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+  padding: 1rem 1.25rem;
+}
+
+.journey-track {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin: 0.75rem 0;
+}
+.journey-step {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 20px;
+  font-size: 0.65rem;
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 85, 'wght' 600;
+  background: var(--mat-high);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.journey-step.is-current {
+  background: var(--gold);
+  color: #1a1a1a;
+  border-color: var(--gold);
+}
+.journey-arrow {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+.journey-metric {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.journey-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 60px;
+}
+.journey-stat-value {
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 92, 'wght' 700;
+  font-size: 1.2rem;
+  line-height: 1.2;
+}
+.journey-stat-label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+/* --- Reputation compact cluster --- */
+.rep-cluster {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.rep-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: var(--mat-high);
+  border: 1px solid var(--border);
+}
+.rep-pill-icon { font-size: 0.75rem; }
+.rep-pill-value { min-width: 1.5rem; text-align: right; }
+
+/* --- Evolution timeline (profile) --- */
+.evolution-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin: 1rem 0;
+  padding: 0.5rem 0;
+  overflow-x: auto;
+}
+.evolution-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  position: relative;
+  min-width: 60px;
+}
+.evolution-node-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--mat);
+  z-index: 1;
+}
+.evolution-node.is-current .evolution-node-dot {
+  background: var(--gold);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(245, 215, 0, 0.25);
+}
+.evolution-node-label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  text-align: center;
+  white-space: nowrap;
+}
+.evolution-node-date {
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+.evolution-line {
+  flex: 1;
+  min-width: 24px;
+  height: 2px;
+  background: var(--border);
+  margin-bottom: 1.5rem;
+}
+.evolution-line.is-filled {
+  background: var(--gold);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .journey-section,
+  .stage-badge { transition: none; }
+}
+
+/* ==========================================================================
+   Fase 17 — Polimento Visual: hover, empty states, loading, microtransições
+   ========================================================================== */
+
+/* --- Card hover lift --- */
+.card {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+
+/* --- Button press feedback --- */
+.btn:active {
+  transform: scale(0.97);
+}
+.btn {
+  transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* --- Empty state --- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  gap: 0.5rem;
+}
+.empty-state-icon {
+  font-size: 2rem;
+  opacity: 0.4;
+}
+.empty-state-text {
+  font-size: 0.8rem;
+  max-width: 280px;
+}
+
+/* --- Loading spinner overlay --- */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  background: rgba(0,0,0,0.5);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+.loading-overlay.is-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+.loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255,255,255,0.15);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+.loading-label {
+  font-size: 0.8rem;
+  color: rgba(255,255,255,0.7);
+  font-family: var(--font-display);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* --- Micro: link hover underline --- */
+a {
+  transition: color 0.15s ease;
+}
+
+/* --- Stat card hover refinement --- */
+.stat-card {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+  background: var(--mat-high);
+}
+
+/* --- Progress bar subtle pulse for high values --- */
+.progress-fill.high {
+  transition: width 0.4s ease;
+}
+
+/* --- Loading toast --- */
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 80;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-family: var(--font-display);
+  font-variation-settings: 'wdth' 92, 'wght' 600;
+  background: var(--mat-high);
+  border: 1px solid var(--border);
+  color: var(--text);
+  animation: toastIn 0.3s var(--ease-out-expo) both;
+  pointer-events: none;
+  max-width: 300px;
+}
+.toast--success { border-left: 3px solid #22c55e; }
+.toast--info { border-left: 3px solid #2f6bbf; }
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .btn,
+  .stat-card,
+  .loading-overlay,
+  .toast { transition: none; }
+  .card:hover,
+  .stat-card:hover { transform: none; }
+  .btn:active { transform: none; }
+  .loading-spinner { animation: none; }
+  .toast { animation: none; }
 }

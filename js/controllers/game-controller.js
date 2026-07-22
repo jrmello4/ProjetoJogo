@@ -18,6 +18,7 @@ import { TrainingPartnersService } from '../services/training-partners-service.j
 import { ManagerService } from '../services/manager-service.js';
 import { CareerLogService } from '../services/career-log-service.js';
 import { CareerEventBus, CAREER_EVENT_TYPES } from '../services/career-event-bus.js';
+import { CAREER_EVENT, CareerEvents } from '../services/career-events.js';
 import { RivalryService } from '../services/rivalry-service.js';
 import { StyleService } from '../services/style-service.js';
 import { SocialMediaService } from '../services/social-media-service.js';
@@ -25,6 +26,7 @@ import { PodcastService } from '../services/podcast-service.js';
 import { YearReviewService } from '../services/year-review-service.js';
 import { CrowdService } from '../services/crowd-service.js';
 import { VisualIdentityService } from '../services/visual-identity-service.js';
+import { NarrativeChainService } from '../services/narrative-chain-service.js';
 import { SocialMedia } from './social-media.js';
 import { FightOffer } from '../models/fight-offer.js';
 import { generateId, clamp, pickTopRandom, sanitizePlayerName } from '../utils/helpers.js';
@@ -85,6 +87,7 @@ export class GameController {
     this.managerService = null;
     this.careerLogService = null;
     this.careerEventBus = null;
+    this.careerEvents = null;
     this.rivalryService = null;
     this.socialMediaService = null;
     this.podcastService = null;
@@ -104,20 +107,23 @@ export class GameController {
     this.notifService = new NotificationService(this.db);
     this.careerLogService = new CareerLogService(this.db);
     this.careerEventBus = new CareerEventBus();
+    this.careerEvents = new CareerEvents();
     this.titleService = new TitleService(this.db, this.fighterCtrl, this.notifService);
     this.scoutingService = new ScoutingService(this.db, this.notifService);
     this.contractService = new ContractService(this.db, this.fighterCtrl, this.notifService);
     this.managerService = new ManagerService(this.db, this.notifService, this.careerLogService);
     this.rivalryService = new RivalryService(this.db, this.careerLogService);
     this.partnersService = new TrainingPartnersService(this.db, this.fighterCtrl, this.notifService, this.careerLogService);
-    // Construído depois do RivalryService: _computePressureLevel precisa de
-    // rivalryService para pressão extra em revanche 'grudge'.
-    this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.scoutingService, this.contractService, this.managerService, this.careerLogService, this.rivalryService, this.careerEventBus);
-    this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.contractService, this.rivalryService);
+    // Construído depois do RivalryService: WorldService usa rivalryService
+    // (decaimento de rivalidade, bônus de hype de revanche na bolsa).
+    this.worldService = new WorldService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.scoutingService, this.contractService, this.managerService, this.careerLogService, this.rivalryService, this.careerEvents, this.careerEventBus);
+    this.offerService = new OfferService(this.db, this.fighterCtrl, this.notifService, this.titleService, this.contractService, this.rivalryService, this.careerEvents);
     this.sponsorService = new SponsorService(this.db, this.notifService, this.careerLogService);
     this.socialMediaService = new SocialMediaService(this.db, this.notifService);
     this.podcastService = new PodcastService(this.db, this.careerLogService, this.notifService);
     this.yearReviewService = new YearReviewService(this.db, this.careerLogService, this.notifService);
+    this.narrativeChainService = new NarrativeChainService(this.db);
+    this._registerDomainReactions();
 
     // Sub-controllers extraídos do GameController (P8.2)
     this.financeCtrl = new FinanceController();
@@ -141,6 +147,45 @@ export class GameController {
     this.notifService.clearOld().catch(() => {});
 
     return await this.getPlayerFighter();
+  }
+
+  _registerDomainReactions() {
+    this.careerEvents.on(CAREER_EVENT.FIGHT_OFFERED, async ({ payload }) => {
+      const { offer } = payload;
+      await this.notifService.add(
+        'offer',
+        '📩 Nova Oferta de Luta',
+        `${offer.promotionName} quer você contra ${offer.opponentName} — bolsa de $${offer.purse.toLocaleString()}.${offer.isShortNotice ? ' ⚡ SHORT NOTICE!' : ''}`
+      );
+    });
+    this.careerEvents.on(CAREER_EVENT.FIGHT_ACCEPTED, async ({ payload }) => {
+      const { offer, weeksOut } = payload;
+      await this.notifService.add('success', 'Luta Fechada!', `${offer.opponentName} em ${weeksOut} semana${weeksOut === 1 ? '' : 's'} pelo ${offer.promotionName}. Hora do camp!`);
+    });
+    this.careerEvents.on(CAREER_EVENT.FIGHT_COMPLETED, async ({ payload }) => {
+      const { result, booking, absWeekNow } = payload;
+      const won = result.isDraw ? null : result.winnerId === booking.fighterId;
+      await this.careerLogService.publish(booking.fighterId, 'fight_completed', absWeekNow, result.isDraw ? 30 : result.isFinish ? 55 : 40, {
+        opponentName: booking.opponentName,
+        promotionName: booking.promotionName,
+        won,
+        method: result.method,
+        round: result.round,
+        isTitleFight: !!booking.isTitleFight,
+        resultId: result.id,
+      });
+
+      // F11: gera cadeia de consequências narrativas
+      try {
+        const fighter = await this.getPlayerFighter();
+        if (fighter && this.narrativeChainService) {
+          const opponent = booking.opponentId ? await this.fighterCtrl.getFighter(booking.opponentId) : null;
+          await this.narrativeChainService.generateAfterFight(fighter, opponent, result, booking, absWeekNow, result.isDraw);
+        }
+      } catch (e) {
+        console.warn('F11 narrative chain failed:', e);
+      }
+    });
   }
 
   async _applyPatches(meta) {
@@ -1907,6 +1952,10 @@ export class GameController {
       endCareerPrompt: state.endCareerPrompt || false,
       state,
       now,
+      narrativeChains: this.narrativeChainService
+        ? await this.narrativeChainService.getAllRecent(1)
+        : [],
+      lastFightResult: fighter?.fights?.[0]?.won ?? null,
       onboarding: fighter && OnboardingService.shouldShow(fighter)
         ? {
             activeStep: OnboardingService.activeStep(fighter),

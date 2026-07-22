@@ -1,68 +1,66 @@
 import { e } from '../utils/helpers.js';
 
 const RIVALRY_TYPE_INFO = {
-  grudge: { icon: 'Fogo', label: 'Grudge' },
-  robbery: { icon: 'Juizes', label: 'Roubada' },
-  competitive: { icon: 'Ranking', label: 'Competitiva' },
-  personal: { icon: 'Pessoal', label: 'Pessoal' },
+  grudge: { icon: '🔥', label: 'Grudge' },
+  robbery: { icon: '⚖️', label: 'Roubada' },
+  competitive: { icon: '🥊', label: 'Competitiva' },
+  personal: { icon: '😤', label: 'Pessoal' },
 };
 
 function rivalryTypeInfo(type) {
-  return RIVALRY_TYPE_INFO[type] || { icon: 'Ranking', label: type || 'Competitiva' };
+  return RIVALRY_TYPE_INFO[type] || { icon: '🥊', label: type || 'Competitiva' };
 }
 
 export class RivalriesView {
+  static _renderNewsClip(rivalry, nameA, nameB, { archived = false } = {}) {
+    const typeInfo = rivalryTypeInfo(rivalry.type);
+    const intensity = Math.max(0, Math.min(10, Number(rivalry.intensity) || 0));
+    const headline = archived
+      ? `${nameA} × ${nameB}: capítulo encerrado`
+      : intensity >= 7
+        ? `${nameA} × ${nameB}: guerra declarada`
+        : intensity >= 4
+          ? `${nameA} provoca ${nameB} e o clima esquenta`
+          : `Nasce a rivalidade: ${nameA} × ${nameB}`;
+    const arc = (rivalry.history || []).slice(-4).reverse();
+    const body = arc.length
+      ? arc.map(item => `<p class="news-para">${e(item.description || item.type || '')}</p>`).join('')
+      : '<p class="news-para news-para--muted">Os bastidores ainda estão quietos. Uma luta pode mudar isso.</p>';
+
+    return `
+      <article class="news-clip ${archived ? 'rivalry-dossier--archived' : ''}" data-reveal>
+        <div class="news-masthead">
+          <span class="news-outlet">${archived ? 'Arquivo de Carreira' : 'O Globo do Octógono'}</span>
+          <span class="news-edition">${typeInfo.icon} ${e(typeInfo.label)} · calor ${intensity}/10</span>
+        </div>
+        <h3 class="news-headline">${e(headline)}</h3>
+        <div class="news-byline">Coluna de bastidores · ${(rivalry.history || []).length} capítulo${(rivalry.history || []).length === 1 ? '' : 's'}</div>
+        <div class="news-body">${body}</div>
+        <div class="news-meter" aria-hidden="true"><div class="news-meter-fill" style="width:${intensity * 10}%"></div></div>
+      </article>
+    `;
+  }
+
   static render(rivalries = [], fighters = [], archived = []) {
     const getFighterName = (id) => {
       const fighter = fighters.find(item => item.id === id);
       return fighter ? fighter.name : 'Desconhecido';
     };
-
-    const renderDossier = (rivalry, { archived: isArchived = false } = {}) => {
-      const typeInfo = rivalryTypeInfo(rivalry.type);
-      const history = rivalry.history || [];
-      const intensity = Math.max(0, Math.min(10, Number(rivalry.intensity) || 0));
-      const lastEvent = history[history.length - 1];
-      return `
-        <article class="card rivalry-dossier ${isArchived ? 'rivalry-dossier--archived' : ''}">
-          <div class="document-kicker">${isArchived ? 'ARQUIVO DE CONFLITOS' : 'DOSSIÊ DE CONFLITO'}</div>
-          <div class="flex items-center justify-between mb-3">
-            <span class="badge ${intensity >= 7 ? 'badge-danger' : intensity >= 4 ? 'badge-warning' : 'badge-info'}">
-              ${e(rivalry.intensityLabel || 'Rivalidade')} (${intensity}/10)
-            </span>
-            <span class="text-xs text-muted" title="Origem da rivalidade">${e(typeInfo.icon)} · ${e(typeInfo.label)}</span>
-          </div>
-          <div class="flex items-center justify-between">
-            <div class="text-center"><div class="font-bold">${e(getFighterName(rivalry.fighterAId))}</div></div>
-            <div class="text-danger font-bold">VS</div>
-            <div class="text-center"><div class="font-bold">${e(getFighterName(rivalry.fighterBId))}</div></div>
-          </div>
-          <div class="progress-bar mt-2" style="height:8px">
-            <div class="progress-fill ${intensity >= 7 ? 'low' : intensity >= 4 ? 'medium' : 'high'}" style="width:${intensity * 10}%"></div>
-          </div>
-          <div class="text-xs text-muted mt-2">
-            ${history.length} eventos · ${lastEvent ? e(lastEvent.description || lastEvent.type || '') : 'Sem eventos registrados'}
-          </div>
-          ${history.length ? `
-          <div class="rivalry-history mt-2">
-            <div class="text-xs text-muted mb-1">Linha do arco</div>
-            ${history.slice(-4).reverse().map(event => `
-              <div class="text-xs rivalry-history__entry">• ${e(event.description || event.type || '')}</div>
-            `).join('')}
-          </div>` : ''}
-        </article>
-      `;
-    };
-
+    const clip = (rivalry, options) => this._renderNewsClip(
+      rivalry,
+      getFighterName(rivalry.fighterAId),
+      getFighterName(rivalry.fighterBId),
+      options,
+    );
     const activeHtml = rivalries.length
-      ? `<div class="grid grid-cols-2 gap-4">${rivalries.map(rivalry => renderDossier(rivalry)).join('')}</div>`
-      : `<div class="empty-state"><p>Nenhuma rivalidade ativa. Rivalidades se formam apos lutas intensas.</p></div>`;
+      ? `<div class="grid grid-cols-2 gap-4">${rivalries.map(rivalry => clip(rivalry)).join('')}</div>`
+      : '<div class="empty-state"><p>Nenhuma rivalidade ativa. Rivalidades se formam após lutas intensas.</p></div>';
     const archiveHtml = archived.length
       ? `
         <section class="rivalry-archive">
           <div class="section-label mt-4">Arquivo de Rivalidades Encerradas</div>
-          <p class="text-xs text-muted mb-2">Conflitos encerrados continuam na memoria da carreira.</p>
-          <div class="grid grid-cols-2 gap-4">${archived.slice(0, 8).map(rivalry => renderDossier(rivalry, { archived: true })).join('')}</div>
+          <p class="text-xs text-muted mb-2">Conflitos encerrados continuam na memória da carreira.</p>
+          <div class="grid grid-cols-2 gap-4">${archived.slice(0, 8).map(rivalry => clip(rivalry, { archived: true })).join('')}</div>
         </section>`
       : '';
 

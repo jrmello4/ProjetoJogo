@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { SaveService } from '../js/services/save-service.js';
 
-const STORES = ['fighters', 'organization', 'events', 'fights', 'rivalries', 'hallOfFame', 'offers'];
+const STORES = ['fighters', 'organization', 'events', 'fights', 'rivalries', 'hallOfFame', 'offers', 'narrativeChains'];
 
 function validSave(overrides = {}) {
   return {
@@ -46,5 +46,17 @@ describe('SaveService.importSave', () => {
 
     await expect(service.importSave(JSON.stringify(corrupt))).rejects.toThrow('id duplicado');
     expect(calls).toHaveLength(0);
+  });
+
+  it('migrates a save from before narrative chains existed', async () => {
+    const calls = [];
+    const service = new SaveService({ replaceStores: async snapshot => calls.push(snapshot) });
+    const legacy = validSave();
+    delete legacy.narrativeChains;
+
+    await service.importSave(JSON.stringify(legacy));
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].narrativeChains).toEqual([]);
   });
 });

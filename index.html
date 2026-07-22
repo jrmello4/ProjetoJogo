@@ -18,7 +18,7 @@
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/motion.css">
   <link rel="stylesheet" href="css/three-arena.css">
@@ -192,6 +192,16 @@
   </noscript>
 
   <input type="file" id="saveFileInput" accept=".json" aria-label="Importar arquivo de save" style="display: none;">
+
+  <!-- Fase 9: Drawer lateral para views secundárias -->
+  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Painel lateral">
+    <div class="drawer-header">
+      <h3 id="drawerTitle">Detalhes</h3>
+      <button class="drawer-close" id="drawerCloseBtn" aria-label="Fechar painel">&times;</button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+  </aside>
   <script>
     document.getElementById('saveFileInput').addEventListener('change', (e) => {
       const file = e.target.files[0];

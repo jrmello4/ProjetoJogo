@@ -2,6 +2,7 @@ import { formatCurrency, getWeightClassShort, getWeightClassName, renderAttrRang
 import { TIER_LABELS, NEGOTIATION_CONFIG, TITLE_ROLE, GAME_PLANS, CARD_POSITION } from '../config/game-config.js';
 import { OFFER_STATUS } from '../models/fight-offer.js';
 import { PortraitService } from '../services/portrait-service.js';
+import { deriveScoutingReads } from '../services/scouting-report.js';
 
 const STATUS_LABELS = {
   [OFFER_STATUS.COMPLETED]: { label: 'Realizada', cls: 'badge-success' },
@@ -101,6 +102,47 @@ export class OffersView {
     `;
   }
 
+  // Fase 6 — o dossiê como relatório profissional: quanto você CONHECE vs o
+  // que ainda é ????, ameaças do adversário e oportunidades contra ele, com o
+  // grau de confiança da leitura (indício/provável/confirmado). A informação
+  // nunca é perfeita — é isso que gera tensão na escolha do plano.
+  static _renderScoutingReads(reads) {
+    if (!reads) return '';
+    const known = reads.coveragePct;
+    const confBadge = reads.level > 0
+      ? `<span class="badge ${reads.level >= 3 ? 'badge-success' : reads.level === 2 ? 'badge-warning' : 'badge-info'}">${e(reads.confidence)}</span>`
+      : '';
+    const list = (items) => items.length === 0
+      ? '<li class="scout-empty">????</li>'
+      : items.map(t => `<li>${e(t)}</li>`).join('');
+    const unknownLine = reads.unknown.length
+      ? `<div class="scout-unknown">🕵️ Ainda oculto: ${reads.unknown.map(u => e(u)).join(' · ')}</div>`
+      : '';
+    return `
+      <div class="scout-reads mt-3">
+        <div class="scout-coverage">
+          <div class="scout-coverage-head">
+            <span class="scout-coverage-label">Conhecido</span>
+            <span class="text-xs text-muted">${known}% · desconhecido ${100 - known}%</span>
+            ${confBadge}
+          </div>
+          <div class="scout-bar"><div class="scout-bar-fill" style="width:${known}%"></div></div>
+        </div>
+        <div class="scout-grid mt-2">
+          <div class="scout-col scout-col--threats">
+            <div class="scout-col-title">⚔️ Ameaças</div>
+            <ul>${list(reads.threats)}</ul>
+          </div>
+          <div class="scout-col scout-col--opps">
+            <div class="scout-col-title">🎯 Oportunidades</div>
+            <ul>${list(reads.opportunities)}</ul>
+          </div>
+        </div>
+        ${unknownLine}
+      </div>
+    `;
+  }
+
   // Dossiê do adversário. Sem estudar, tudo é faixa larga e ninguém sabe
   // como ele luta — e aí o plano de jogo vira aposta.
   static _renderDossier(offer, d) {
@@ -140,6 +182,7 @@ export class OffersView {
         </div>
 
         <div class="mt-3">${tendencies}${dna}</div>
+        ${this._renderScoutingReads(deriveScoutingReads(d))}
       </div>
       ${this._renderTheirRead(offer, d.theirRead)}
     `;
@@ -219,7 +262,65 @@ export class OffersView {
     `;
   }
 
-  static render(pending, accepted, history, fighter, now, dossiers = {}, contractProposals = [], teammates = {}, rivalries = {}, readiness = {}, opponents = {}) {
+  // Fase 1 — "O que está em jogo". Três colunas (RECOMPENSA / RISCO /
+  // CONSEQUÊNCIA) traduzem o estado do jogo na decisão central do core loop:
+  // o que conquisto, com o que entro, o que perco. Dados vêm de
+  // computeFightStakes (fight-stakes.js); aqui só desenha.
+  static _renderStakes(stakes) {
+    if (!stakes) return '';
+    const col = (title, cls, items) => `
+      <div class="stakes-col stakes-col--${cls}">
+        <div class="stakes-col-title">${title}</div>
+        ${items.length === 0 ? '' : `<ul class="stakes-list">
+          ${items.map(i => `<li><span class="stakes-icon">${i.icon}</span>${e(i.text)}</li>`).join('')}
+        </ul>`}
+      </div>`;
+    return `
+      <div class="stakes-block mt-2" data-reveal>
+        <div class="stakes-header">⚖️ O que está em jogo</div>
+        <div class="stakes-grid">
+          ${col('Recompensa', 'reward', stakes.reward)}
+          ${col('Risco', 'risk', stakes.risk)}
+          ${col('Se perder', 'consequence', stakes.consequence)}
+        </div>
+      </div>
+    `;
+  }
+
+  // Fase 8 — contrato como documento jurídico. Não é um card de stats: são
+  // partes, cláusulas numeradas e uma linha de assinatura. Os botões mantêm
+  // contract-accept/decline (wiring de app.js intacto).
+  static _renderContractDoc(cp) {
+    const tierLabel = TIER_LABELS[cp.tier] || '';
+    const tierCls = cp.tier === 1 ? 'badge-danger' : cp.tier === 2 ? 'badge-warning' : 'badge-info';
+    return `
+      <div class="legal-doc mb-2" data-reveal>
+        <div class="legal-doc-head">
+          <span class="legal-doc-title">Contrato de Exclusividade</span>
+          <span class="legal-doc-seal" aria-hidden="true">§</span>
+        </div>
+        <div class="legal-doc-parties">
+          <div><span class="legal-label">Promoção</span> <strong>${e(cp.promotionName)}</strong> <span class="badge ${tierCls}">${tierLabel}</span></div>
+          <div><span class="legal-label">Vínculo</span> ${cp.fightsTotal} lutas em regime de exclusividade</div>
+        </div>
+        <ol class="legal-clauses">
+          <li><span class="legal-clause-k">Bolsa por luta</span><span class="legal-clause-v">${formatCurrency(cp.basePurse)}</span></li>
+          <li><span class="legal-clause-k">Bônus de vitória</span><span class="legal-clause-v">${formatCurrency(cp.winBonus)}</span></li>
+          <li><span class="legal-clause-k">Cláusula de título</span><span class="legal-clause-v">${cp.titleClause ? 'Inclusa' : 'Ausente'}</span></li>
+          <li><span class="legal-clause-k">Exclusividade</span><span class="legal-clause-v">outras promoções silenciam enquanto vigente</span></li>
+        </ol>
+        <div class="legal-doc-sign">
+          <span class="legal-sign-line">Assinatura do atleta</span>
+          <div class="flex gap-2">
+            <button class="btn btn-sm btn-success contract-accept" data-fighter="${cp.fighterId}" data-promo="${cp.promotionId}" data-promo-name="${e(cp.promotionName)}">✒️ Assinar</button>
+            <button class="btn btn-sm btn-secondary contract-decline" data-fighter="${cp.fighterId}">Recusar</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  static render(pending, accepted, history, fighter, now, dossiers = {}, contractProposals = [], teammates = {}, rivalries = {}, readiness = {}, opponents = {}, stakes = {}) {
     const fighterOf = () => fighter;
     // Retrato do oponente — SEMPRE do lutador completo (opponents map);
     // sem ele, cai num placeholder de projeção só como último recurso.
@@ -237,7 +338,6 @@ export class OffersView {
           const fighter = fighterOf(o);
           const weeksToFight = o.eventAbsWeek - now;
           const weeksToExpire = o.expiresAbsWeek - now;
-          const risky = fighter && o.opponentOverall != null && o.opponentOverall - fighter.overallRating >= 5;
 
           const titleLabel = o.titleRole === TITLE_ROLE.DEFENSE
             ? `Defesa de cinturão ${getWeightClassName(o.weightClass)}`
@@ -303,8 +403,7 @@ export class OffersView {
                   <button class="btn btn-sm btn-secondary offer-decline" data-id="${o.id}">Recusar</button>
                 </div>
               </div>
-              ${risky ? '<div class="text-xs mt-2" style="color:var(--accent)">⚠️ Adversário mais forte no papel — risco alto, recompensa de reputação maior.</div>' : ''}
-              ${fighter && fighter.fatigue >= 40 ? '<div class="text-xs mt-1" style="color:var(--gold)">⚡ Seu atleta ainda carrega fadiga — considere o tempo de recuperação.</div>' : ''}
+              ${this._renderStakes(stakes[o.id])}
 
               ${o.negotiated
                 ? '<div class="text-xs text-muted mt-2">Bolsa já negociada nesta oferta.</div>'
@@ -441,35 +540,7 @@ export class OffersView {
     const contractHtml = contractProposals.length === 0 ? '' : `
       <div class="section-label mt-4">Propostas de Contrato Exclusivo</div>
       <p class="text-xs text-muted mb-2">Aceitar um contrato vincula o atleta a uma promoção — ofertas de outras promoções deixam de aparecer.</p>
-      ${contractProposals.map(cp => `
-        <div class="card mb-2 offer-card--contract" data-reveal>
-          <div class="flex items-center justify-between mb-2">
-            <div class="flex items-center gap-2">
-              ${tierBadge(cp.tier)}
-              <span class="font-bold">${e(cp.promotionName)}</span>
-            </div>
-            <span class="badge badge-info">${cp.fightsTotal} lutas</span>
-          </div>
-          <div class="flex items-center gap-3 mb-2" style="flex-wrap:wrap">
-            <div>
-              <div class="text-xs text-muted">Bolsa por luta</div>
-              <div class="text-sm font-bold" style="color:var(--success)">${formatCurrency(cp.basePurse)}</div>
-            </div>
-            <div>
-              <div class="text-xs text-muted">Bônus de vitória</div>
-              <div class="text-sm font-bold">${formatCurrency(cp.winBonus)}</div>
-            </div>
-            <div>
-              <div class="text-xs text-muted">Cláusula de título</div>
-              <div class="text-sm font-bold">${cp.titleClause ? 'Sim' : 'Não'}</div>
-            </div>
-          </div>
-          <div class="flex gap-2">
-            <button class="btn btn-sm btn-success contract-accept" data-fighter="${cp.fighterId}" data-promo="${cp.promotionId}" data-promo-name="${e(cp.promotionName)}">Aceitar Contrato</button>
-            <button class="btn btn-sm btn-secondary contract-decline" data-fighter="${cp.fighterId}">Recusar</button>
-          </div>
-        </div>
-      `).join('')}
+      ${contractProposals.map(cp => this._renderContractDoc(cp)).join('')}
     `;
 
     return `

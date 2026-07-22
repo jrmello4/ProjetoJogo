@@ -1,4 +1,4 @@
-const STORES = ['fighters', 'organization', 'events', 'fights', 'rivalries', 'hallOfFame', 'offers'];
+const STORES = ['fighters', 'organization', 'events', 'fights', 'rivalries', 'hallOfFame', 'offers', 'narrativeChains'];
 const SLOT_COUNT = 6;
 const SAVE_VERSION = 4;
 
@@ -75,7 +75,12 @@ export class SaveService {
 
     const normalized = {};
     for (const store of STORES) {
-      normalized[store] = this._validateRecords(store, data[store]);
+      // Narrative chains arrived after older exports already existed. Missing
+      // chains therefore mean an empty collection, not a corrupt save.
+      const records = store === 'narrativeChains' && data[store] == null
+        ? []
+        : data[store];
+      normalized[store] = this._validateRecords(store, records);
     }
     const gameStates = this._validateRecords('gameState', data.gameState);
     if (!gameStates.some(record => record.id === 'state')) {
@@ -125,6 +130,47 @@ export class SaveService {
     for (const store of STORES) await this.db.clear(store);
     await this.db.clear('notifications');
     await this.db.clear('gameState');
+  }
+
+  /** F15: valida que um save importado tem dados mínimos consistentes */
+  validateSave(data) {
+    if (!data || typeof data !== 'object') throw new Error('Save inválido — dados vazios.');
+    const checks = [
+      { field: 'fighters', label: 'lutadores', min: 1 },
+      { field: 'organization', label: 'organização', min: 1 },
+      { field: 'gameState', label: 'estado do jogo', min: 1 },
+    ];
+    for (const { field, label, min } of checks) {
+      const arr = data[field];
+      if (!arr || !Array.isArray(arr)) {
+        throw new Error(`Save corrompido — store "${label}" ausente.`);
+      }
+      if (arr.length < min) {
+        throw new Error(`Save incompleto — store "${label}" vazio.`);
+      }
+    }
+    const career = (data.gameState || []).find(s => s.id === 'career');
+    const fighterId = career?.playerFighterId;
+    const playerFighter = data.fighters?.find(f => f.id === fighterId);
+    if (!playerFighter) {
+      throw new Error('Save inconsistente — lutador principal não encontrado.');
+    }
+    return true;
+  }
+
+  /** F15: valida estado atual do jogo entre DB stores */
+  async validateCurrentState() {
+    const issues = [];
+    const fighters = await this.db.getAll('fighters');
+    if (fighters.length === 0) issues.push('Nenhum lutador encontrado.');
+    const state = await this.db.getAll('gameState');
+    if (state.length === 0) issues.push('Estado do jogo vazio.');
+    const career = state.find(s => s.id === 'career');
+    if (career) {
+      const playerExists = fighters.some(f => f.id === career.playerFighterId);
+      if (!playerExists) issues.push(`Lutador do jogador (${career.playerFighterId}) não encontrado.`);
+    }
+    return issues.length > 0 ? issues : null;
   }
 
   async saveSave(slotIndex) {

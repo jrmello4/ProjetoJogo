@@ -4,8 +4,16 @@ import { PodcastService } from '../services/podcast-service.js';
 import { YearReviewService } from '../services/year-review-service.js';
 import { CrowdService } from '../services/crowd-service.js';
 import { PortraitService } from '../services/portrait-service.js';
+import { VisualIdentityService } from '../services/visual-identity-service.js';
+import { careerLogEntryLabel } from '../services/career-log-labels.js';
 
 const tierBadgeCls = (tier) => (tier === 1 ? 'badge-danger' : tier === 2 ? 'badge-warning' : 'badge-info');
+const CAREER_STAGES_LABELS = {
+  rookie: 'Iniciante', prospect: 'Prospecto', journeyman: 'Circuito',
+  star: 'Estrela', champion: 'Campeão', ex_champion: 'Ex-campeão',
+  veteran: 'Veterano', legend: 'Lenda', retired: 'Aposentado',
+  fallen: 'Declínio', coach: 'Treinador', mogul: 'Empresário',
+};
 
 // Só passos do onboarding com um alvo ESTÁVEL na tela ganham "Mostrar" —
 // weighedIn só aparece via prompt na semana da pesagem, não tem elemento
@@ -166,6 +174,109 @@ export class DashboardView {
     return `${parts[0]}<br>${parts.slice(1).join(' ')}`;
   }
 
+  // ===== Últimos Acontecimentos (Fase 2) =====
+  // O feed vivo da carreira: o que aconteceu de importante, mais recente
+  // primeiro. Alimentado pelo career log (Fase 4) — a mesma fonte que
+  // biografia/documentário consomem. É o que responde "o que está
+  // acontecendo agora?" logo abaixo do pôster, antes de qualquer estatística.
+  static _renderRecentFeed(data) {
+    const items = data.recentHappenings || [];
+    if (items.length === 0) {
+      return `
+        <div class="section-label" data-reveal>Últimos Acontecimentos</div>
+        <div class="card mb-4" data-reveal>
+          <div class="empty-state">
+            <span class="empty-state-icon">📋</span>
+            <span class="empty-state-text">Nada de novo esta semana. A carreira segue.</span>
+          </div>
+        </div>`;
+    }
+    const ago = (atAbsWeek) => {
+      const w = Math.max(0, (data.now ?? 0) - (atAbsWeek ?? 0));
+      return w === 0 ? 'esta semana' : w === 1 ? 'há 1 semana' : `há ${w} semanas`;
+    };
+    return `
+      <div class="section-label" data-reveal>Últimos Acontecimentos</div>
+      <div class="card mb-4 recent-feed" data-reveal>
+        <ul class="feed-list" data-reveal-stagger>
+          ${items.map(entry => {
+            const { icon, text } = careerLogEntryLabel(entry);
+            return `<li class="feed-item">
+              <span class="feed-icon" aria-hidden="true">${icon}</span>
+              <span class="feed-text">${e(text)}</span>
+              <span class="feed-when">${e(ago(entry.atAbsWeek))}</span>
+            </li>`;
+          }).join('')}
+        </ul>
+      </div>
+    `;
+  }
+
+  // ===== F11: Cadeia de consequências narrativas =====
+  static _renderNarrativeChains(data) {
+    const chains = data.narrativeChains || [];
+    if (chains.length === 0) return '';
+    const chain = chains[0];
+    const cssClass = chain.won ? 'chain-card--win' : 'chain-card--loss';
+
+    return `
+      <div class="section-label" data-reveal>${chain.icon} ${chain.title}</div>
+      <div class="card mb-4 chain-card ${cssClass}" data-reveal>
+        <div class="chain-header">
+          <span class="chain-opponent">vs ${e(chain.opponentName)} · ${e(chain.method)} R${chain.round}</span>
+          <span class="chain-opponent">${chain.isTitleFight ? '🏆 Title Fight' : ''}</span>
+        </div>
+        <div class="chain-list">
+          ${chain.consequences.map(c => `
+            <div class="chain-item">
+              <span class="chain-item-icon">${c.icon}</span>
+              <div class="chain-item-text">
+                <div class="chain-item-title">${e(c.title)}</div>
+                <div class="chain-item-desc">${e(c.desc)}</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // ===== Lesão como ficha médica (Fase 8) =====
+  // O sistema de documentos: a reabilitação não é um card genérico, é um
+  // prontuário — diagnóstico, fase, carimbo de status e o plano de tratamento
+  // a "assinar". Os botões mantêm data-rehab-choice, então o wiring de app.js
+  // não muda.
+  static _renderMedicalRecord(fighter) {
+    const inj = fighter.injury || {};
+    const caseNo = String(fighter.id || '').replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase() || '0000';
+    const fastCost = (INJURY_CONFIG?.REHAB_FAST_COST * INJURY_CONFIG?.REHAB_FAST_WEEKS) || 1500;
+    return `
+      <div class="section-label" data-reveal>Decisões Pendentes</div>
+      <div class="med-record mb-4" data-reveal>
+        <div class="med-record-head">
+          <span class="med-record-org">🏥 Comissão Atlética · Prontuário</span>
+          <span class="med-record-id">Nº ${caseNo}</span>
+        </div>
+        <div class="med-record-fields">
+          <div class="med-field"><span class="med-field-label">Atleta</span><span class="med-field-value">${e(fighter.name)}</span></div>
+          <div class="med-field"><span class="med-field-label">Diagnóstico</span><span class="med-field-value">${e(inj.description || 'Lesão em avaliação')}</span></div>
+          <div class="med-field"><span class="med-field-label">Fase</span><span class="med-field-value">Reabilitação</span></div>
+        </div>
+        <div class="med-stamp" aria-hidden="true">Em reabilitação</div>
+        <div class="med-treatment">
+          <div class="med-treatment-title">Plano de tratamento — assine embaixo:</div>
+          <button class="btn btn-secondary med-treatment-opt" data-rehab-choice="free">
+            <strong>Fisioterapia gratuita</strong>
+            <span class="text-xs text-muted ml-2">6 semanas · sem custo</span>
+          </button>
+          <button class="btn btn-secondary med-treatment-opt" data-rehab-choice="fast">
+            <strong>Fisioterapia rápida</strong>
+            <span class="text-xs text-muted ml-2">3 semanas · $${fastCost}</span>
+          </button>
+        </div>
+      </div>`;
+  }
+
   static render(data, weekLabel) {
     const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, rivalryPrompt, narrativePrompt, weighInPrompt, pendingRehab, readiness, now, endCareerPrompt, onboarding, podcastEpisode, yearReview, crowdSnapshot, mediaCompare } = data;
 
@@ -247,26 +358,7 @@ export class DashboardView {
     }
 
     // ===== P2.2: Reabilitação de lesão =====
-    let rehabHtml = '';
-    if (pendingRehab) {
-      rehabHtml = `
-        <div class="card mb-4" data-reveal style="border-top-color:var(--danger)">
-          <div class="card-header">
-            <span class="card-title">🏥 Reabilitação de Lesão</span>
-          </div>
-          <p class="text-sm text-muted mb-2">Sua lesão está em fase de reabilitação. Escolha o tipo de tratamento:</p>
-          <div class="flex flex-col gap-2">
-            <button class="btn btn-secondary" data-rehab-choice="free" style="text-align:left">
-              <strong>Fisioterapia gratuita</strong>
-              <span class="text-xs text-muted ml-2">(6 semanas — lenta, mas sem custo)</span>
-            </button>
-            <button class="btn btn-secondary" data-rehab-choice="fast" style="text-align:left">
-              <strong>Fisioterapia rápida</strong>
-              <span class="text-xs text-muted ml-2">(3 semanas — $${INJURY_CONFIG?.REHAB_FAST_COST * INJURY_CONFIG?.REHAB_FAST_WEEKS || 1500})</span>
-            </button>
-          </div>
-        </div>`;
-    }
+    const rehabHtml = pendingRehab ? this._renderMedicalRecord(fighter) : '';
 
     // ===== Redes sociais em semana livre (§D.2) =====
     let socialHtml = '';
@@ -469,6 +561,19 @@ export class DashboardView {
     const injured = fighter.status === 'injured';
     const styleCfg = FIGHTING_STYLES[fighter.style] || FIGHTING_STYLES.freestyle;
     const xpPct = Math.round(fighter.xpProgress * 100);
+
+    // F10: identidade visual — estágio, arquétipo, legado
+    const identity = VisualIdentityService.describeIdentity(fighter);
+    const stageCls = `stage-badge stage-badge--${identity.stageId}`;
+    const stageBadge = `<span class="${stageCls}">${e(identity.stageLabel)}</span>`;
+    const legacyScore = Math.round((
+      (fighter.popularity || 0) +
+      (fighter.overallRating || 50) +
+      Math.min(Math.round((fighter.careerEarnings || 0) / 20000), 50) +
+      Math.min((fighter.titlesWon || 0) * 20, 40) +
+      Math.min((fighter.totalFights || 0) * 1.5, 30)
+    ) / 5);
+
     const fighterHtml = `
       <div class="section-label" data-reveal>Seu Lutador</div>
       <div class="bento-grid mb-4" data-reveal-stagger>
@@ -492,6 +597,17 @@ export class DashboardView {
             : fighter.availableFromAbsWeek > now
               ? `<div class="text-xs" style="color:var(--warning)">⏳ Suspensão médica · ${fighter.availableFromAbsWeek - now} sem</div>`
               : '<div class="text-xs text-muted">Sem luta marcada</div>'}
+
+          <!-- F10: estágio + identidade + reputação -->
+          <div class="flex items-center gap-2 mt-2 flex-wrap">
+            ${stageBadge}
+            <span class="text-xs" style="color:var(--text-secondary)">${e(identity.archetypeLabel)}</span>
+          </div>
+          <div class="rep-cluster mt-1">
+            <span class="rep-pill"><span class="rep-pill-icon">🔥</span><span>${fighter.narrativeHeat || 0}</span></span>
+            <span class="rep-pill"><span class="rep-pill-icon">👥</span><span>${fighter.popularity || 0}</span></span>
+            <span class="rep-pill"><span class="rep-pill-icon">👑</span><span>${legacyScore}</span></span>
+          </div>
 
           <div class="flex items-center gap-2 mt-2">
             <span class="badge badge-info">Nv.${fighter.level}</span>
@@ -594,9 +710,28 @@ export class DashboardView {
     return `
       ${this._renderPoster(data, weekLabel)}
       ${onboardingHtml}
+      ${this._renderRecentFeed(data)}
 
-      <!-- Stats -->
-      <div class="section-label" data-reveal>Visão Geral</div>
+      ${this._renderNarrativeChains(data)}
+
+      ${this._renderJourney(data)}
+
+      ${offersHtml}
+      ${weighInHtml}
+      ${rehabHtml}
+      ${socialHtml}
+      ${rivalryHtml}
+      ${narrativeHtml}
+      ${endCareerHtml}
+
+      <!-- Stats + seções secundárias collapsible (Fase 9) -->
+      <div class="section-label" data-reveal>
+        <div class="collapsible-header is-open" data-collapsible="overview">
+          Visão Geral
+          <span class="collapsible-toggle" aria-hidden="true">▼</span>
+        </div>
+      </div>
+      <div class="collapsible-body is-open" data-collapsible-body="overview">
       <div class="bento-grid mb-4" data-reveal-stagger>
         <div class="stat-card stat-card--span-3" title="Dinheiro disponível agora — bolsas entram aqui, camp e vida pessoal saem daqui">
           <div class="card-header"><span class="card-title">💵 Caixa</span></div>
@@ -623,40 +758,31 @@ export class DashboardView {
           <div class="stat-label">Total em bolsas</div>
         </div>
       </div>
-
-      ${offersHtml}
-      ${weighInHtml}
-      ${rehabHtml}
-      ${socialHtml}
-      ${rivalryHtml}
-      ${narrativeHtml}
-      ${endCareerHtml}
+      </div>
       ${crowdSnapshot ? CrowdService.renderReactionCard(crowdSnapshot.reaction, crowdSnapshot.fanMail) : ''}
       ${mediaCompare ? `
-      <div class="card mb-4" data-reveal style="border-top-color:var(--danger)">
-        <div class="card-header">
-          <span class="card-title">📡 Na mídia</span>
-          <span class="badge badge-warning">Rivalidade ${mediaCompare.intensity}/10</span>
+      <!-- Notícia -> página de mídia esportiva (Fase 8, reusa a estética de recorte) -->
+      <article class="news-clip mb-4" data-reveal>
+        <div class="news-masthead">
+          <span class="news-outlet">Boletim da Mídia</span>
+          <span class="news-edition">📡 Rivalidade ${mediaCompare.intensity}/10</span>
         </div>
-        <p class="text-sm font-bold mb-3">${escapeHtml(mediaCompare.headline)}</p>
-        <div class="grid grid-cols-3 gap-3 text-center">
-          <div>
-            <div class="text-xs text-muted">Você</div>
-            <div class="font-bold">${escapeHtml(mediaCompare.yourRecord)}</div>
-            <div class="text-xs text-muted">OVR ${mediaCompare.yourOvr} · pop ${mediaCompare.yourPop}</div>
+        <h3 class="news-headline">${escapeHtml(mediaCompare.headline)}</h3>
+        <div class="news-byline">Tale of the tape · confronto direto ${escapeHtml(mediaCompare.h2h)}</div>
+        <div class="tape-compare">
+          <div class="tape-side">
+            <div class="tape-name">Você</div>
+            <div class="tape-record">${escapeHtml(mediaCompare.yourRecord)}</div>
+            <div class="tape-meta">OVR ${mediaCompare.yourOvr} · pop ${mediaCompare.yourPop}</div>
           </div>
-          <div>
-            <div class="text-xs text-muted">Confronto direto</div>
-            <div class="font-bold text-lg">${escapeHtml(mediaCompare.h2h)}</div>
-            <div class="text-xs text-muted">vs ${escapeHtml(mediaCompare.rivalName)}</div>
-          </div>
-          <div>
-            <div class="text-xs text-muted">${escapeHtml(mediaCompare.rivalName)}</div>
-            <div class="font-bold">${escapeHtml(mediaCompare.rivalRecord)}</div>
-            <div class="text-xs text-muted">OVR ${mediaCompare.rivalOvr} · pop ${mediaCompare.rivalPop}</div>
+          <div class="tape-vs" aria-hidden="true">×</div>
+          <div class="tape-side tape-side--rival">
+            <div class="tape-name">${escapeHtml(mediaCompare.rivalName)}</div>
+            <div class="tape-record">${escapeHtml(mediaCompare.rivalRecord)}</div>
+            <div class="tape-meta">OVR ${mediaCompare.rivalOvr} · pop ${mediaCompare.rivalPop}</div>
           </div>
         </div>
-      </div>` : ''}
+      </article>` : ''}
       ${PodcastService.renderCard(podcastEpisode)}
       ${YearReviewService.renderCard(yearReview)}
       ${sponsorsHtml}
@@ -680,6 +806,212 @@ export class DashboardView {
       ${worldHtml}
       ${milestonesHtml}
       ${resultsHtml}
+      </div> <!-- end collapsible-body overview -->
     `;
+  }
+
+  // ===== F10: Jornada do lutador no dashboard =====
+  static _renderJourney(data) {
+    const { fighter } = data;
+    if (!fighter) return '';
+    const total = fighter.totalFights ?? ((fighter.record?.wins || 0) + (fighter.record?.losses || 0) + (fighter.record?.draws || 0));
+    const titlesWon = fighter.titlesWon || 0;
+    const pop = fighter.popularity || 0;
+
+    const stageIds = ['rookie'];
+    if (total >= 3) stageIds.push('prospect');
+    if (total >= 8) stageIds.push('journeyman');
+    if (pop >= 50 || total >= 12 || titlesWon > 0) stageIds.push('star');
+    if (titlesWon > 0) stageIds.push('champion');
+
+    const identity = VisualIdentityService.describeIdentity(fighter);
+    const currentIdx = stageIds.indexOf(identity.stageId);
+    if (currentIdx === -1) stageIds.push(identity.stageId);
+
+    const stageTrack = stageIds.map((sid, i) => {
+      const isCurrent = sid === identity.stageId;
+      return `
+        <span class="journey-step ${isCurrent ? 'is-current' : ''}" title="${isCurrent ? 'Estágio atual' : ''}">
+          ${CAREER_STAGES_LABELS[sid] || sid}
+        </span>
+        ${i < stageIds.length - 1 ? '<span class="journey-arrow">→</span>' : ''}
+      `;
+    }).join('');
+
+    const topAttrs = DashboardView._topAttributes(fighter);
+    const legacy = Math.round((
+      pop + (fighter.overallRating || 50) +
+      Math.min(Math.round((fighter.careerEarnings || 0) / 20000), 50) +
+      Math.min(titlesWon * 20, 40) +
+      Math.min(total * 1.5, 30)
+    ) / 5);
+
+    return `
+      <div class="journey-section mb-4" data-reveal>
+        <div class="flex items-center justify-between mb-1">
+          <span class="section-label" style="margin:0;border:none;padding:0">📈 Sua Jornada</span>
+          <span class="text-xs text-muted">${total} lutas · ${fighter.record?.wins || 0}V ${fighter.record?.losses || 0}D</span>
+        </div>
+        <div class="journey-track">${stageTrack}</div>
+        <div class="journey-metric">
+          ${topAttrs.map(a => `
+            <div class="journey-stat">
+              <span class="journey-stat-value" style="color:${a.color}">${a.value}</span>
+              <span class="journey-stat-label">${e(a.label)}</span>
+            </div>
+          `).join('')}
+          <div class="journey-stat">
+            <span class="journey-stat-value" style="color:var(--gold)">${legacy}</span>
+            <span class="journey-stat-label">Legado</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // Retorna top 4 atributos com label + cor semântica
+  static _topAttributes(fighter) {
+    const attrs = [
+      { key: 'boxing', label: 'Boxe' },
+      { key: 'kickboxing', label: 'Kickboxe' },
+      { key: 'muayThai', label: 'Muay Thai' },
+      { key: 'wrestling', label: 'Wrestling' },
+      { key: 'bjj', label: 'BJJ' },
+      { key: 'strength', label: 'Força' },
+      { key: 'speed', label: 'Velocidade' },
+      { key: 'cardio', label: 'Cardio' },
+      { key: 'technique', label: 'Técnica' },
+      { key: 'agility', label: 'Agilidade' },
+    ];
+    const values = attrs.map(a => ({ ...a, value: fighter[a.key] || 50 }));
+    values.sort((a, b) => b.value - a.value);
+    const top = values.slice(0, 4);
+    return top.map(a => ({
+      ...a,
+      color: a.value >= 80 ? '#22c55e' : a.value >= 60 ? '#eab308' : '#ef4444',
+    }));
+  }
+
+  // ===== Decision overlays (Fase 9) =====
+  // Retorna HTML para o primeiro overlay de decisão pendente, ou null.
+  // app.js chama após renderDashboard() para mostrar overlays prioritários.
+  static getDecisionOverlayHtml(data) {
+    const { socialPrompt, rivalryPrompt, narrativePrompt, weighInPrompt, endCareerPrompt } = data;
+
+    if (endCareerPrompt) {
+      return {
+        priority: 5,
+        type: 'end-career',
+        title: '🕊️ Último Capítulo',
+        html: `
+          <div class="decision-card-header">🕊️ Sua Carreira Está Chegando ao Fim</div>
+          <div class="decision-card-body">
+            <p>Aos ${data.fighter?.age || '?'} anos, você precisa decidir como quer encerrar sua jornada no MMA. Esta escolha é definitiva.</p>
+            <div class="decision-card-actions">
+              ${Object.entries(END_CAREER_CHOICES).map(([key, choice]) => `
+                <button class="btn btn-secondary end-career-choice" data-end-career="${key}" style="text-align:left;padding:0.75rem 1rem;height:auto;flex-direction:column;align-items:flex-start;gap:0.25rem">
+                  <div class="font-bold">${choice.icon} ${e(choice.label)}</div>
+                  <div class="text-xs text-muted">${e(choice.description)}</div>
+                </button>
+              `).join('')}
+            </div>
+          </div>`
+      };
+    }
+
+    if (weighInPrompt) {
+      return {
+        priority: 4,
+        type: 'weigh-in',
+        title: '⚖️ Semana da Pesagem',
+        html: `
+          <div class="decision-card-header">⚖️ Semana da Pesagem</div>
+          <div class="decision-card-body">
+            <p>Você enfrenta ${e(weighInPrompt.opponentName)} em breve. Defina como vai administrar o corte de peso.</p>
+            <div class="decision-card-actions">
+              ${weighInPrompt.strategies.map(s => `
+                <button class="btn btn-secondary" data-weigh-in-choice="${s.key}" style="text-align:left">
+                  <strong>${e(s.label)}</strong>
+                  <span class="text-xs text-muted ml-2">${e(s.description)}</span>
+                </button>
+              `).join('')}
+            </div>
+          </div>`
+      };
+    }
+
+    if (narrativePrompt) {
+      return {
+        priority: 3,
+        type: 'narrative',
+        title: '📰 Momento da Carreira',
+        html: `
+          <div class="decision-card-header">📰 Momento da Carreira</div>
+          <div class="decision-card-body">
+            <p>${e(narrativePrompt.prompt)}</p>
+            <div class="decision-card-actions">
+              ${narrativePrompt.choices.map(c => `
+                <button class="btn btn-secondary narrative-choice" data-narrative-choice="${c.key}" style="text-align:left">
+                  ${e(c.text)}
+                </button>
+              `).join('')}
+            </div>
+          </div>`
+      };
+    }
+
+    if (socialPrompt) {
+      return {
+        priority: 2,
+        type: 'social',
+        title: '📱 Momento nas Redes',
+        html: `
+          <div class="decision-card-header">📱 Momento nas Redes</div>
+          <div class="decision-card-body">
+            <p>Você tem a atenção da mídia social esta semana — como vai se posicionar?</p>
+            <div class="decision-card-actions">
+              ${socialPrompt.choices.map(c => `
+                <button class="btn btn-secondary" data-social-choice="${c.key}" style="text-align:left">
+                  ${e(c.text)}
+                  <span class="text-xs text-muted ml-2">(${e(c.hint)})</span>
+                </button>
+              `).join('')}
+            </div>
+          </div>`
+      };
+    }
+
+    if (rivalryPrompt) {
+      return {
+        priority: 1,
+        type: 'rivalry',
+        title: '⚔️ Rivalidade',
+        html: `
+          <div class="decision-card-header">⚔️ Rivalidade</div>
+          <div class="decision-card-body">
+            <p>${rivalryPrompt.rivalName} está provocando você. Como reagir?</p>
+            <div class="decision-card-actions">
+              ${rivalryPrompt.choices.map(c => `
+                <button class="btn btn-secondary rivalry-choice" data-choice="${c.key}" style="text-align:left">${e(c.text)}</button>
+              `).join('')}
+            </div>
+          </div>`
+      };
+    }
+
+    return null;
+  }
+
+  // ===== Collapsible init (Fase 9) =====
+  static initCollapsible() {
+    document.querySelectorAll('[data-collapsible]').forEach(header => {
+      const key = header.dataset.collapsible;
+      const body = document.querySelector(`[data-collapsible-body="${key}"]`);
+      if (!body) return;
+
+      header.addEventListener('click', () => {
+        header.classList.toggle('is-open');
+        body.classList.toggle('is-open');
+      });
+    });
   }
 }

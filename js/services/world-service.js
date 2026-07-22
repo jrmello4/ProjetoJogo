@@ -2,16 +2,18 @@ import { Promotion } from '../models/promotion.js';
 import { Fighter } from '../models/fighter.js';
 import { Event } from '../models/event.js';
 import { OFFER_STATUS } from '../models/fight-offer.js';
-import { SimulationEngine } from '../controllers/simulation.js';
 import { CombatAdapter } from '../controllers/combat-adapter.js';
+import { FightOutcome } from '../controllers/fight-outcome.js';
 import { TapeService } from './tape-service.js';
 import { ReadinessService } from './readiness-service.js';
 import { DataGenerator } from './data-generator.js';
 import { HallOfFame } from './hall-of-fame.js';
+import { InjuryService } from './injury-service.js';
 import { CrowdService } from './crowd-service.js';
 import { VisualIdentityService } from './visual-identity-service.js';
 import { CAREER_EVENT_TYPES } from './career-event-bus.js';
-import { generateId, getWeightClassName, formatWeeks } from '../utils/helpers.js';
+import { CAREER_EVENT } from './career-events.js';
+import { generateId, getWeightClassName } from '../utils/helpers.js';
 import {
   ACADEMIES,
   WORLD_CONFIG,
@@ -23,23 +25,17 @@ import {
   PROMOTIONS,
   OFFER_CONFIG,
   TIER_MOVEMENT_CONFIG,
-  PERMANENT_SCAR_TABLE,
-  DNA_DISCOVERY_CONFIG,
   RIVALRY_CONFIG,
   GAME_PLANS,
   TAPE_CONFIG,
-  INJURY_CONFIG,
   WEIGHT_BULLY_CONFIG,
-  CONSECUTIVE_KO_CONFIG,
   absWeekToDate,
-  computeSuspensionWeeks,
-  rollInjurySeverity,
 } from '../config/game-config.js';
 
 // Motor do mundo vivo: cada promoção de IA agenda e realiza os próprios
 // eventos. Lutas do jogador entram nos cards via ofertas aceitas.
 export class WorldService {
-  constructor(db, fighterCtrl, notifService, titleService = null, scoutingService = null, contractService = null, managerService = null, careerLogService = null, rivalryService = null, careerEventBus = null) {
+  constructor(db, fighterCtrl, notifService, titleService = null, scoutingService = null, contractService = null, managerService = null, careerLogService = null, rivalryService = null, careerEvents = null, careerEventBus = null) {
     this.db = db;
     this.fighterCtrl = fighterCtrl;
     this.notifService = notifService;
@@ -50,6 +46,8 @@ export class WorldService {
     this.careerLogService = careerLogService;
     this.rivalryService = rivalryService;
     this.careerEventBus = careerEventBus;
+    this.careerEvents = careerEvents;
+    this.injuryService = new InjuryService(db, careerLogService, notifService);
   }
 
   // Fase 3 — reúne o contexto que decide o quanto o adversário conhece você.
@@ -85,7 +83,7 @@ export class WorldService {
       // O vazamento (§Fase 3b): quem dividiu o tatame com você não precisa da
       // fita. Ele te viu.
       sparredWeeks: player.sparredWith?.[opponent.id] || 0,
-      planEdgeFn: (plan, target) => SimulationEngine._planEdge(plan, target, scoutingLevel),
+      planEdgeFn: (plan, target) => FightOutcome._planEdge(plan, target, scoutingLevel),
     });
   }
 
@@ -133,7 +131,7 @@ export class WorldService {
   // prepareCardFight(container) para montar a UI de cartas dentro de
   // _runEvent; simulateWeeks passa null e o CombatAdapter resolve com IA.
   async processWeek(absWeekNow, startedAt, playerFighterId, cornerHooks = null) {
-    await this._recoverInjuries(absWeekNow, playerFighterId);
+    await this.injuryService.recoverInjuries(absWeekNow, playerFighterId);
     if (this.titleService) await this.titleService.reconcileBelts();
 
     const promotions = await this.getPromotions();
@@ -303,12 +301,10 @@ export class WorldService {
       const gamePlan = fight.booking?.gamePlan || 'balanced';
 
       const fightDateISO = absWeekToDate(absWeekNow, startedAt).toISOString();
-      const pressureLevel = await this._computePressureLevel(fight, promo);
       // §B.1 — pressurePerformer/bigEventNervous se descobrem exatamente na
       // 1ª luta de tier 1 OU numa disputa de cinturão (condições do spec,
-      // checadas por lutador — não o pressureLevel agregado da luta: tier 1
-      // sozinho só soma +20 em _computePressureLevel, nunca cruzando algum
-      // limiar genérico de "pressão alta" sem título/revanche/sequência).
+      // checadas por lutador). O motor de cartas não modela pressão no
+      // resultado da luta; a descoberta do traço continua sendo o gancho vivo.
       const isTitleFight = !!fight.titleWeightClass;
       if (isTitleFight || (promo.tier === 1 && !fighterA.reachedTier1)) {
         if (fighterA.hasDNA('pressurePerformer')) fighterA.discoverTrait('pressurePerformer');
@@ -341,13 +337,16 @@ export class WorldService {
         tactics.readinessFactorA = tactics.readiness.factor;
       }
 
-      // Player booked fight → card combat (official engine). AI-vs-AI stays
-      // on SimulationEngine. interactive mirrors the old cornerHooks signal:
-      // live advanceWeek passes hooks; simulateWeeks / processWeek() does not.
+      // TODA luta resolve pelo motor de cartas (CombatAdapter) — motor oficial
+      // e único. Só a luta do jogador (fight.booking) recebe UI ao vivo e
+      // prêmio de carta; IA-vs-IA roda headless (interactive=false, sem
+      // recompensa). interactive espelha o antigo sinal de cornerHooks:
+      // advanceWeek ao vivo passa hooks; simulateWeeks / processWeek() não.
       let result;
+      let interactive = false;
+      let container = null;
       if (fight.booking) {
-        const interactive = !!cornerHooks;
-        let container = null;
+        interactive = !!cornerHooks;
         if (interactive && cornerHooks.prepareCardFight) {
           container = await cornerHooks.prepareCardFight({
             fighter: fighterA,
@@ -359,30 +358,26 @@ export class WorldService {
           // is missing (dev callers / partial hooks).
           await cornerHooks.onFightStart?.({ fighter: fighterA, opponent: fighterB, promo });
         }
-
-        const adapter = new CombatAdapter();
-        if (container) adapter.setContainer(container);
-        result = await adapter.runFight(
-          fighterA,
-          fighterB,
-          promo.tier === 1,
-          gamePlan,
-          promo.tier,
-          isTitleFight,
-          interactive
-        );
-        // CombatAdapter only resolves the bout — record/morale/popularity/
-        // post-fight effects still live on SimulationEngine (same side
-        // effects simulateFight always applied).
-        result.date = fightDateISO;
-        this._applyCardFightOutcome(fighterA, fighterB, result, fightDateISO);
-      } else {
-        // Instruções de córner ao vivo só existiam no motor antigo; lutas
-        // de IA nunca usam cornerHooks.
-        result = await SimulationEngine.simulateFight(
-          fighterA, fighterB, promo.tier === 1, null, gamePlan, fightDateISO, pressureLevel, tactics
-        );
       }
+
+      const adapter = new CombatAdapter();
+      if (container) adapter.setContainer(container);
+      result = await adapter.runFight(
+        fighterA,
+        fighterB,
+        promo.tier === 1,
+        gamePlan,
+        promo.tier,
+        isTitleFight,
+        interactive,
+        !!fight.booking, // awardReward — só a luta do jogador ganha carta
+      );
+      // CombatAdapter só resolve a luta — cartel/moral/popularidade/efeitos
+      // pós-luta são aplicados aqui (mesmos side effects de antes), via
+      // FightOutcome. IA-vs-IA recebe exatamente o mesmo tratamento.
+      result.date = fightDateISO;
+      this._applyCardFightOutcome(fighterA, fighterB, result, fightDateISO);
+
       result.tactics = tactics;
 
       // A fita registra o que foi observável: o plano que cada um trouxe, sob
@@ -424,10 +419,10 @@ export class WorldService {
         fighterB.registerPromoResult(promo.id, result.winnerId === fighterB.id);
       }
 
-      await this._rollInjury(fighterA, result, absWeekNow, playerFighterId);
-      await this._rollInjury(fighterB, result, absWeekNow, playerFighterId);
-      this._applySuspension(fighterA, result, absWeekNow);
-      this._applySuspension(fighterB, result, absWeekNow);
+      await this.injuryService.rollInjury(fighterA, result, absWeekNow, playerFighterId);
+      await this.injuryService.rollInjury(fighterB, result, absWeekNow, playerFighterId);
+      this.injuryService.applySuspension(fighterA, result, absWeekNow);
+      this.injuryService.applySuspension(fighterB, result, absWeekNow);
 
       await this.fighterCtrl.updateFighter(fighterA);
       await this.fighterCtrl.updateFighter(fighterB);
@@ -470,6 +465,18 @@ export class WorldService {
         // Você acabou de passar 15 minutos dentro do octógono com o cara —
         // sabe mais sobre ele do que qualquer olheiro. Tarde demais.
         if (this.scoutingService) await this.scoutingService.observeAfterFight(fighterB.id);
+        await this.careerEvents?.emit(CAREER_EVENT.FIGHT_COMPLETED, {
+          result,
+          booking: fight.booking,
+          promotionId: promo.id,
+          absWeekNow,
+        });
+        if (!result.isDraw) {
+          await this.careerEvents?.emit(
+            result.winnerId === fighterA.id ? CAREER_EVENT.FIGHT_WON : CAREER_EVENT.FIGHT_LOST,
+            { result, booking: fight.booking, absWeekNow }
+          );
+        }
         await this._settlePlayerFight(fight, result, promo, absWeekNow, titleOutcome);
       }
 
@@ -520,32 +527,32 @@ export class WorldService {
     return { event, results, playerResults, playerFighterIds };
   }
 
-  // Side-effects that SimulationEngine.simulateFight always applied after
-  // resolving a bout (W-L-D record, fight history, morale, popularity,
-  // post-fight fatigue/effects, KO accumulated damage). CombatAdapter only
-  // returns a result object — without this, player card fights would never
-  // update the cartel.
+  // Side-effects always applied after resolving a bout (W-L-D record, fight
+  // history, morale, popularity, post-fight fatigue/effects, KO accumulated
+  // damage). CombatAdapter only returns a result object — without this, no
+  // fight would update the cartel. Lives in FightOutcome now (era o motor
+  // antigo simulateFight que aplicava isto internamente).
   _applyCardFightOutcome(fighterA, fighterB, result, dateISO) {
     const method = { method: result.method };
     const round = result.round || 3;
     if (result.isDraw) {
-      SimulationEngine._updateFighter(fighterA, fighterB, 'draw', method, round, dateISO);
-      SimulationEngine._updateFighter(fighterB, fighterA, 'draw', method, round, dateISO);
-      SimulationEngine._updatePopularity(fighterA, fighterB, method, 'draw');
-      SimulationEngine._updatePopularity(fighterB, fighterA, method, 'draw');
+      FightOutcome._updateFighter(fighterA, fighterB, 'draw', method, round, dateISO);
+      FightOutcome._updateFighter(fighterB, fighterA, 'draw', method, round, dateISO);
+      FightOutcome._updatePopularity(fighterA, fighterB, method, 'draw');
+      FightOutcome._updatePopularity(fighterB, fighterA, method, 'draw');
       fighterA.applyPostFightEffects();
       fighterB.applyPostFightEffects();
       return;
     }
     const winner = result.winnerId === fighterA.id ? fighterA : fighterB;
     const loser = result.winnerId === fighterA.id ? fighterB : fighterA;
-    SimulationEngine._updateFighter(winner, loser, 'win', method, round, dateISO);
-    SimulationEngine._updateFighter(loser, winner, 'loss', method, round, dateISO);
-    SimulationEngine._updatePopularity(winner, loser, method, 'win');
-    SimulationEngine._updatePopularity(loser, winner, method, 'loss');
+    FightOutcome._updateFighter(winner, loser, 'win', method, round, dateISO);
+    FightOutcome._updateFighter(loser, winner, 'loss', method, round, dateISO);
+    FightOutcome._updatePopularity(winner, loser, method, 'win');
+    FightOutcome._updatePopularity(loser, winner, method, 'loss');
     winner.applyPostFightEffects();
     loser.applyPostFightEffects();
-    SimulationEngine._applyAccumulatedDamage(winner, loser, result);
+    FightOutcome._applyAccumulatedDamage(winner, loser, result);
   }
 
   // Fase 3 — o que a luta significou pro Livro. É aqui que o sistema deixa de
@@ -991,26 +998,6 @@ export class WorldService {
     return candidates[0] || null;
   }
 
-  // §C.3 — pressão psicológica da luta (0-100): escala pressurePerformer/
-  // bigEventNervous/composure em SimulationEngine em vez do antigo binário
-  // isBigEvent (só tier 1). Sinais disponíveis aqui: título em jogo, palco
-  // de elite, reencontro, sequência em risco de qualquer lado, e — agora
-  // que RivalryService está disponível (§D.3) — rivalidade tipo 'grudge'
-  // entre os dois: uma revanche contra o rival que te provocou pesa mais.
-  async _computePressureLevel(fight, promo) {
-    let pressure = 0;
-    if (fight.titleWeightClass) pressure += 50;
-    if (promo.tier === 1) pressure += 20;
-    if (fight.booking?.isReencounter) pressure += 15;
-    if ((fight.fighterA.winStreak || 0) >= 3) pressure += 10;
-    if ((fight.fighterB.winStreak || 0) >= 3) pressure += 10;
-    if (this.rivalryService) {
-      const rivalry = await this.rivalryService.getRivalryBetween(fight.fighterA.id, fight.fighterB.id);
-      if (rivalry?.type === 'grudge') pressure += RIVALRY_CONFIG.GRUDGE_PRESSURE_BONUS;
-    }
-    return Math.min(100, pressure);
-  }
-
   // P4.x — aplica o bônus de "chegou maior" quando a oferta marcou o
   // adversário como weight bully. Devolve o DELTA de verdade aplicado
   // (pós-clamp em 99, não o bônus nominal) para o chamador reverter exato
@@ -1030,154 +1017,6 @@ export class WorldService {
     fighterB.attributes.strength = Math.min(99, strengthBefore + bonus);
     fighterB.applyWeightCutImpact(WEIGHT_BULLY_CONFIG.CARDIO_IMPACT_MULT);
     return { power: fighterB.attributes.power - powerBefore, strength: fighterB.attributes.strength - strengthBefore };
-  }
-
-  // Suspensão médica pós-luta: aplicada a TODOS os lutadores (jogador e IA)
-  // para respeitar o afastamento mínimo entre lutas real do MMA.
-  _applySuspension(fighter, result, absWeekNow) {
-    const won = result.winnerId === fighter.id;
-    const weeks = computeSuspensionWeeks(result.method, won);
-    const suspendedUntil = absWeekNow + weeks;
-    const injuryRestUntil = fighter.injury?.restUntilAbsWeek || fighter.injury?.untilAbsWeek || 0;
-    fighter.availableFromAbsWeek = Math.max(suspendedUntil, injuryRestUntil);
-  }
-
-  async _rollInjury(fighter, result, absWeekNow, playerFighterId) {
-    const won = result.winnerId === fighter.id;
-    const isFinish = result.method && !result.method.startsWith('Decision');
-
-    let chance = won ? WORLD_CONFIG.INJURY_CHANCE_WINNER : WORLD_CONFIG.INJURY_CHANCE_LOSER;
-    if (!won && isFinish) chance += WORLD_CONFIG.INJURY_CHANCE_FINISH_BONUS;
-    if (fighter.hasDNA('injuryProne')) chance += WORLD_CONFIG.INJURY_CHANCE_PRONE_BONUS;
-
-    // Relatório médico (ABC/NSAC/CABMMA): nocautes consecutivos acumulam
-    // risco de verdade — exame neurológico extra a partir do 2º seguido,
-    // recomendação de aposentadoria a partir do 3º. Só o lutador do jogador
-    // (mesmo escopo de sequelae/permanentScars).
-    const isKoTkoLoss = !won && result.method && (result.method.startsWith('KO') || result.method.startsWith('TKO'));
-    if (fighter.id === playerFighterId) {
-      fighter.consecutiveKoTkoLosses = isKoTkoLoss ? (fighter.consecutiveKoTkoLosses || 0) + 1 : 0;
-    }
-
-    if (Math.random() >= chance) return;
-
-    const severity = rollInjurySeverity();
-    let weeks = severity.weeks;
-
-    // Exame neurológico extra some junto com o resto da lesão desta luta —
-    // não é uma segunda suspensão separada, é a MESMA lesão levando mais
-    // tempo pra liberar porque a comissão exige exame antes de autorizar.
-    let examNote = '';
-    if (fighter.id === playerFighterId && isKoTkoLoss && fighter.consecutiveKoTkoLosses >= CONSECUTIVE_KO_CONFIG.EXAM_THRESHOLD) {
-      weeks += CONSECUTIVE_KO_CONFIG.EXAM_EXTRA_WEEKS;
-      examNote = ` — exame neurológico obrigatório após ${fighter.consecutiveKoTkoLosses} nocautes seguidos`;
-      if (this.careerLogService) {
-        await this.careerLogService.publish(fighter.id, 'consecutive_ko_exam', absWeekNow, 65, {
-          count: fighter.consecutiveKoTkoLosses,
-        });
-      }
-    }
-    if (fighter.id === playerFighterId && isKoTkoLoss && fighter.consecutiveKoTkoLosses >= CONSECUTIVE_KO_CONFIG.RETIREMENT_WARNING_THRESHOLD) {
-      await this.notifService.add('danger', '🧠 Recomendação Médica',
-        `${fighter.consecutiveKoTkoLosses} nocautes seguidos. Times médicos recomendam fortemente considerar a aposentadoria — o risco acumulado é real.`);
-    }
-
-    // P2.2: new injury format with stages
-    fighter.injury = {
-      stage: 'rest',
-      restUntilAbsWeek: absWeekNow + weeks,
-      rehabEndAbsWeek: 0,
-      type: severity.type,
-      description: `${severity.label} — ${formatWeeks(weeks)}${examNote}`,
-      rehabCost: 0,
-      rehabChosen: false,
-      resumeStatus: fighter.status,
-    };
-    fighter.status = 'injured';
-
-    // §B.1 — injuryProne se descobre na 2ª lesão em menos de 52 semanas.
-    // O check roda ANTES do incremento: injuryCount >= 1 significa "já havia
-    // lesão anterior" e lastInjuryAbsWeek é a semana dela. Incrementar antes
-    // faria o trait revelar já na 1ª lesão da carreira.
-    if (fighter.hasDNA('injuryProne') && !fighter.isDiscovered('injuryProne')
-      && fighter.injuryCount >= 1
-      && (absWeekNow - fighter.lastInjuryAbsWeek) < DNA_DISCOVERY_CONFIG.INJURY_PRONE_WINDOW_WEEKS) {
-      fighter.discoverTrait('injuryProne');
-    }
-    fighter.injuryCount = (fighter.injuryCount || 0) + 1;
-    fighter.lastInjuryAbsWeek = absWeekNow;
-
-    // §B.2 — lesão mais severa (mais semanas fora) rola chance de sequela
-    // permanente: reduz o TETO de alguns atributos pro resto da carreira,
-    // com uma pequena compensação mental (a dor ensina a lutar diferente).
-    const scarChance = weeks >= WORLD_CONFIG.SCAR_SEVERE_WEEKS_THRESHOLD
-      ? WORLD_CONFIG.SCAR_CHANCE_SEVERE
-      : WORLD_CONFIG.SCAR_CHANCE_LIGHT;
-    if (Math.random() < scarChance) {
-      const template = PERMANENT_SCAR_TABLE[Math.floor(Math.random() * PERMANENT_SCAR_TABLE.length)];
-      fighter.permanentScars.push({
-        bodyPart: template.bodyPart,
-        attributeCeilings: { ...template.attributeCeilings },
-        compensation: { ...template.compensation },
-        fromFightId: result.id,
-        atAbsWeek: absWeekNow,
-      });
-      for (const [attr, bonus] of Object.entries(template.compensation)) {
-        fighter.attributes[attr] = Math.min(fighter.effectiveCeiling(attr), (fighter.attributes[attr] || 50) + bonus);
-      }
-      // §F — só a sequela do lutador do jogador vira "momento marcante";
-      // _rollInjury roda pra todo lutador de toda luta do mundo.
-      if (this.careerLogService && fighter.id === playerFighterId) {
-        await this.careerLogService.publish(fighter.id, 'permanent_scar', absWeekNow, 55, { bodyPart: template.bodyPart });
-      }
-    }
-
-    // P10.1 — Sequelas de KO/TKO ou lesões graves (só para o jogador)
-    if (fighter.id === playerFighterId && !won && isFinish) {
-      const method = result.method || '';
-      if (Math.random() < INJURY_CONFIG.SEVERE_INJURY_CHANCE) {
-        let attr = null;
-        let desc = '';
-        if (method.startsWith('KO')) {
-          attr = 'chin';
-          desc = 'Sequela de nocaute';
-        } else if (method.startsWith('TKO')) {
-          attr = Math.random() < 0.5 ? 'speed' : 'chin';
-          desc = attr === 'speed' ? 'Lesão articular grave' : 'Sequela de TKO';
-        } else if (method === 'Submission') {
-          attr = 'speed';
-          desc = 'Lesão em articulação';
-        }
-        if (attr) {
-          fighter.applySequelae(attr, desc);
-          if (this.careerLogService) {
-            const seq = fighter.sequelae?.[fighter.sequelae.length - 1];
-            await this.careerLogService.publish(fighter.id, 'sequela', absWeekNow, 60, {
-              attr,
-              reduction: seq?.reduction,
-              description: desc,
-            });
-          }
-        }
-      }
-    }
-  }
-
-  async _recoverInjuries(absWeekNow, playerFighterId) {
-    const injured = await this.db.getIndex('fighters', 'status', 'injured');
-    for (const data of injured) {
-      if (!data.injury) continue;
-      // P2.2: support both old format (untilAbsWeek) and new (restUntilAbsWeek)
-      const healWeek = data.injury.restUntilAbsWeek || data.injury.untilAbsWeek || 0;
-      if (healWeek > absWeekNow) continue;
-      const fighter = new Fighter(data);
-      fighter.status = fighter.injury.resumeStatus || 'roster';
-      fighter.injury = null;
-      await this.db.put('fighters', fighter);
-      if (fighter.id === playerFighterId) {
-        await this.notifService.add('success', 'Recuperado', `${fighter.name} está liberado pelo departamento médico.`);
-      }
-    }
   }
 
   async _refillFreeAgents() {

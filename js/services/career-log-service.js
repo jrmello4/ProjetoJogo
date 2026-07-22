@@ -1,4 +1,5 @@
 import { NARRATIVE_EVENTS } from '../config/game-config.js';
+import { generateId } from '../utils/helpers.js';
 
 const DOC_ID = 'careerLog';
 const MAX_ENTRIES = 300;
@@ -8,7 +9,7 @@ const MAX_ENTRIES = 300;
 // (§D.2), rivalidades (§D.3) e o documentário de carreira (§B.3) CONSOMEM
 // daqui em vez de cada um inventar sua própria noção de "isso importou".
 //
-// entry: { fighterId, type, atAbsWeek, magnitude (0-100), data }
+// entry: { id, fighterId, type, atAbsWeek, magnitude (0-100), data }
 // types: 'title_won' | 'upset' | 'streak' | 'rematch' | 'dna_discovered' |
 //        'permanent_scar' | 'academy_switch' | 'manager_switch' |
 //        'rivalry_born' | 'rival_arc' | 'finish' | 'provocation' | 'viral' |
@@ -32,7 +33,14 @@ export class CareerLogService {
 
   async publish(fighterId, type, atAbsWeek, magnitude, data = {}) {
     const doc = await this._doc();
-    doc.entries.push({ fighterId, type, atAbsWeek, magnitude: Math.round(magnitude), data });
+    doc.entries.push({
+      id: generateId(),
+      fighterId,
+      type,
+      atAbsWeek,
+      magnitude: Math.round(magnitude),
+      data,
+    });
     if (doc.entries.length > MAX_ENTRIES) {
       // Mantém as de maior magnitude quando precisa cortar, não só as recentes —
       // um título conquistado há 3 anos importa mais pro documentário do que
@@ -59,6 +67,23 @@ export class CareerLogService {
   async topByMagnitude(fighterId, limit = 10) {
     const mine = (await this.all()).filter(e => e.fighterId === fighterId);
     return mine.sort((a, b) => b.magnitude - a.magnitude).slice(0, limit);
+  }
+
+  // Linha do tempo é diferente de "momentos marcantes": ela conserva a
+  // ordem em que a carreira aconteceu e serve de fonte para perfil, arquivo
+  // histórico e futuras retrospectivas. `topByMagnitude` continua sendo a
+  // consulta certa para biografias e cerimônias.
+  async timelineForFighter(fighterId, { limit = 100, newestFirst = false } = {}) {
+    const entries = (await this.all())
+      .filter(entry => entry.fighterId === fighterId)
+      .sort((a, b) => {
+        const byWeek = (a.atAbsWeek || 0) - (b.atAbsWeek || 0);
+        if (byWeek !== 0) return newestFirst ? -byWeek : byWeek;
+        return newestFirst
+          ? String(b.id || '').localeCompare(String(a.id || ''))
+          : String(a.id || '').localeCompare(String(b.id || ''));
+      });
+    return entries.slice(0, limit);
   }
 
   async recentSince(absWeekNow, windowWeeks) {

@@ -142,7 +142,7 @@ function weekLabel(absWeek, startedAt) {
   return `Semana ${absWeek}`;
 }
 
-// fights[] é mais-recente-primeiro (unshift em SimulationEngine) — inverte
+// fights[] é mais-recente-primeiro (unshift em FightOutcome._updateFighter) — inverte
 // pra ordem cronológica real, do primeiro pro último combate.
 function chronologicalFights(fighter) {
   return [...(fighter?.fights || [])].reverse();
@@ -155,7 +155,7 @@ function computeAscensao(fighter) {
   const firstFight = chrono[0];
   const firstWin = chrono.find(f => f.won === true) || null;
   // record.wins+losses+draws conta TODAS as lutas da carreira; fights[] é
-  // limitado às últimas 50 (ver SimulationEngine._updateFighter). Se a
+  // limitado às últimas 50 (ver FightOutcome._updateFighter). Se a
   // carreira foi mais longa que isso, a "primeira luta" aqui é a mais antiga
   // que ainda sobrou no registro, não necessariamente a estreia real —
   // melhor avisar isso do que fingir que é.
@@ -433,7 +433,8 @@ export class RetirementCeremonyView {
         <p>${e(entry.name)} pendurou as luvas</p>
       </div>
 
-      <div class="card" style="text-align:center;padding:2rem;background:linear-gradient(135deg,var(--mat-high),var(--mat));border:2px solid var(--belt)">
+      <div class="card cert-doc" style="text-align:center;padding:2rem;background:linear-gradient(135deg,var(--mat-high),var(--mat));border:2px solid var(--belt)">
+        <div class="cert-kicker">Arquivo do Hall da Fama · Documento Histórico</div>
         <div style="font-size:3rem;margin-bottom:0.5rem">🏆</div>
         <h1 style="font-size:1.75rem;margin-bottom:0.25rem">${e(entry.name)}</h1>
         <p class="text-muted">${getWeightClassName(entry.weightClass)} · ${entry.nationality?.name || 'Nacionalidade desconhecida'} · ${stats.ageAtInduction} anos</p>

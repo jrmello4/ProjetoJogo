@@ -41,7 +41,7 @@ export class CombatAdapter {
   // from (default 3 = Regional). isTitleFight swaps the reward for
   // CardRewardService.getTitleReward() instead of a player-chosen pool.
   // interactive=false: both sides use AI, no UI (fast-forward path).
-  async runFight(fighterA, fighterB, fiveRounds, gamePlanKey, promoTier = 3, isTitleFight = false, interactive = true) {
+  async runFight(fighterA, fighterB, fiveRounds, gamePlanKey, promoTier = 3, isTitleFight = false, interactive = true, awardReward = true) {
     // Without a DOM host, interactive mode would hang forever waiting for
     // a click that never arrives — fall back to AI-vs-AI resolution.
     if (interactive && !this.container) interactive = false;
@@ -205,9 +205,11 @@ export class CombatAdapter {
         });
 
         let turnResult = null;
+        let finish = null;
         if (cardA && cardB) {
           turnResult = CombatResolver.resolveTurn(state, cardA.id, cardB.id);
           roundTurns.push(turnResult);
+          finish = CombatResolver.checkFinish(state, turnResult, r);
         } else if (cardA && !cardB) {
           // Player attacked, AI had no card — player wins turn uncontested
           turnResult = {
@@ -245,17 +247,15 @@ export class CombatAdapter {
           if (turnResult) {
             this._showTurnResult(turnResult, takedownStuffed);
             this._flashStaminaHit(turnResult);
+            await this._delay(400);
           }
           this.view.update(this.container, state);
         }
 
-        if (turnResult && cardA && cardB) {
-          const finish = CombatResolver.checkFinish(state, turnResult, r);
-          if (finish) {
-            state.ended = true;
-            state.finishMethod = finish.method;
-            break;
-          }
+        if (finish) {
+          state.ended = true;
+          state.finishMethod = finish.method;
+          break;
         }
 
         state.turnOwner = state.turnOwner === 'A' ? 'B' : 'A';
@@ -309,9 +309,12 @@ export class CombatAdapter {
     // the player pick from a tier-based pool via _showCardReward (or auto-
     // pick a random option when non-interactive so simulateWeeks still
     // progresses the card pool).
+    // awardReward=false (luta IA-vs-IA no mundo): resolve o resultado mas não
+    // distribui carta de recompensa nem persiste no cardPool — NPCs não devem
+    // acumular loadout por vencer. Só a luta do jogador ganha prêmio.
     result.rewardCard = null;
     const playerWon = !result.isDraw && result.winnerId === result.fighterAId;
-    if (playerWon) {
+    if (playerWon && awardReward) {
       if (isTitleFight) {
         result.rewardCard = CardRewardService.getTitleReward();
       } else {
@@ -348,7 +351,7 @@ export class CombatAdapter {
     // MetaProgressionService was injected via setMetaProgressionService.
     // Fire-and-forget by design (addLegacyPoints doesn't await save()),
     // same as the rest of MetaProgressionService's mutators.
-    if (this.metaProgressionService && playerWon) {
+    if (this.metaProgressionService && playerWon && awardReward) {
       this.metaProgressionService.addLegacyPoints(
         this.metaProgressionService.constructor.computeLegacyPoints(result, isTitleFight)
       );
@@ -650,5 +653,9 @@ export class CombatAdapter {
       header.classList.add('combat-header-shake');
       setTimeout(() => header.classList.remove('combat-header-shake'), 400);
     }
+  }
+
+  _delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }

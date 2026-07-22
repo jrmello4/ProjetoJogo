@@ -1,9 +1,9 @@
-// Harness estatístico de balanceamento — mede se o motor de simulação é
+// Harness estatístico de balanceamento — mede se o motor de cartas é
 // justo em vez de confiar em "ajustei no olho e parece certo".
 //
 // Roda: npm run balance
 import { Fighter } from '../js/models/fighter.js';
-import { SimulationEngine } from '../js/controllers/simulation.js';
+import { CombatAdapter } from '../js/controllers/combat-adapter.js';
 
 const BASE_ATTRS = {
   boxing: 50, kickboxing: 50, muayThai: 50, wrestling: 50, bjj: 50,
@@ -33,7 +33,9 @@ async function runBatch(n, buildPair) {
   const methods = {};
   for (let i = 0; i < n; i++) {
     const [a, b] = buildPair();
-    const result = await SimulationEngine.simulateFight(a, b);
+    const adapter = new CombatAdapter();
+    // headless: interactive=false, awardReward=false (motor de cartas puro)
+    const result = await adapter.runFight(a, b, false, 'balanced', 3, false, false, false);
     if (result.isDraw) draws++;
     else if (result.winnerId === a.id) winsA++;
     else winsB++;
@@ -44,6 +46,9 @@ async function runBatch(n, buildPair) {
     winRateA: +(100 * winsA / n).toFixed(1),
     winRateB: +(100 * winsB / n).toFixed(1),
     drawRate: +(100 * draws / n).toFixed(1),
+    decisiveWinRateA: winsA + winsB > 0
+      ? +(100 * winsA / (winsA + winsB)).toFixed(1)
+      : null,
     methods: Object.fromEntries(
       Object.entries(methods).map(([k, v]) => [k, +(100 * v / n).toFixed(1)])
     ),
@@ -53,15 +58,18 @@ async function runBatch(n, buildPair) {
 function printResult(label, r, expectation) {
   console.log(`\n${label}`);
   console.log(`  N=${r.n}  A=${r.winRateA}%  B=${r.winRateB}%  draw=${r.drawRate}%`);
+  console.log(`  decisões: A=${r.decisiveWinRateA ?? '-'}%  B=${r.decisiveWinRateA == null ? '-' : +(100 - r.decisiveWinRateA).toFixed(1)}%`);
   console.log(`  métodos: ${JSON.stringify(r.methods)}`);
   if (expectation) console.log(`  esperado: ${expectation}`);
 }
 
-const N = 3000;
+// Motor de cartas resolve turno-a-turno (mais pesado que o antigo
+// estatístico) — N menor pra manter o harness rodável em segundos.
+const N = 1000;
 
 async function main() {
   console.log('='.repeat(70));
-  console.log('HARNESS DE BALANCEAMENTO — SimulationEngine.simulateFight');
+  console.log('HARNESS DE BALANCEAMENTO — CombatAdapter (motor de cartas)');
   console.log('='.repeat(70));
 
   // 1) Espelho puro: dois lutadores idênticos, zero vantagem de nenhum lado.
@@ -69,7 +77,7 @@ async function main() {
   // fighterA sempre citado primeiro leva alguma vantagem por posição).
   const mirror = await runBatch(N, () => [makeFighter('a'), makeFighter('b')]);
   printResult('1) Espelho (atributos idênticos, sem plano/tática)', mirror,
-    '~50/50 ± poucos pontos — qualquer desvio grande é bug de posição/ordem');
+    'decisões ~50/50 ± poucos pontos; empates reportados separadamente');
 
   // 2) Curva de habilidade: A recebe delta crescente em TODOS os atributos.
   // Precisa subir de forma monotônica e suave — sem degrau, sem platô, sem
@@ -104,7 +112,7 @@ async function main() {
   console.log('   pulado no harness base — rodar manualmente com --perk=<id> se suspeitar de um específico.');
 
   console.log('\n' + '='.repeat(70));
-  console.log('Leitura: cenário 1 fora de ~48-52% = bug estrutural, prioridade máxima.');
+  console.log('Leitura: decisões do cenário 1 fora de ~48-52% = bug estrutural, prioridade máxima.');
   console.log('Cenário 2 sem curva suave = fórmula precisa de recalibração dos pesos.');
   console.log('='.repeat(70));
 }

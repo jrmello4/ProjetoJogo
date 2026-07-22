@@ -15,6 +15,7 @@ import { renderCalendar } from './views/calendar.js';
 import { RankingsView } from './views/rankings.js';
 import { FinanceView } from './views/finance.js';
 import { RankingService } from './services/ranking.js';
+import { computeFightStakes } from './services/fight-stakes.js';
 import { TapeService } from './services/tape-service.js';
 import { ReadinessService } from './services/readiness-service.js';
 import { NotificationsView } from './views/notifications.js';
@@ -29,6 +30,7 @@ import * as PerksScreenView from './views/perks-screen.js';
 import { RivalryService } from './services/rivalry-service.js';
 import { SeasonService } from './services/season-service.js';
 import { NotificationService } from './services/notification-service.js';
+import { DebugService } from './services/debug-service.js';
 import { SaveService } from './services/save-service.js';
 import { CinematicService } from './services/cinematic-service.js';
 import { AudioService } from './services/audio-service.js';
@@ -58,6 +60,61 @@ if (new URLSearchParams(window.location.search).has('cardCombat')) {
 // Vazio = compartilha só o texto, sem link.
 const SHARE_URL = '';
 
+// ===== F12: Detecta momentos cinematográficos da carreira =====
+const CINEMATIC_MOMENTS = {
+  first_win: {
+    icon: '🌟', title: 'Primeira Vitória na Carreira!',
+    desc: 'Sua jornada no MMA profissional começa com uma vitória. Cada lenda começa em algum lugar — esta é a primeira página da sua história.',
+    subtitle: 'Estreia com vitória',
+  },
+  first_loss: {
+    icon: '💔', title: 'Primeira Derrota',
+    desc: 'Todo lutador conhece o amargo do primeiro revés. O que define um campeão não é cair, mas como ele se levanta.',
+    subtitle: 'É assim que lendas são forjadas',
+  },
+  first_title: {
+    icon: '🏆', title: 'CAMPEÃO!',
+    desc: 'Você conquistou o cinturão! Anos de treino, sacrifício e dedicação culminaram neste momento. Seu nome entra para a história da divisão.',
+    subtitle: 'Novo campeão!',
+  },
+  streak_5: {
+    icon: '🔥', title: '5 Vitórias Consecutivas!',
+    desc: 'Você está imparável. Cinco vitórias seguidas colocam todos na categoria de aviso — ninguém quer enfrentar você agora.',
+    subtitle: 'Sequência impressionante',
+  },
+  streak_10: {
+    icon: '⚡', title: '10 Vitórias Seguidas!',
+    desc: 'DOMINAÇÃO ABSOLUTA. Dez vitórias consecutivas é algo que poucos na história conseguem. Você está escrevendo seu nome ao lado dos maiores.',
+    subtitle: 'Fenomenal!',
+  },
+};
+
+function detectCinematicMoment(data) {
+  const fighter = data.fighter;
+  if (!fighter) return null;
+  const won = data.lastFightResult;
+  if (won === null || won === undefined) return null;
+
+  const wins = fighter.record?.wins || 0;
+  const losses = fighter.record?.losses || 0;
+  const total = wins + losses;
+  const titlesWon = fighter.titlesWon || 0;
+  const streak = fighter.winStreak || 0;
+  const chains = data.narrativeChains;
+  if (!chains || chains.length === 0) return null;
+
+  let id = null;
+  if (won === true && wins === 1 && total === 1) id = 'first_win';
+  else if (won === false && losses === 1) id = 'first_loss';
+  else if (won === true && titlesWon >= 1) id = 'first_title';
+  else if (won === true && streak === 5) id = 'streak_5';
+  else if (won === true && streak === 10) id = 'streak_10';
+
+  if (!id) return null;
+  const m = CINEMATIC_MOMENTS[id];
+  return { ...m, id };
+}
+
 // §C.1 — rótulos de Manager.style, usados na criação de personagem e na
 // tela de academia/empresário.
 const MANAGER_STYLE_LABELS = {
@@ -74,10 +131,13 @@ class App {
     this.rivalryService = null;
     this.seasonService = new SeasonService(this.game.db);
     this.notificationService = new NotificationService(this.game.db);
+    this.debugService = new DebugService(this.game);
+    window.DebugService = this.debugService;
     this.saveService = new SaveService(this.game.db);
     this.monetizationService = new MonetizationService(this.game.db);
     this.threeArena = null;
     this.threeBackground = null;
+    this.shownMoments = new Set();
   }
 
   async init() {
@@ -743,6 +803,9 @@ class App {
   }
 
   async renderDashboard() {
+    // F9: fecha overlay de decisão pendente antes de re-renderizar
+    LayoutView.closeDecisionOverlay(document.querySelector('.decision-overlay'));
+
     const data = await this.game.getDashboard();
     const monetization = await this.monetizationService.getState();
     data.eliteFrame = monetization.equipped.posterFrame === 'cos-elite-frame';
@@ -755,6 +818,12 @@ class App {
     data.bestOfferOpponent = bestOffer?.opponentId
       ? await this.game.fighterCtrl.getFighter(bestOffer.opponentId).catch(() => null)
       : null;
+
+    // Fase 2 — feed "Últimos Acontecimentos": os capítulos recentes da
+    // carreira (career log, mais novo primeiro) logo abaixo do pôster.
+    data.recentHappenings = data.fighter
+      ? await this.game.careerLogService.timelineForFighter(data.fighter.id, { limit: 6, newestFirst: true })
+      : [];
 
     const weekLabel = absWeekToLabel(data.now);
     const html = DashboardView.render(data, weekLabel);
@@ -878,8 +947,77 @@ class App {
       this._showWeeklyTrainingModal(data.fighter);
     }
 
+    // Fase 9: overlay de decisão prioritária após dashboard renderizar
+    // Os handlers inline (social, rivalry, narrative, etc.) já chamam
+    // renderDashboard que limpa o overlay — handler extra causaria
+    // corrida de fechamento com data.closing.
+    const pendingDecision = DashboardView.getDecisionOverlayHtml(data);
+    if (pendingDecision) {
+      LayoutView.showDecisionOverlay(pendingDecision.html);
+    }
+
+    // Fase 9: collapsible sections
+    DashboardView.initCollapsible();
+
+    // Fase 12: momento cinematográfico (milestones) — só mostra 1x
+    const moment = detectCinematicMoment(data);
+    if (moment && !this.shownMoments.has(moment.id)) {
+      this.shownMoments.add(moment.id);
+      setTimeout(() => this._showCinematicMoment(moment), 400);
+    }
+
+    // Fase 13: estado da arena 3D reflete carreira
+    if (this.threeArena) {
+      const f = data.fighter;
+      let arenaState = 'idle';
+      if (f) {
+        if (f.titlesWon > 0) arenaState = 'champion';
+        else if ((f.winStreak || 0) >= 3) arenaState = 'streak';
+        else if (f.injury?.active) arenaState = 'danger';
+        else if (f.morale !== undefined && f.morale < 30) arenaState = 'danger';
+        else if (f.energy !== undefined && f.energy < 30) arenaState = 'tranquil';
+      }
+      this.threeArena.setState(arenaState);
+    }
+
     this._bindFighterClicks();
     this._bindEventClicks();
+  }
+
+  _showCinematicMoment(moment) {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+        localStorage.getItem('reduceMotion') === 'true') return;
+
+    document.querySelector('.cinematic-moment-overlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'cinematic-moment-overlay';
+    overlay.innerHTML = `
+      <div class="cinematic-moment-card">
+        <span class="moment-icon">${moment.icon}</span>
+        <div class="moment-title">${moment.title}</div>
+        <div class="moment-subtitle">${moment.subtitle}</div>
+        <div class="moment-description">${moment.desc}</div>
+        <button class="moment-continue">Continuar</button>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(() => overlay.classList.add('is-open'));
+
+    const close = () => {
+      if (overlay.dataset.closing) return;
+      overlay.dataset.closing = '1';
+      overlay.querySelector('.cinematic-moment-card')?.classList.add('is-closing');
+      setTimeout(() => overlay.remove(), 220);
+    };
+
+    overlay.querySelector('.moment-continue').addEventListener('click', (e) => {
+      e.stopPropagation();
+      close();
+    });
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close();
+    });
   }
 
   initThreeArena(fighter = null) {
@@ -908,6 +1046,14 @@ class App {
           danger: fighter?.injury ? 0.45 : 0,
           critical: fighter?.injury?.stage === 'rest',
         });
+        const arenaState = fighter?.titlesWon > 0
+          ? 'champion'
+          : (fighter?.winStreak || 0) >= 3
+            ? 'streak'
+            : fighter?.injury || (fighter?.morale ?? 100) < 30
+              ? 'danger'
+              : (fighter?.energy ?? 100) < 30 ? 'tranquil' : 'idle';
+        this.threeArena.setState(arenaState);
       } catch (err) {
         console.warn('ThreeArena falhou ao iniciar (WebGL indisponível?):', err);
       }
@@ -1191,7 +1337,25 @@ class App {
       }
     }
 
-    const html = OffersView.render(pending, accepted, history, fighter, now, dossiers, contractProposals, teammates, rivalries, readiness, opponents);
+    // Fase 1 — "O que está em jogo": enquadra cada oferta pendente em
+    // RECOMPENSA/RISCO/CONSEQUÊNCIA. O salto/recuo no ranking usa a posição
+    // divisional real (uma leitura de todos os lutadores por render).
+    const stakes = {};
+    if (pending.length > 0) {
+      const activeDivision = (await this.game.fighterCtrl.getAllFighters())
+        .filter(f => f.status !== 'retired' && f.weightClass === fighter.weightClass);
+      const divRankings = RankingService.calculateRankings(activeDivision);
+      const rankOf = (id) => divRankings.find(r => r.fighter.id === id)?.rank ?? null;
+      for (const o of pending) {
+        stakes[o.id] = computeFightStakes(fighter, o, {
+          playerRank: rankOf(fighter.id),
+          oppRank: rankOf(o.opponentId),
+          divisionSize: divRankings.length,
+        });
+      }
+    }
+
+    const html = OffersView.render(pending, accepted, history, fighter, now, dossiers, contractProposals, teammates, rivalries, readiness, opponents, stakes);
     await LayoutView.render(html);
 
     document.querySelectorAll('.study-opponent').forEach(btn => {
@@ -1746,7 +1910,11 @@ class App {
     // Biografia viva — só pro jogador: careerLog + rival mais quente.
     let profileCtx = {};
     if (isPlayer && this.game.careerLogService) {
-      const topMoments = await this.game.careerLogService.topByMagnitude(fighter.id, 6);
+      const [topMoments, recentMoments, gameState] = await Promise.all([
+        this.game.careerLogService.topByMagnitude(fighter.id, 6),
+        this.game.careerLogService.timelineForFighter(fighter.id, { limit: 30 }),
+        this.game.db.get('gameState', 'state'),
+      ]);
       let rivalryInfo = null;
       if (this.rivalryService) {
         const rivalries = await this.rivalryService.getRivalries(fighter.id);
@@ -1758,7 +1926,7 @@ class App {
           rivalryInfo = { rivalry: top, opponentName: fromFights || otherFighter?.name || 'Adversário desconhecido' };
         }
       }
-      profileCtx = { topMoments, rivalryInfo };
+      profileCtx = { topMoments, recentMoments, careerStartedAt: gameState?.startedAt || null, rivalryInfo };
     }
 
     const html = FighterProfileView.render(fighter, fighter.fights, isPlayer, profileCtx);
@@ -2418,6 +2586,7 @@ class App {
       a.download = `mma-manager-backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(a.href);
+      LayoutView.showToast('Backup exportado!');
       this.notificationService.add('success', 'Backup Exportado', 'Arquivo JSON baixado com o mundo inteiro.');
     });
 
@@ -2429,12 +2598,51 @@ class App {
       try {
         const text = await file.text();
         await this.saveService.importSave(text);
+        LayoutView.showToast('Backup importado, recarregando...');
         this.notificationService.add('success', 'Backup Importado', 'Recarregando o mundo...');
         setTimeout(() => location.reload(), 800);
       } catch (err) {
         this.notificationService.add('warning', 'Importação Falhou', String(err?.message || err));
       }
     });
+
+    // F16: Debug panel
+    const debugToggle = document.getElementById('debugToggleBtn');
+    debugToggle?.addEventListener('click', async () => {
+      DebugService.toggle();
+      this.renderSettings();
+    });
+
+    if (DebugService.isEnabled() && this.debugService) {
+      const actionsContainer = document.getElementById('debugActions');
+      const resultEl = document.getElementById('debugResult');
+      if (actionsContainer) {
+        const actions = this.debugService.getActions();
+        actions.forEach(a => {
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-sm ' + (a.danger ? 'btn-warning' : 'btn-secondary');
+          btn.textContent = a.label;
+          btn.title = a.desc;
+          btn.style.cssText = 'text-align:left;padding:0.35rem 0.7rem;height:auto';
+          btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            btn.textContent = '...';
+            try {
+              const r = await this.debugService.execute(a.id);
+              if (resultEl) {
+                resultEl.textContent = r.msg;
+                resultEl.style.color = r.type === 'danger' ? 'var(--danger)' : r.type === 'warning' ? 'var(--warning)' : 'var(--success)';
+              }
+            } catch (e) {
+              if (resultEl) { resultEl.textContent = 'Erro: ' + e.message; resultEl.style.color = 'var(--danger)'; }
+            }
+            btn.disabled = false;
+            btn.textContent = a.label;
+          });
+          actionsContainer.appendChild(btn);
+        });
+      }
+    }
 
     document.querySelectorAll('[data-cosmetic-slot]').forEach(btn => {
       btn.addEventListener('click', async () => {

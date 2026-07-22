@@ -28,8 +28,8 @@ export class MotionEngine {
     }
 
     this.lenis = new Lenis({
-      duration: 1.15,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      duration: 0.45,
+      easing: (t) => Math.round(Math.min(1, t) * 6) / 6,
       smoothWheel: true,
       wheelMultiplier: 0.85,
       // Lenis por padrão sequestra o wheel da página inteira — sem excluir
@@ -80,20 +80,20 @@ export class MotionEngine {
     // entrance; the container just stays visible.
     gsap.set(container, { opacity: 1, y: 0 });
 
-    const tl = gsap.timeline({ defaults: { ease: 'power3.out' } });
+    const tl = gsap.timeline({ defaults: { ease: 'steps(4)' } });
 
     const header = container.querySelector('.page-header');
     if (header) {
       tl.fromTo(
         header.querySelector('h2'),
-        { opacity: 0, y: 40, skewY: 2 },
-        { opacity: 1, y: 0, skewY: 0, duration: 0.7 }
+        { opacity: 0, y: 8 },
+        { opacity: 1, y: 0, duration: 0.18 }
       );
       tl.fromTo(
         header.querySelector('p'),
-        { opacity: 0, y: 20 },
-        { opacity: 1, y: 0, duration: 0.5 },
-        '-=0.45'
+        { opacity: 0, y: 4 },
+        { opacity: 1, y: 0, duration: 0.14 },
+        '-=0.1'
       );
     }
 
@@ -111,14 +111,13 @@ export class MotionEngine {
 
     gsap.fromTo(
       cards,
-      { opacity: 0, y: 48, scale: 0.96 },
+      { opacity: 0, y: 8 },
       {
         opacity: 1,
         y: 0,
-        scale: 1,
-        duration: 0.65,
-        stagger: 0.07,
-        ease: 'power3.out',
+        duration: 0.18,
+        stagger: 0.035,
+        ease: 'steps(4)',
         clearProps: 'transform',
       }
     );
@@ -129,7 +128,7 @@ export class MotionEngine {
     this._clearScrollTriggers();
 
     container.querySelectorAll('[data-reveal]').forEach((el) => {
-      gsap.set(el, { opacity: 0, y: 40 });
+      gsap.set(el, { opacity: 0, y: 8 });
       const trigger = ScrollTrigger.create({
         trigger: el,
         start: 'top 88%',
@@ -137,8 +136,8 @@ export class MotionEngine {
         onEnter: () => {
           gsap.fromTo(
             el,
-            { opacity: 0, y: 60 },
-            { opacity: 1, y: 0, duration: 0.8, ease: 'power3.out' }
+            { opacity: 0, y: 8 },
+            { opacity: 1, y: 0, duration: 0.18, ease: 'steps(4)' }
           );
         },
       });
@@ -147,7 +146,7 @@ export class MotionEngine {
 
     container.querySelectorAll('[data-reveal-stagger]').forEach((group) => {
       const children = group.children;
-      gsap.set(children, { opacity: 0, y: 30 });
+      gsap.set(children, { opacity: 0, y: 6 });
       const trigger = ScrollTrigger.create({
         trigger: group,
         start: 'top 85%',
@@ -155,8 +154,8 @@ export class MotionEngine {
         onEnter: () => {
           gsap.fromTo(
             children,
-            { opacity: 0, y: 40 },
-            { opacity: 1, y: 0, duration: 0.6, stagger: 0.08, ease: 'power3.out' }
+            { opacity: 0, y: 6 },
+            { opacity: 1, y: 0, duration: 0.18, stagger: 0.035, ease: 'steps(4)' }
           );
         },
       });
@@ -201,8 +200,8 @@ export class MotionEngine {
     if (!activeLink || !gsap) return;
     gsap.fromTo(
       activeLink,
-      { scale: 0.95 },
-      { scale: 1, duration: 0.35, ease: 'back.out(2)' }
+      { x: -2 },
+      { x: 0, duration: 0.14, ease: 'steps(3)' }
     );
   }
 

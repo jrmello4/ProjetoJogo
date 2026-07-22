@@ -1,5 +1,6 @@
 import { formatDateShort, escapeHtml, e } from '../utils/helpers.js';
 import { ICON_MAP } from '../services/notification-service.js';
+import { PixelIcon } from './pixel-icon.js';
 
 const CATEGORIES = {
   all: { label: 'Todas', types: null },
@@ -20,6 +21,21 @@ const _TYPE_CATEGORY = {
   'week-advance': 'other',
   success: 'other',
 };
+
+// Saves antigos podem conter os textos da primeira reação de oferta já
+// gravados com mojibake. A correção é apenas de apresentação e não migra o DB.
+const displayText = value => String(value ?? '')
+  .replaceAll('ðŸ“© ', '')
+  .replaceAll('âš¡ ', '')
+  .replaceAll('â€”', '—')
+  .replaceAll('vocÃª', 'você')
+  .replaceAll('Ã§', 'ç')
+  .replaceAll('Ã£', 'ã')
+  .replaceAll('Ã¡', 'á')
+  .replaceAll('Ã©', 'é')
+  .replaceAll('Ã­', 'í')
+  .replaceAll('Ã³', 'ó')
+  .replaceAll('Ãº', 'ú');
 
 export class NotificationsView {
   static MAX_RENDERED = 150;
@@ -96,14 +112,14 @@ export class NotificationsView {
           <div class="notif-item ${n.read ? 'notif-read' : 'notif-unread'} ${n.type === 'hall-of-fame' ? 'nav-link' : ''}" style="padding:0.75rem 0;border-bottom:1px solid var(--border)" ${n.type === 'hall-of-fame' ? 'data-view="retirement"' : ''}>
             <div class="flex items-start justify-between">
               <div class="flex items-start gap-2" style="flex:1">
-                <span style="font-size:1.2rem">${NotificationsView.iconFor(n.type)}</span>
+                <span>${NotificationsView.iconFor(n.type)}</span>
                 <div>
-                  <div class="font-bold text-sm">${escapeHtml(n.title)}</div>
-                  <div class="text-xs text-muted">${escapeHtml(n.message)}</div>
+                  <div class="font-bold text-sm">${escapeHtml(displayText(n.title))}</div>
+                  <div class="text-xs text-muted">${escapeHtml(displayText(n.message))}</div>
                   <div class="text-xs text-muted" style="margin-top:0.25rem">${formatDateShort(n.timestamp)}</div>
                 </div>
               </div>
-              ${!n.read ? `<button class="btn btn-sm btn-secondary notif-mark-read" data-id="${escapeHtml(n.id)}" style="margin-left:0.5rem">✓</button>` : ''}
+              ${!n.read ? `<button class="btn btn-sm btn-secondary notif-mark-read" data-id="${escapeHtml(n.id)}" aria-label="Marcar como lida" style="margin-left:0.5rem">${PixelIcon.render('success')}</button>` : ''}
             </div>
           </div>
         `).join('')}
@@ -117,7 +133,7 @@ export class NotificationsView {
   }
 
   static iconFor(type) {
-    return ICON_MAP[type] || 'ℹ️';
+    return PixelIcon.render(ICON_MAP[type] || 'notifications', { size: 'lg' });
   }
 
   static renderSaveLoad(saveInfo, slots, currentSlot) {

@@ -1,17 +1,18 @@
 import { AudioService } from './audio-service.js';
 import { escapeHtml } from '../utils/helpers.js';
+import { PixelIcon } from '../views/pixel-icon.js';
 
 const TYPE_META = {
-  success: { icon: '✅', mod: 'toast--success' },
-  info: { icon: 'ℹ️', mod: 'toast--info' },
-  warning: { icon: '⚠️', mod: 'toast--warning' },
-  danger: { icon: '⛔', mod: 'toast--danger' },
-  injury: { icon: '🏥', mod: 'toast--warning' },
-  'contract-expiry': { icon: '📄', mod: 'toast--warning' },
-  rivalry: { icon: '⚔️', mod: 'toast--info' },
-  'hall-of-fame': { icon: '🏆', mod: 'toast--gold' },
-  'week-advance': { icon: '📅', mod: 'toast--info' },
-  achievement: { icon: '🏆', mod: 'toast--gold' },
+  success: { icon: 'success', mod: 'toast--success' },
+  info: { icon: 'notifications', mod: 'toast--info' },
+  warning: { icon: 'notifications', mod: 'toast--warning' },
+  danger: { icon: 'loss', mod: 'toast--danger' },
+  injury: { icon: 'injury', mod: 'toast--warning' },
+  'contract-expiry': { icon: 'timeline', mod: 'toast--warning' },
+  rivalry: { icon: 'rivalries', mod: 'toast--info' },
+  'hall-of-fame': { icon: 'title', mod: 'toast--gold' },
+  'week-advance': { icon: 'calendar', mod: 'toast--info' },
+  achievement: { icon: 'title', mod: 'toast--gold' },
 };
 
 const MAX_VISIBLE = 4;
@@ -47,7 +48,7 @@ export class Toast {
     toast.className = `toast ${meta.mod}`;
     // title/message vêm de notif com nomes de lutadores — escapar evita XSS
     toast.innerHTML = `
-      <span class="toast-icon">${meta.icon}</span>
+      <span class="toast-icon">${PixelIcon.render(meta.icon, { size: 'lg' })}</span>
       <div class="toast-body">
         <div class="toast-title">${escapeHtml(title)}</div>
         ${message ? `<div class="toast-message">${escapeHtml(message)}</div>` : ''}

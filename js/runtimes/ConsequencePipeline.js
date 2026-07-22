@@ -4,10 +4,7 @@
 // Processa reações em cadeia após eventos de carreira (lutas, semanas).
 // Não é um pilar navegável — é um pipeline de processamento.
 
-import { CAREER_EVENT_TYPES } from '../services/career-event-bus.js';
-import { CrowdService } from '../services/crowd-service.js';
-import { CAREER_EVENT, CareerEvents } from '../services/career-events.js';
-import { absWeek, DNA_DISCOVERY_MAGNITUDE, RIVALRY_CONFIG, WEEKLY_TRAINING_FREQUENCY, LEVEL_CONFIG, WEIGH_IN_CONFIG, OFFER_CONFIG } from '../config/game-config.js';
+import { DNA_DISCOVERY_MAGNITUDE, RIVALRY_CONFIG, WEEKLY_TRAINING_FREQUENCY, LEVEL_CONFIG, OFFER_CONFIG } from '../config/game-config.js';
 import { DNA_TRAIT_NAMES } from '../models/fighter.js';
 import { pickTopRandom } from '../utils/helpers.js';
 

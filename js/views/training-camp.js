@@ -212,7 +212,7 @@ export class TrainingCampView {
                   <option value="strategy" ${cfg.spec === 'strategy' ? 'selected' : ''}>Estratégia — +1 leitura do plano do oponente</option>
                   <option value="study" ${cfg.spec === 'study' ? 'selected' : ''}>Estudo do Adversário — +1 nível scouting temporário</option>
                   ${cardOptions.length > 0
-                    ? `<option value="card_discovery" ${cfg.spec === 'card_discovery' ? 'selected' : ''}>🃏 Descoberta de Carta</option>`
+                    ? `<option value="card_discovery" ${cfg.spec === 'card_discovery' ? 'selected' : ''}>Descoberta de Carta</option>`
                     : ''}
                   ${weaponOptions.length > 0
                     ? `<option value="install_weapon" ${cfg.spec === 'install_weapon' ? 'selected' : ''}>🧰 Instalar arma nova</option>`

@@ -2,17 +2,17 @@ import { generateId } from '../utils/helpers.js';
 import { Toast } from './toast.js';
 
 const TYPE_ICONS = {
-  'contract-expiry': '⚠️',
-  injury: '🏥',
-  rivalry: '⚔️',
-  'hall-of-fame': '🏆',
-  'week-advance': '📅',
-  info: 'ℹ️',
-  warning: '⚠️',
-  success: '✅',
-  danger: '⛔',       // mesmo ícone de toast.js — recomendação médica forte
-  headline: '📰',     // Épico F3: manchetes estilo FM
-  expectation: '💭',  // Épico F2: expectativas de atletas
+  'contract-expiry': 'notifications',
+  injury: 'injury',
+  rivalry: 'rivalries',
+  'hall-of-fame': 'title',
+  'week-advance': 'calendar',
+  info: 'notifications',
+  warning: 'notifications',
+  success: 'success',
+  danger: 'loss',
+  headline: 'events',
+  expectation: 'morale',
 };
 
 export const ICON_MAP = TYPE_ICONS;
@@ -82,6 +82,6 @@ export class NotificationService {
   }
 
   static iconFor(type) {
-    return TYPE_ICONS[type] || 'ℹ️';
+    return TYPE_ICONS[type] || 'notifications';
   }
 }

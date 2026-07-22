@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "font": {
+    "family": "Pixelify Sans",
+    "file": "fonts/PixelifySans.ttf",
+    "license": "fonts/OFL.txt"
+  },
+  "atlases": {
+    "ui16": "ui-icons.svg",
+    "status32": "status-icons.svg"
+  },
+  "frames": {
+    "card": "frames/card-frame.svg",
+    "button": "frames/button-frame.svg",
+    "modal": "frames/modal-frame.svg",
+    "table": "frames/table-frame.svg"
+  },
+  "scenes": {
+    "onboarding": "scenes/career-arena.png",
+    "career": "scenes/career-arena.png",
+    "management": "scenes/world-legacy.png",
+    "world": "scenes/world-legacy.png",
+    "history": "scenes/world-legacy.png",
+    "preparation": "scenes/training-gym.png",
+    "combat": "scenes/career-arena.png",
+    "consequences": "scenes/career-arena.png",
+    "utilities": "scenes/world-legacy.png"
+  },
+  "emptyStates": ["offer", "training", "world", "timeline", "legacy", "injury", "unknown"],
+  "icons": [
+    "unknown", "octagon", "dashboard", "hall", "events", "market",
+    "training", "rivalries", "notifications", "settings", "calendar",
+    "cash", "energy", "morale", "rank", "offer", "injury", "title",
+    "fight", "plan", "scout", "timeline", "legacy", "world",
+    "management", "save", "simulate", "next", "success", "loss", "draw"
+  ]
+}

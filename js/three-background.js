@@ -37,7 +37,8 @@ export class ThreeBackground {
       powerPreference: 'low-power',
     });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(1);
+    // Deliberately chunky background pixels; CSS performs the final upscale.
+    this.renderer.setPixelRatio(0.6);
     this.renderer.setClearColor(0x000000, 0);
 
     // Insert canvas behind everything

@@ -74,7 +74,8 @@ export class ThreeFaceOff {
       powerPreference: 'high-performance',
     });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    // Preserve the 3D fight language inside the 16-bit cabinet frame.
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 0.75));
     this.renderer.setClearColor(0x000000, 0);
     this.container.appendChild(this.renderer.domElement);
 

@@ -2751,6 +2751,12 @@ a {
 }
 
 /* --- Sidebar transitions + active link polish --- */
+.sidebar-utility-nav {
+  display: grid;
+  gap: 0.15rem;
+  margin-bottom: 0.5rem;
+}
+
 .nav-menu {
   transition: opacity 0.2s ease, transform 0.2s ease;
 }

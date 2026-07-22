@@ -465,6 +465,7 @@ export class WorldService {
         // Você acabou de passar 15 minutos dentro do octógono com o cara —
         // sabe mais sobre ele do que qualquer olheiro. Tarde demais.
         if (this.scoutingService) await this.scoutingService.observeAfterFight(fighterB.id);
+        await this._settlePlayerFight(fight, result, promo, absWeekNow, titleOutcome);
         await this.careerEvents?.emit(CAREER_EVENT.FIGHT_COMPLETED, {
           result,
           booking: fight.booking,
@@ -477,7 +478,6 @@ export class WorldService {
             { result, booking: fight.booking, absWeekNow }
           );
         }
-        await this._settlePlayerFight(fight, result, promo, absWeekNow, titleOutcome);
       }
 
       if (this.careerEventBus) {

@@ -107,7 +107,8 @@ export class ThreeArena {
       powerPreference: 'high-performance',
     });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    // Arcade theme: render below CSS resolution and upscale with nearest-neighbor.
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 0.75));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.setClearColor(0x000000, 0);

@@ -26,9 +26,9 @@ export class SidebarState {
         label: 'Carreira',
         contextual: false,
         items: [
-          { view: 'overview', label: 'Visão Geral', icon: 'hall' },
-          { view: 'events', label: 'Mundo', icon: 'events' },
-          { view: 'management', label: 'Gestão', icon: 'market' },
+          { view: 'overview', label: 'Visão Geral', icon: 'fight' },
+          { view: 'events', label: 'Mundo', icon: 'world' },
+          { view: 'management', label: 'Gestão', icon: 'management' },
         ],
       },
     ];
@@ -41,9 +41,9 @@ export class SidebarState {
         contextual: true,
         items: [
           { view: 'training', label: 'Camp', icon: 'training' },
-          { view: 'opponent', label: 'Estudo da Luta', icon: 'events' },    // scouting + tape combined
-          { view: 'offers', label: 'Plano de Luta', icon: 'events' },       // game plan + bait
-          { view: 'fight', label: 'Combate', icon: 'dashboard' },           // only when fight day
+          { view: 'opponent', label: 'Estudo da Luta', icon: 'scout' },    // scouting + tape combined
+          { view: 'fight-plan', label: 'Plano de Luta', icon: 'plan' },  // game plan + bait
+          { view: 'fight', label: 'Combate', icon: 'fight' },           // only when fight day
         ],
       });
     }
@@ -55,8 +55,8 @@ export class SidebarState {
       contextual: false,
       items: [
         { view: 'rivalries', label: 'Rivalidades', icon: 'rivalries' },
-        { view: 'timeline', label: 'Linha do Tempo', icon: 'hall' },
-        { view: 'hall-of-fame', label: 'Legado', icon: 'hall' },
+        { view: 'timeline', label: 'Linha do Tempo', icon: 'timeline' },
+        { view: 'hall-of-fame', label: 'Legado', icon: 'legacy' },
       ],
     });
 

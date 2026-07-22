@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CombatAdapter } from '../js/controllers/combat-adapter.js';
 import { makeFighter } from './fixtures.js';
 
@@ -11,6 +11,17 @@ const BASE_ATTRS = {
   strength: 50, speed: 50, durability: 50, recovery: 50,
   composure: 50, aggression: 50, adaptability: 50,
 };
+
+// O motor usa RNG de propósito; o teste não pode usar uma amostra nova a cada
+// execução. Uma semente fixa torna a regressão reproduzível sem mudar a
+// aleatoriedade usada pelo jogo real.
+function seededRandom(seed = 0xC0FFEE) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
 
 async function decisiveWinRate(n, attrsA, attrsB = BASE_ATTRS) {
   let winsA = 0;
@@ -34,6 +45,14 @@ async function decisiveWinRate(n, attrsA, attrsB = BASE_ATTRS) {
 // simetria de posição devem ser avaliadas apenas entre lutas decididas;
 // tratar empate como derrota de A cria viés estatístico inexistente.
 describe('Balanceamento do motor de cartas', () => {
+  beforeEach(() => {
+    vi.spyOn(Math, 'random').mockImplementation(seededRandom());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('lutadores idênticos ficam perto de 50/50 (sem viés estrutural de posição)', async () => {
     // Motor de cartas tem variância maior que binomial (RNG de carta/posição),
     // então n=400 oscila mais que ±0.05 em torno de 0.5. Limites largos aqui

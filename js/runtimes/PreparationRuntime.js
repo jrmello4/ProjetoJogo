@@ -4,13 +4,12 @@
 // Orquestra camp, treino, scouting, tape, pesagem.
 // Toda regra de negócio permanece nos serviços especializados.
 
-import { TRAINING_FOCUS_META, GAME_PLANS, CAMP_CONFIG, WEIGH_IN_CONFIG, WEEKLY_TRAINING_CHOICES, WEEKLY_ACTIVITIES, ACADEMIES, READINESS_CONFIG, absWeek, OFFER_CONFIG, MOVES } from '../config/game-config.js';
+import { TRAINING_FOCUS_META, GAME_PLANS, CAMP_CONFIG, WEIGH_IN_CONFIG, WEEKLY_TRAINING_CHOICES, WEEKLY_ACTIVITIES, ACADEMIES, READINESS_CONFIG, absWeek, MOVES } from '../config/game-config.js';
 import { Academy } from '../models/academy.js';
-import { clamp, generateId, sanitizePlayerName } from '../utils/helpers.js';
+import { clamp } from '../utils/helpers.js';
 import { ScoutingService } from '../services/scouting-service.js';
 import { TapeService } from '../services/tape-service.js';
 import { OnboardingService } from '../services/onboarding-service.js';
-import { ReadinessService } from '../services/readiness-service.js';
 import { TrainingCamp } from '../controllers/training-camp.js';
 import { WeeklyTrainingController } from '../controllers/weekly-training.js';
 import { FightOffer } from '../models/fight-offer.js';

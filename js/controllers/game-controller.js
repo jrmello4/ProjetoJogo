@@ -1,79 +1,32 @@
-import { Academy } from '../models/academy.js';
-import { Promotion } from '../models/promotion.js';
-import { Fighter, DNA_TRAIT_NAMES } from '../models/fighter.js';
+import { Fighter } from '../models/fighter.js';
 import { DB } from '../services/db.js';
 import { DataGenerator } from '../services/data-generator.js';
-import { RankingService } from '../services/ranking.js';
-import { FighterController } from './fighter-controller.js';
-import { EventController } from './event-controller.js';
-import { SeasonService } from '../services/season-service.js';
-import { NotificationService } from '../services/notification-service.js';
-import { WorldService } from '../services/world-service.js';
-import { OfferService } from '../services/offer-service.js';
-import { SponsorService } from '../services/sponsor-service.js';
-import { TitleService } from '../services/title-service.js';
-import { ScoutingService } from '../services/scouting-service.js';
-import { ContractService } from '../services/contract-service.js';
 import { TrainingPartnersService } from '../services/training-partners-service.js';
-import { ManagerService } from '../services/manager-service.js';
-import { CareerLogService } from '../services/career-log-service.js';
-import { CareerEventBus, CAREER_EVENT_TYPES } from '../services/career-event-bus.js';
-import { CAREER_EVENT, CareerEvents } from '../services/career-events.js';
-import { RivalryService } from '../services/rivalry-service.js';
+import { CAREER_EVENT_TYPES } from '../services/career-event-bus.js';
 import { StyleService } from '../services/style-service.js';
-import { SocialMediaService } from '../services/social-media-service.js';
-import { PodcastService } from '../services/podcast-service.js';
-import { YearReviewService } from '../services/year-review-service.js';
-import { CrowdService } from '../services/crowd-service.js';
 import { VisualIdentityService } from '../services/visual-identity-service.js';
-import { NarrativeChainService } from '../services/narrative-chain-service.js';
-import { SocialMedia } from './social-media.js';
-import { FightOffer } from '../models/fight-offer.js';
-import { generateId, clamp, pickTopRandom, sanitizePlayerName } from '../utils/helpers.js';
-import { TrainingCamp } from './training-camp.js';
-import { WeeklyTrainingController } from './weekly-training.js';
-import { FinanceController } from './finance-controller.js';
-import { NarrativeController } from './narrative-controller.js';
-import { CareerController } from './career-controller.js';
+import { generateId, clamp, sanitizePlayerName } from '../utils/helpers.js';
 import {
-  ACADEMIES,
   ARCHETYPES,
   ORIGINS,
   DIFFICULTIES,
   LIFESTYLE_TIERS,
   LIFESTYLE_DOWNGRADE_MORALE_PENALTY,
-  PROMOTIONS,
-  CORE_WEIGHT_CLASSES,
-  WORLD_CONFIG,
-  TRAINING_FOCUS_META,
-  GAME_PLANS,
-  CAMP_CONFIG,
-  WEIGH_IN_CONFIG,
-  RIVALRY_CONFIG,
   SYNERGY_CONFIG,
   PARTNER_CONFIG,
-  DNA_DISCOVERY_MAGNITUDE,
-  READINESS_CONFIG,
-  WEEKLY_TRAINING_CHOICES,
-  WEEKLY_TRAINING_FREQUENCY,
   CHALLENGE_MODES,
   absWeek,
 } from '../config/game-config.js';
-import { TapeService } from '../services/tape-service.js';
-import { ReadinessService } from '../services/readiness-service.js';
 import { OnboardingService } from '../services/onboarding-service.js';
-import { LEVEL_CONFIG, MOVES, WEEKLY_ACTIVITIES, INJURY_CONFIG, OFFER_CONFIG } from '../config/game-config.js';
+import { OFFER_CONFIG } from '../config/game-config.js';
 import { CareerRuntime } from '../runtimes/CareerRuntime.js';
 
-const WORLD_MODE = 'career-1-fighter';
 // v4: carreira de 1 lutador — Academy substitui Gym/RivalGym, economia
 // pessoal, sem elenco. Ver docs/superpowers/specs/2026-07-13-carreira-sistemica-1-lutador-design.md
-const WORLD_SCHEMA = 5;
 
 // Orquestrador da carreira: o jogador É o lutador, do primeiro contrato à
 // aposentadoria. As promoções são IA e o mundo gira sozinho a cada semana.
-// Onda 1: init() delega para CareerRuntime. Os demais métodos permanecem aqui
-// até as ondas seguintes.
+// Fachada compatível: preserva a API pública e delega a orquestração aos runtimes.
 export class GameController {
   constructor() {
     this.db = new DB();
@@ -387,6 +340,14 @@ export class GameController {
   // ===== Pesagem (delegado ao CareerRuntime) =====
   async resolveWeighIn(strategyId, absWeekNow, options) {
     return this.runtime.preparation.resolveWeighIn(strategyId, absWeekNow, options);
+  }
+
+  async resolveRehabChoice(choiceKey) {
+    return this.runtime.resolveRehabChoice(choiceKey);
+  }
+
+  async resolveEndCareer(fighterId, choiceKey) {
+    return this.runtime.resolveEndCareer(fighterId, choiceKey);
   }
 
   async resolveRivalryInteraction(choice) {

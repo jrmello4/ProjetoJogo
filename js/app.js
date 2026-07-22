@@ -42,8 +42,11 @@ import { AppearanceEditor } from './views/appearance-editor.js';
 import { SettingsView } from './views/settings.js';
 import { TutorialCoach } from './services/tutorial-coach.js';
 import { FightFeedbackService } from './services/fight-feedback-service.js';
+import { CAREER_EVENT } from './services/career-events.js';
+import { GameFeedback } from './services/game-feedback.js';
 import { motion } from './motion/motion-engine.js';
 import { SidebarState } from './runtimes/SidebarState.js';
+import { HudState } from './runtimes/HudState.js';
 import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, ARCHETYPES, ORIGINS, absWeekToLabel, FIGHTING_STYLES, PERKS, CHALLENGE_MODES } from './config/game-config.js';
 import { formatCurrency, getAdjacentWeightClasses, sanitizePlayerName, e } from './utils/helpers.js';
 import { validateCharCreateStep } from './utils/char-create-validate.js';
@@ -139,6 +142,7 @@ class App {
     this.threeArena = null;
     this.threeBackground = null;
     this.shownMoments = new Set();
+    this._sidebarEventUnsubscribers = [];
   }
 
   async init() {
@@ -149,13 +153,7 @@ class App {
     try {
       playerFighter = await this.game.init();
       const dashboardData = await this.game.getDashboard();
-      const sidebarState = SidebarState.compute(
-        dashboardData.fighter,
-        dashboardData.bookings,
-        dashboardData.pendingOffers
-      );
-      window.__currentView = 'dashboard';
-      LayoutView.renderSidebar(sidebarState.sections);
+      this._refreshChrome(dashboardData);
     } catch (err) {
       console.error('Failed to init game:', err);
       document.getElementById('mainContent').innerHTML = `
@@ -171,6 +169,7 @@ class App {
       return;
     }
     this.rivalryService = new RivalryService(this.game.db, this.game.careerLogService);
+    this._registerSidebarEventHandlers();
 
     // Decorativo — uma falha de WebGL aqui está no caminho síncrono do boot
     // e não pode impedir o resto do app de carregar.
@@ -179,11 +178,10 @@ class App {
     window.addEventListener('navigate', (e) => {
       const view = e.detail?.view;
       if (!view) return;
+      this._setActiveNavView(view);
       this.navigateTo(view);
-      document.querySelectorAll('.nav-link[data-view]').forEach(l => {
-        l.classList.toggle('active', l.dataset.view === view);
-      });
     });
+    window.addEventListener('advance-week', () => this.advanceWeek());
 
     document.addEventListener('click', (e) => {
       const navEl = e.target.closest('[data-nav]');
@@ -213,6 +211,47 @@ class App {
     }
 
     this.navigateTo('dashboard');
+  }
+
+  _setActiveNavView(view) {
+    window.__currentView = view;
+    document.querySelectorAll('.nav-link[data-view]').forEach(link => {
+      link.classList.toggle('active', link.dataset.view === view);
+    });
+  }
+
+  _updateSidebar({ fighter, bookings = [], pendingOffers = [] }) {
+    const sidebarState = SidebarState.compute(fighter, bookings, pendingOffers);
+    this._setActiveNavView(this.currentView);
+    LayoutView.renderSidebar(sidebarState.sections);
+  }
+
+  _updateHud(data) {
+    LayoutView.renderHud(HudState.compute(data));
+  }
+
+  async _refreshChrome(data = null) {
+    const dashboard = data || await this.game.getDashboard();
+    this._updateSidebar(dashboard);
+    this._updateHud(dashboard);
+    return dashboard;
+  }
+
+  _registerSidebarEventHandlers() {
+    this._sidebarEventUnsubscribers.forEach(unsubscribe => unsubscribe());
+    const refresh = () => {
+      this._refreshChrome().catch(error => console.warn('Falha ao atualizar interface da carreira:', error));
+    };
+    this._sidebarEventUnsubscribers = [
+      CAREER_EVENT.FIGHT_OFFERED,
+      CAREER_EVENT.FIGHT_ACCEPTED,
+      CAREER_EVENT.FIGHT_DECLINED,
+      CAREER_EVENT.FIGHT_CANCELLED,
+      CAREER_EVENT.FIGHT_COMPLETED,
+      CAREER_EVENT.FIGHT_WON,
+      CAREER_EVENT.FIGHT_LOST,
+      CAREER_EVENT.INJURY_SUSTAINED,
+    ].map(type => this.game.careerEvents.on(type, refresh));
   }
 
   // ===== Criação de personagem (§A.7) — wizard multi-step =====
@@ -717,7 +756,7 @@ class App {
         text: 'Antes de cada luta, configure intensidade e foco do treino aqui — isso define seu desempenho no octógono.',
       },
       {
-        selector: '#weekAdvanceBtn',
+        selector: '[data-week-advance]',
         title: '⏩ Avançar Semana',
         text: 'Cada clique processa uma semana inteira: treino, ofertas, eventos e notícias do mundo do MMA.',
       },
@@ -726,9 +765,21 @@ class App {
     localStorage.setItem('tutorialDone', '1');
   }
 
+  _sceneForView(view) {
+    if (['training', 'opponent', 'fight-plan'].includes(view)) return 'training';
+    if (view === 'fight') return 'combat';
+    if (['events', 'rankings', 'calendar'].includes(view)) return 'world';
+    if (['management', 'finance', 'academy', 'offers'].includes(view)) return 'management';
+    if (['rivalries', 'timeline', 'hall-of-fame', 'retirement'].includes(view)) return 'legacy';
+    if (['settings', 'notifications'].includes(view)) return 'utility';
+    return 'career';
+  }
+
   async navigateTo(view) {
     this.previousView = this.currentView;
     this.currentView = view;
+    this._setActiveNavView(view);
+    document.body.dataset.scene = this._sceneForView(view);
 
     try {
       switch (view) {
@@ -783,16 +834,17 @@ class App {
           await this.renderFinance();
           break;
         case 'opponent':
-          // Estudo da Luta — scouting do oponente (redireciona para ofertas com foco na luta atual)
-          await this.renderOffers();
+          await this.renderOpponentStudy();
+          break;
+        case 'fight-plan':
+          await this.renderFightPlan();
           break;
         case 'timeline':
           // Linha do Tempo — podcast + biografia (redireciona para hall da fama / dashboard)
           await this.renderDashboard();
           break;
         case 'fight':
-          // Combate — a luta em si
-          await this.renderDashboard(); // fallback — luta e iniciada pelo fluxo semanal
+          await this.renderFightDay();
           break;
         default:
           await this.renderDashboard();
@@ -841,6 +893,7 @@ class App {
     LayoutView.closeDecisionOverlay(document.querySelector('.decision-overlay'));
 
     const data = await this.game.getDashboard();
+    this._refreshChrome(data);
     const monetization = await this.monetizationService.getState();
     data.eliteFrame = monetization.equipped.posterFrame === 'cos-elite-frame';
 
@@ -866,7 +919,7 @@ class App {
     this.initThreeArena(data.fighter);
     this._updateNavBadges(data.pendingOffers?.length || 0);
 
-    document.getElementById('weekAdvanceBtn')?.addEventListener('click', () => this.advanceWeek());
+    document.querySelector('[data-week-advance]')?.addEventListener('click', () => this.advanceWeek());
     document.getElementById('saveLoadBtn')?.addEventListener('click', () => this.handleSaveLoad());
     document.getElementById('simulatePeriodBtn')?.addEventListener('click', () => this.openSimulatePeriod());
 
@@ -1181,12 +1234,17 @@ class App {
 
   // ===== Tick semanal: o coração do jogo =====
   async advanceWeek() {
-    const btn = document.getElementById('weekAdvanceBtn');
-    if (btn) btn.disabled = true;
+    const controls = document.querySelectorAll('[data-week-advance], [data-hud-advance], [data-fight-day-advance]');
+    controls.forEach(control => { control.disabled = true; });
     AudioService.play('whoosh');
 
     try {
-      await this._advanceWeekInner();
+      const before = await this.game.getDashboard().catch(() => null);
+      const outcome = await this._advanceWeekInner();
+      const after = await this._refreshChrome();
+      if (!outcome?.suppressFeedback) {
+        LayoutView.showGameFeedback(GameFeedback.diff(before, after));
+      }
     } catch (err) {
       // A ação mais executada do jogo inteiro, sem nenhuma rede de segurança
       // antes disto: qualquer exceção em processWeek() (bug de dado após
@@ -1194,8 +1252,7 @@ class App {
       // linhas de world-service) deixava o botão desabilitado pra sempre,
       // sem aviso — único jeito de sair era recarregar a página.
       console.error('Falha ao avançar semana:', err);
-      const retryBtn = document.getElementById('weekAdvanceBtn');
-      if (retryBtn) retryBtn.disabled = false;
+      controls.forEach(control => { control.disabled = false; });
       await this.notificationService.add(
         'danger',
         'Falha ao avançar semana',
@@ -1281,7 +1338,7 @@ class App {
               });
             }
           });
-          return;
+          return { summary, suppressFeedback: true };
         }
       }
       const html = EventsView.renderLiveSimulation(featured.event, featured.results, featured.playerFighterIds);
@@ -1290,10 +1347,11 @@ class App {
       document.querySelectorAll('.event-back').forEach(b => {
         b.addEventListener('click', () => this.renderDashboard());
       });
-      return;
+      return { summary, suppressFeedback: true };
     }
 
-    this.renderDashboard();
+    await this.renderDashboard();
+    return { summary, suppressFeedback: false };
   }
 
   // ===== Simular Período =====
@@ -1385,6 +1443,68 @@ class App {
     document.querySelector('.summary-back')?.addEventListener('click', () => this.renderDashboard());
   }
 
+  async _getPlayerFightContext() {
+    const [fighter, bookings, state] = await Promise.all([
+      this.game.getPlayerFighter(),
+      this.game.offerService.getAccepted(),
+      this.seasonService.getState(),
+    ]);
+    const now = (state.year - 1) * 52 + state.week;
+    return { fighter, bookings, now, booking: bookings.find(offer => offer.fighterId === fighter?.id) || null };
+  }
+
+  _fightReadiness(fighter, booking, dossier) {
+    if (!fighter || !booking) return null;
+    const level = dossier?.level ?? 0;
+    const player = ReadinessService.playerReadiness(fighter, booking, level);
+    const opponent = ReadinessService.aiReadiness(booking.tier, !!booking.isTitleFight, `${booking.id}-${booking.opponentId}`);
+    return {
+      player: player.total,
+      parts: player.parts,
+      opponentKnown: level >= 1,
+      opponent: level >= 1 ? opponent : null,
+      opponentLabel: level >= 1 ? ReadinessService.label(opponent) : null,
+    };
+  }
+
+  async renderOpponentStudy() {
+    const { fighter, booking } = await this._getPlayerFightContext();
+    const dossier = booking ? await this.game.opponentDossier(booking) : null;
+    await LayoutView.render(OffersView.renderOpponentStudy(booking, dossier, this._fightReadiness(fighter, booking, dossier)));
+
+    document.querySelector('.study-opponent')?.addEventListener('click', async () => {
+      const result = await this.game.studyOpponent(booking.opponentId);
+      if (!result.ok) await this.notificationService.add('warning', 'Scouting', result.reason);
+      await this.renderOpponentStudy();
+    });
+  }
+
+  async renderFightPlan() {
+    const { fighter, booking } = await this._getPlayerFightContext();
+    const dossier = booking ? await this.game.opponentDossier(booking) : null;
+    await LayoutView.render(OffersView.renderFightPlan(booking, dossier, this._fightReadiness(fighter, booking, dossier)));
+
+    document.querySelectorAll('.plan-option').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await this.game.setGamePlan(btn.dataset.offer, btn.dataset.plan);
+        await this.renderFightPlan();
+      });
+    });
+    document.querySelectorAll('.bait-toggle').forEach(box => {
+      box.addEventListener('change', async () => {
+        const result = await this.game.setBait(box.dataset.offer, box.checked);
+        if (!result.ok) await this.notificationService.add('warning', 'Isca', result.reason);
+        await this.renderFightPlan();
+      });
+    });
+  }
+
+  async renderFightDay() {
+    const { booking, now } = await this._getPlayerFightContext();
+    await LayoutView.render(OffersView.renderFightDay(booking, now));
+    document.querySelector('[data-fight-day-advance]')?.addEventListener('click', () => this.advanceWeek());
+  }
+
   // ===== Ofertas =====
   async renderOffers() {
     const state = await this.seasonService.getState();
@@ -1393,6 +1513,7 @@ class App {
     const accepted = await this.game.offerService.getAccepted();
     const history = await this.game.offerService.getHistory();
     const fighter = await this.game.getPlayerFighter();
+    await this._refreshChrome();
 
     const dossiers = {};
     for (const o of accepted) {
@@ -2351,6 +2472,7 @@ class App {
         TrainingCamp.configureCamp(fighter, intensity, spec || 'striking', partnerId, weaponTarget, profFocus, cardFocus);
         OnboardingService.markCampConfigured(fighter);
         await this.game.fighterCtrl.updateFighter(fighter);
+        await this._refreshChrome();
 
         const cost = CAMP_CONFIG.WEEKLY_COST[intensity] || 0;
         this.notificationService.add('success', 'Camp Configurado', `Você iniciou camp ${intensity} ($${cost.toLocaleString()}/sem).`);
@@ -2362,6 +2484,7 @@ class App {
       btn.addEventListener('click', async () => {
         TrainingCamp.cancelCamp(fighter);
         await this.game.fighterCtrl.updateFighter(fighter);
+        await this._refreshChrome();
         this.notificationService.add('info', 'Camp Cancelado', 'Camp cancelado.');
         this.renderTrainingCamp();
       });
@@ -2391,6 +2514,7 @@ class App {
     document.querySelectorAll('.lifestyle-set').forEach(btn => {
       btn.addEventListener('click', async () => {
         await this.game.setLifestyle(btn.dataset.tier);
+        await this._refreshChrome();
         this.renderFinance();
       });
     });
@@ -2407,6 +2531,7 @@ class App {
           fighter.hiredServices.push(key);
         }
         await this.game.fighterCtrl.updateFighter(fighter);
+        await this._refreshChrome();
         this.renderFinance();
       });
     });
@@ -2428,6 +2553,7 @@ class App {
         } else {
           this.notificationService.add('warning', 'Troca Falhou', result.reason);
         }
+        await this._refreshChrome();
         this.renderAcademy();
       });
     });
@@ -2449,6 +2575,7 @@ class App {
         } else {
           this.notificationService.add('warning', 'Contratação Falhou', result.reason);
         }
+        await this._refreshChrome();
         this.renderAcademy();
       });
     });

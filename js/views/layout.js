@@ -1,8 +1,9 @@
 import { DB } from '../services/db.js';
 import { AudioService } from '../services/audio-service.js';
 import { motion } from '../motion/motion-engine.js';
-import { riveManager } from '../motion/rive-manager.js';
-import { SidebarState } from '../runtimes/SidebarState.js';
+import { PortraitService } from '../services/portrait-service.js';
+import { formatCurrency, e } from '../utils/helpers.js';
+import { PixelIcon } from './pixel-icon.js';
 
 export class LayoutView {
   static _renderSeq = 0;
@@ -29,14 +30,12 @@ export class LayoutView {
         mainContent.innerHTML = content;
         motion.scrollToTop();
         motion.animatePageEnter(mainContent);
-        riveManager.mountAll(mainContent);
         this._animateStats(mainContent);
         resolve();
       });
     }
 
     mainContent.innerHTML = content;
-    riveManager.mountAll(mainContent);
     return Promise.resolve();
   }
 
@@ -113,8 +112,7 @@ export class LayoutView {
   }
 
   static initNavigation() {
-    riveManager.mountAll(document.getElementById('sidebar'));
-
+    PixelIcon.mountLegacyObserver();
     const links = document.querySelectorAll('.nav-link[data-view]');
     links.forEach((link) => {
       link.addEventListener('click', (e) => {
@@ -208,7 +206,7 @@ export class LayoutView {
         // Bloqueado com modal ou cinemática abertos — espaço não deve
         // disparar avanço de semana por baixo de uma decisão pendente.
         if (document.querySelector('.modal-overlay, .cinematic-overlay')) return;
-        const btn = document.getElementById('weekAdvanceBtn');
+        const btn = document.querySelector('[data-week-advance], [data-hud-advance], [data-fight-day-advance]');
         if (btn && !btn.disabled && btn.offsetParent !== null) {
           e.preventDefault();
           btn.click();
@@ -445,7 +443,7 @@ export class LayoutView {
         sectionHtml += `
           <li class="nav-item">
             <a class="nav-link ${activeClass}" data-view="${item.view}" href="#" role="button">
-              <span class="rive-slot" data-rive="${item.icon}"></span>
+              ${PixelIcon.render(item.icon)}
               <span>${item.label}</span>
             </a>
           </li>`;
@@ -480,8 +478,107 @@ export class LayoutView {
       });
     });
 
-    // Re-mount Rive animations (already imported at top of module)
-    riveManager.mountAll(container);
+  }
+
+  /** Persistent arcade HUD. Receives only the pure projection from HudState. */
+  static renderHud(state) {
+    const host = document.getElementById('gameHud');
+    if (!host) return;
+    if (!state?.ready) {
+      host.hidden = true;
+      host.innerHTML = '';
+      return;
+    }
+
+    const energy = Math.max(0, Math.min(100, state.energy));
+    const morale = Math.max(0, Math.min(100, state.morale));
+    const next = state.nextFight;
+    const nextMeta = next
+      ? next.isFightWeek ? 'DIA DA LUTA' : `${next.weeksToFight} SEM PARA A LUTA`
+      : state.pendingOffers > 0 ? `${state.pendingOffers} OFERTA${state.pendingOffers === 1 ? '' : 'S'} PENDENTE${state.pendingOffers === 1 ? '' : 'S'}` : 'SEM LUTA MARCADA';
+    const nextName = next?.opponentName || (state.pendingOffers > 0 ? 'VER PROPOSTAS' : 'AGUARDANDO CONTRATO');
+
+    host.innerHTML = `
+      <header class="game-hud" aria-label="Estado atual da carreira">
+        <button class="hud-fighter" type="button" data-hud-nav="overview" aria-label="Abrir perfil de ${e(state.fighterName)}">
+          <span class="hud-portrait">${PortraitService.renderFighter(state.fighter, { size: 48 })}</span>
+          <span class="hud-fighter-copy">
+            <span class="hud-fighter-name">${e(state.fighterName)}</span>
+            <span class="hud-fighter-meta"><span>${e(state.recordLabel)}</span><span>${e(state.rankLabel)}</span></span>
+          </span>
+        </button>
+        <div class="hud-stat hud-stat--rank">
+          <span class="hud-stat-head">${PixelIcon.render('calendar', { size: 'sm' })} Semana</span>
+          <strong class="hud-stat-value">${e(state.weekLabel)}</strong>
+        </div>
+        <div class="hud-stat hud-stat--cash">
+          <span class="hud-stat-head">${PixelIcon.render('cash', { size: 'sm' })} Caixa</span>
+          <strong class="hud-stat-value">${formatCurrency(state.cash)}</strong>
+        </div>
+        <div class="hud-stat hud-stat--energy">
+          <span class="hud-stat-head">${PixelIcon.render('energy', { size: 'sm' })} Energia</span>
+          <strong class="hud-stat-value">${energy}%</strong>
+          <span class="hud-meter" aria-hidden="true"><span style="width:${energy}%"></span></span>
+        </div>
+        <div class="hud-stat hud-stat--morale">
+          <span class="hud-stat-head">${PixelIcon.render('morale', { size: 'sm' })} Moral</span>
+          <strong class="hud-stat-value">${morale}%</strong>
+          <span class="hud-meter" aria-hidden="true"><span style="width:${morale}%"></span></span>
+        </div>
+        <button class="hud-next-fight" type="button" data-hud-nav="${next ? 'fight' : 'offers'}">
+          <span class="hud-next-label">${PixelIcon.render(next?.isTitleFight ? 'title' : 'fight', { size: 'sm' })} Próxima luta</span>
+          <strong class="hud-next-name">${e(nextName)}</strong>
+          <span class="hud-next-meta ${next?.isFightWeek ? 'hud-next-meta--danger' : ''}">${e(nextMeta)}</span>
+        </button>
+        <div class="hud-action">
+          <button class="btn btn-primary hud-advance" type="button" data-hud-advance aria-label="Avançar semana" ${state.canAdvance ? '' : 'disabled'}>
+            ${PixelIcon.render('next', { size: 'lg' })}
+            <span class="hud-advance-label">Avançar semana</span>
+          </button>
+        </div>
+      </header>`;
+    host.hidden = false;
+
+    host.querySelectorAll('[data-hud-nav]').forEach(button => {
+      button.addEventListener('click', () => {
+        window.dispatchEvent(new CustomEvent('navigate', { detail: { view: button.dataset.hudNav } }));
+      });
+    });
+    host.querySelector('[data-hud-advance]')?.addEventListener('click', () => {
+      window.dispatchEvent(new CustomEvent('advance-week'));
+    });
+  }
+
+  /** Non-blocking summary of changes caused by a weekly tick. */
+  static showGameFeedback(feedback) {
+    if (!feedback?.hasChanges) return;
+    document.querySelector('.game-feedback')?.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'game-feedback';
+    const deltaLabel = (change) => {
+      if (change.key === 'cash') return `${change.delta >= 0 ? '+' : '-'}${formatCurrency(Math.abs(change.delta))}`;
+      if (change.key === 'rank') return change.delta > 0 ? `SUBIU ${change.delta}` : `CAIU ${Math.abs(change.delta)}`;
+      if (change.key === 'countdown') return change.to === 0 ? 'DIA DA LUTA' : `${change.to} SEMANAS`;
+      return `${change.delta >= 0 ? '+' : ''}${change.delta}`;
+    };
+    overlay.innerHTML = `
+      <section class="game-feedback-panel" role="dialog" aria-modal="true" aria-label="Resumo da semana">
+        <div class="game-feedback-kicker">Turno concluído</div>
+        <h2 class="game-feedback-title">${e(feedback.weekLabel)}</h2>
+        <div class="game-feedback-grid">
+          ${feedback.changes.map(change => `
+            <div class="game-feedback-item game-feedback-item--${e(change.tone)}">
+              <div class="game-feedback-item-head">${PixelIcon.render(change.icon)} ${e(change.label)}</div>
+              <div class="game-feedback-delta">${e(deltaLabel(change))}</div>
+            </div>`).join('')}
+        </div>
+        <button class="btn btn-primary game-feedback-close" type="button">Continuar</button>
+      </section>`;
+    document.body.appendChild(overlay);
+    AudioService.play(feedback.changes.some(change => change.key === 'cash' && change.delta > 0) ? 'cash' : 'notify');
+    const close = () => overlay.remove();
+    overlay.querySelector('.game-feedback-close')?.addEventListener('click', close);
+    setTimeout(close, 2600);
   }
 
 }

@@ -50,7 +50,7 @@ export class DashboardView {
     // (salvar, só ícone) — três botões de mesmo peso deixavam o CTA sem foco.
     const actions = `
       <div class="poster-actions">
-        <button class="btn btn-primary week-advance" id="weekAdvanceBtn">Avançar semana</button>
+        <button class="btn btn-primary week-advance" data-week-advance>Avançar semana</button>
         <button class="btn btn-secondary" id="simulatePeriodBtn">Simular período</button>
         <button class="btn btn-secondary btn-only-icon save-load" id="saveLoadBtn" title="Salvar / carregar" aria-label="Salvar ou carregar jogo">💾</button>
       </div>`;

@@ -246,6 +246,74 @@ export class OffersView {
     `;
   }
 
+  static renderOpponentStudy(offer, dossier, readiness) {
+    if (!offer) {
+      return `
+        <div class="page-header"><h2>Estudo da Luta</h2></div>
+        <div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">Marque uma luta para abrir o dossiê do adversário.</div></div>`;
+    }
+
+    return `
+      <div class="page-header">
+        <div><h2>Estudo da Luta</h2><p>${e(offer.opponentName)} · ${e(offer.promotionName)}</p></div>
+      </div>
+      <div class="page-grid page-grid--two">
+        <section class="card">${dossier ? this._renderDossier(offer, dossier) : '<p class="text-muted">Dossiê indisponível.</p>'}</section>
+        <section class="card">
+          <div class="card-header"><span class="card-title">🎯 Preparação</span></div>
+          ${this._renderReadiness(readiness)}
+          <button class="btn btn-primary" data-nav="fight-plan">Montar plano de luta</button>
+        </section>
+      </div>`;
+  }
+
+  static renderFightPlan(offer, dossier, readiness) {
+    if (!offer) {
+      return `
+        <div class="page-header"><h2>Plano de Luta</h2></div>
+        <div class="empty-state"><div class="empty-state-icon">🎯</div><div class="empty-state-text">Marque uma luta para escolher um plano.</div></div>`;
+    }
+
+    return `
+      <div class="page-header">
+        <div><h2>Plano de Luta</h2><p>Contra ${e(offer.opponentName)} · ${e(offer.promotionName)}</p></div>
+      </div>
+      <section class="card">
+        ${this._renderReadiness(readiness)}
+        ${this._renderGamePlan(offer, dossier)}
+      </section>
+      <div class="flex gap-2 mt-3">
+        <button class="btn btn-secondary" data-nav="opponent">Voltar ao dossiê</button>
+        <button class="btn btn-primary" data-nav="fight">Ver noite da luta</button>
+      </div>`;
+  }
+
+  static renderFightDay(offer, now) {
+    if (!offer) {
+      return `
+        <div class="page-header"><h2>Combate</h2></div>
+        <div class="empty-state"><div class="empty-state-icon">🥊</div><div class="empty-state-text">Nenhuma luta marcada.</div></div>`;
+    }
+
+    const weeksToFight = Math.max(0, offer.eventAbsWeek - now);
+    const plan = GAME_PLANS[offer.gamePlan || 'balanced'];
+    return `
+      <div class="page-header">
+        <div><h2>Combate</h2><p>Noite da luta · ${e(offer.promotionName)}</p></div>
+      </div>
+      <section class="card fight-night-card">
+        <div class="fight-night-faceoff">
+          <strong>${e(offer.opponentName)}</strong><span>vs</span><strong>Você</strong>
+        </div>
+        <p class="text-muted mt-2">${offer.isTitleFight ? '🏆 Disputa de cinturão · ' : ''}${weeksToFight === 0 ? 'A luta é nesta semana.' : `Faltam ${weeksToFight} semana${weeksToFight === 1 ? '' : 's'}.`}</p>
+        <p class="text-sm mt-2">Plano atual: <strong>${e(plan?.label || 'Equilibrado')}</strong></p>
+        <div class="flex gap-2 mt-3">
+          <button class="btn btn-secondary" data-nav="fight-plan">Revisar plano</button>
+          <button class="btn btn-primary" data-fight-day-advance>Avançar para a luta</button>
+        </div>
+      </section>`;
+  }
+
   // §Fase 3b — o dilema. A promoção não te oferece o seu parceiro de treino por
   // acaso: essa luta costuma ser a boa. O jogador precisa ver o preço ANTES de
   // clicar em aceitar, senão não é uma decisão — é uma pegadinha.

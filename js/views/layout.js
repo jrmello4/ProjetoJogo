@@ -2,6 +2,7 @@ import { DB } from '../services/db.js';
 import { AudioService } from '../services/audio-service.js';
 import { motion } from '../motion/motion-engine.js';
 import { riveManager } from '../motion/rive-manager.js';
+import { SidebarState } from '../runtimes/SidebarState.js';
 
 export class LayoutView {
   static _renderSeq = 0;
@@ -421,6 +422,62 @@ export class LayoutView {
       el.style.transition = 'opacity 0.2s';
       setTimeout(() => el.remove(), 250);
     }, 3000);
+  }
+
+  /** Render sidebar navigation dynamically based on game state */
+  static renderSidebar(sections) {
+    const nav = document.querySelector('.sidebar nav');
+    if (!nav) return;
+
+    let html = '';
+    for (const section of sections) {
+      let sectionHtml = '';
+      if (section.label) {
+        sectionHtml += `<p class="nav-group-label">${section.label}</p>`;
+      }
+      sectionHtml += '<ul class="nav-menu">';
+      for (const item of section.items) {
+        const activeClass = window.__currentView === item.view ? 'active' : '';
+        sectionHtml += `
+          <li class="nav-item">
+            <a class="nav-link ${activeClass}" data-view="${item.view}" href="#" role="button">
+              <span class="rive-slot" data-rive="${item.icon}"></span>
+              <span>${item.label}</span>
+            </a>
+          </li>`;
+      }
+      sectionHtml += '</ul>';
+
+      if (section.contextual) {
+        html += `<div class="nav-section--contextual">${sectionHtml}</div>`;
+      } else {
+        html += sectionHtml;
+      }
+    }
+    nav.innerHTML = html;
+
+    // Re-attach navigation event listeners
+    this._attachNavListeners(nav);
+  }
+
+  /** Attach click handlers to all nav links */
+  static _attachNavListeners(container) {
+    const links = container.querySelectorAll('.nav-link[data-view]');
+    links.forEach((link) => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const view = link.dataset.view;
+        links.forEach((l) => l.classList.remove('active'));
+        link.classList.add('active');
+
+        // Dispatch navigate event — same pattern as initNavigation
+        window.__currentView = view;
+        window.dispatchEvent(new CustomEvent('navigate', { detail: { view } }));
+      });
+    });
+
+    // Re-mount Rive animations (already imported at top of module)
+    riveManager.mountAll(container);
   }
 
 }

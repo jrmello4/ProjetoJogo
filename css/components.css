@@ -2729,3 +2729,23 @@ a {
   .loading-spinner { animation: none; }
   .toast { animation: none; }
 }
+
+/* ==========================================================================
+   Contextual nav section — highlighted when next-fight section appears
+   ========================================================================== */
+.nav-section--contextual {
+  position: relative;
+}
+.nav-section--contextual::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent-dim, rgba(196, 30, 58, 0.08)), transparent);
+  pointer-events: none;
+}
+.nav-section--contextual .nav-group-label {
+  color: var(--accent, #c41e3a);
+  font-weight: 700;
+  letter-spacing: 1px;
+}

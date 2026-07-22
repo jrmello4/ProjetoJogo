@@ -428,6 +428,10 @@ export class LayoutView {
   static renderSidebar(sections) {
     const nav = document.querySelector('.sidebar nav');
     if (!nav) return;
+    if (!sections || sections.length === 0) {
+      nav.innerHTML = '<p class="text-secondary text-sm" style="padding:1rem">Carregando...</p>';
+      return;
+    }
 
     let html = '';
     for (const section of sections) {

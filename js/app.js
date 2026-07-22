@@ -154,8 +154,8 @@ class App {
         dashboardData.bookings,
         dashboardData.pendingOffers
       );
-      LayoutView.renderSidebar(sidebarState.sections);
       window.__currentView = 'dashboard';
+      LayoutView.renderSidebar(sidebarState.sections);
     } catch (err) {
       console.error('Failed to init game:', err);
       document.getElementById('mainContent').innerHTML = `

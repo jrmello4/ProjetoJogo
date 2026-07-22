@@ -113,16 +113,16 @@ export class OffersView {
       ? `<span class="badge ${reads.level >= 3 ? 'badge-success' : reads.level === 2 ? 'badge-warning' : 'badge-info'}">${e(reads.confidence)}</span>`
       : '';
     const list = (items) => items.length === 0
-      ? '<li class="scout-empty">????</li>'
+      ? '<li class="scout-empty">Desconhecido — estude o adversário para revelar</li>'
       : items.map(t => `<li>${e(t)}</li>`).join('');
     const unknownLine = reads.unknown.length
       ? `<div class="scout-unknown">🕵️ Ainda oculto: ${reads.unknown.map(u => e(u)).join(' · ')}</div>`
       : '';
     return `
-      <div class="scout-reads mt-3">
+      <div class="scout-reads mt-3" data-scouting-visibility="${reads.visibility || 'unknown'}">
         <div class="scout-coverage">
           <div class="scout-coverage-head">
-            <span class="scout-coverage-label">Conhecido</span>
+            <span class="scout-coverage-label">Conhecido · ${reads.visibility === 'revealed' ? 'confirmado' : reads.visibility === 'partial' ? 'parcial' : 'desconhecido'}</span>
             <span class="text-xs text-muted">${known}% · desconhecido ${100 - known}%</span>
             ${confBadge}
           </div>

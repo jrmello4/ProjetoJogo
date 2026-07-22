@@ -14,8 +14,23 @@ export class RankingService {
 
     return ranked.map((item, index) => ({
       ...item,
+      breakdown: this.scoreBreakdown(item.fighter),
       rank: index + 1,
     }));
+  }
+
+  static scoreBreakdown(fighter) {
+    const recent = (fighter.fights || []).slice(0, RESUME_WINDOW);
+    const wins = recent.filter(f => f.won);
+    const overall = fighter.overallRating || fighter.averageSkill || 0;
+    const resume = wins.length > 0 ? (wins.reduce((s, f) => s + (f.opponentRating ?? 50), 0) / wins.length - 50) * 0.5 : 0;
+    let streak = 0;
+    for (const f of fighter.fights || []) { if (!f.won) break; streak++; }
+    const streakBonus = Math.min(streak, 5) * 2;
+    const recordBonus = clamp((fighter.record?.wins || 0) - (fighter.record?.losses || 0), -10, 10);
+    const formPenalty = recent.filter(f => !f.won).length * 4;
+    const popularity = (fighter.popularity || 0) * 0.03;
+    return { overall, resume, streak: streakBonus, record: recordBonus, form: -formPenalty, popularity };
   }
 
   // Um ranking de MMA responde "contra quem você venceu", não "quantas vezes".

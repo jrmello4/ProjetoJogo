@@ -208,7 +208,7 @@ export class TrainingCampView {
                   <option value="grappling" ${cfg.spec === 'grappling' ? 'selected' : ''}>Grappling</option>
                   <option value="cardio" ${cfg.spec === 'cardio' ? 'selected' : ''}>Cardio</option>
                   <option value="chin" ${cfg.spec === 'chin' ? 'selected' : ''}>Resistência</option>
-                  <option value="recovery" ${cfg.spec === 'recovery' ? 'selected' : ''}>Recuperação — reduz fadiga, acelera lesões</option>
+                  <option value="recovery" ${cfg.spec === 'recovery' ? 'selected' : ''}>Recuperação — reduz fadiga, acelera a recuperação</option>
                   <option value="strategy" ${cfg.spec === 'strategy' ? 'selected' : ''}>Estratégia — +1 leitura do plano do oponente</option>
                   <option value="study" ${cfg.spec === 'study' ? 'selected' : ''}>Estudo do Adversário — +1 nível scouting temporário</option>
                   ${cardOptions.length > 0

@@ -23,8 +23,8 @@ const CARD_CATEGORY = {
 // Short position labels for the meta readout — full names overflow the
 // narrow card, so the tactical chip uses coach shorthand instead.
 const POSITION_SHORT = {
-  [POSITIONS.DISTANCE]: 'DIST',
-  [POSITIONS.RANGE]: 'ALC',
+  [POSITIONS.DISTANCE]: 'Distância',
+  [POSITIONS.RANGE]: 'Alcance',
   [POSITIONS.CLINCH]: 'CLIN',
   [POSITIONS.GROUND_TOP]: 'CHÃO↑',
   [POSITIONS.GROUND_GUARD]: 'CHÃO↓',
@@ -130,22 +130,29 @@ export class CardCombatView {
   _bindInteractions(container) {
     container.querySelectorAll('.card-item:not(.disabled)').forEach(el => {
       el.addEventListener('click', () => {
+        if (el.disabled || this.handlers?.isResolving?.()) return;
         const cardId = el.dataset.cardId;
         if (this.handlers?.onCardPlay) this.handlers.onCardPlay(cardId);
+      });
+      el.addEventListener('keydown', (event) => {
+        if ((event.key === 'Enter' || event.key === ' ') && !el.disabled) {
+          event.preventDefault();
+          el.click();
+        }
       });
     });
 
     container.querySelectorAll('.move-btn').forEach(el => {
       el.addEventListener('click', () => {
         const pos = el.dataset.position;
-        if (this.handlers?.onMove) this.handlers.onMove(pos);
+        if (!el.disabled && !this.handlers?.isResolving?.() && this.handlers?.onMove) this.handlers.onMove(pos);
       });
     });
 
     const passBtn = container.querySelector('.pass-btn');
     if (passBtn) {
       passBtn.addEventListener('click', () => {
-        if (this.handlers?.onPass) this.handlers.onPass();
+        if (!passBtn.disabled && !this.handlers?.isResolving?.() && this.handlers?.onPass) this.handlers.onPass();
       });
     }
   }
@@ -193,6 +200,12 @@ export class CardCombatView {
       const noUses = remaining !== undefined && remaining <= 0;
       const wrongPos = !card.positions.includes(fighter.position);
       const disabled = onCooldown || noUses || wrongPos;
+      const posTitle = card.positions.map(p => POSITION_NAMES[p] || p).join(', ');
+      const disabledReason = wrongPos
+        ? `Disponível em: ${posTitle}`
+        : onCooldown
+          ? `Recarga: ${cooldowns[id]} turno${cooldowns[id] === 1 ? '' : 's'}`
+          : noUses ? 'Sem usos restantes' : '';
 
       // Notebook card anatomy (coach page): category header + cost stamp ·
       // taped technique photo · title with marker underline · handwritten
@@ -207,7 +220,6 @@ export class CardCombatView {
       // 3+ collapsed to a count (full list in the title tooltip).
       const posList = card.positions.map(p => POSITION_SHORT[p] || p);
       const posShort = posList.length > 2 ? `${posList.length} POS` : posList.join('/');
-      const posTitle = card.positions.map(p => POSITION_NAMES[p] || p).join(', ');
       const priority = derivePriority(card);
       // Movement IS the effect when a card repositions you; otherwise fall
       // back to the tag-derived tactical essence.
@@ -215,12 +227,12 @@ export class CardCombatView {
       const cdVal = onCooldown ? `${cooldowns[id]}T` : (card.cooldown > 1 ? `${card.cooldown}T` : '—');
       const usesVal = card.maxUses !== Infinity ? `${remaining ?? card.maxUses}/${card.maxUses}` : '∞';
       return `
-        <div class="card-item mastery-basic ${disabled ? 'disabled' : ''} ${card.type}" data-card-id="${card.id}">
+        <button type="button" class="card-item mastery-basic ${disabled ? 'disabled' : ''} ${card.type}" data-card-id="${card.id}" ${disabled ? 'disabled aria-disabled="true"' : ''} aria-label="${card.name}. ${card.description}. Dano ${card.baseDamage}. ${disabledReason}">
           <span class="card-hole h1"></span><span class="card-hole h2"></span>
           <div class="card-category-bar">
             <span class="cat-icon" aria-hidden="true">${category.icon}</span>
             <span class="cat-label">${category.label}</span>
-            <span class="card-cost" title="Custo de stamina"><b>${cost}</b><small>CUSTO</small></span>
+              <span class="card-cost" title="Custo de stamina"><b>${cost}</b><small>Custo</small></span>
           </div>
           <div class="card-art">
             ${artHtml}
@@ -235,7 +247,7 @@ export class CardCombatView {
               <div class="stat"><span class="stat-label">Recarga</span><span class="stat-val">${cdVal}</span></div>
             </div>
             <div class="card-footer">
-              <span class="card-dmg" title="Dano base">DMG ${card.baseDamage}</span>
+              <span class="card-dmg" title="Dano base">Dano ${card.baseDamage}</span>
               <span class="card-priority ${priority.cls}" title="Prioridade">${priority.label}</span>
             </div>
             <div class="card-effect">
@@ -243,7 +255,7 @@ export class CardCombatView {
               <span class="eff-val">${effect}</span>
             </div>
           </div>
-        </div>
+        </button>
       `;
     }).join('');
   }
@@ -258,9 +270,10 @@ export class CardCombatView {
       [POSITIONS.GROUND_TOP]: 'Levantar (Chão → Clinch)',
       [POSITIONS.GROUND_GUARD]: 'Levantar (Chão → Clinch)',
     };
+    const resolving = Boolean(state.isResolving);
     return `
-      <button class="pass-btn">Passar Turno</button>
-      ${allowed.map(pos => `<button class="move-btn" data-position="${pos}">Ir para ${posNames[pos] || pos}</button>`).join('')}
+      <button type="button" class="pass-btn" ${resolving ? 'disabled aria-disabled="true"' : ''}>${resolving ? 'Resolvendo ação…' : 'Passar Turno'}</button>
+      ${allowed.map(pos => `<button type="button" class="move-btn" data-position="${pos}" ${resolving ? 'disabled aria-disabled="true"' : ''}>Ir para ${posNames[pos] || pos}</button>`).join('')}
     `;
   }
 

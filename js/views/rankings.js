@@ -164,8 +164,9 @@ export class RankingsView {
                 ${isMine(c.fighter, playerFighterId) ? '<span class="badge badge-danger ml-2" style="font-size:0.6rem">VOCÊ</span>' : ''}
               </span>
               <span class="text-xs text-muted">${c.fighter.record?.wins ?? 0}-${c.fighter.record?.losses ?? 0}-${c.fighter.record?.draws ?? 0}</span>
-              <span class="text-xs font-bold" style="width:3.5rem;text-align:right">${c.fighter.overallRating ?? '?'} OVR</span>
+              <span class="text-xs font-bold" style="width:5rem;text-align:right" title="Pontuação: ${Number(c.score || 0).toFixed(1)}. Base: OVR + cartel recente + qualidade das vitórias + forma.">${Number(c.score || 0).toFixed(1)} pts</span>
             </div>
+            ${c.breakdown ? `<div class="text-xs text-muted" style="padding:0 0.75rem 0.5rem 3.1rem">Critérios: OVR ${Math.round(c.breakdown.overall)} · cartel ${c.breakdown.record >= 0 ? '+' : ''}${c.breakdown.record} · forma ${c.breakdown.form >= 0 ? '+' : ''}${c.breakdown.form} · vitórias qualificadas ${c.breakdown.resume >= 0 ? '+' : ''}${c.breakdown.resume.toFixed(1)}</div>` : ''}
           `).join('')}
         </div>
       </div>

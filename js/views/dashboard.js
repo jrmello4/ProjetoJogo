@@ -279,6 +279,9 @@ export class DashboardView {
 
   static render(data, weekLabel) {
     const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, rivalryPrompt, narrativePrompt, weighInPrompt, pendingRehab, readiness, now, endCareerPrompt, onboarding, podcastEpisode, yearReview, crowdSnapshot, mediaCompare } = data;
+    // A decisão prioritária vive no overlay. Mantê-la também no dashboard
+    // criava duas versões clicáveis do mesmo evento.
+    const hasPriorityDecision = Boolean(endCareerPrompt || weighInPrompt || narrativePrompt || socialPrompt || rivalryPrompt);
 
     const tierBadge = (tier) => `<span class="badge ${tierBadgeCls(tier)}">${TIER_LABELS[tier]}</span>`;
 
@@ -337,7 +340,7 @@ export class DashboardView {
 
     // ===== Pesagem — a decisão que fecha a preparação =====
     let weighInHtml = '';
-    if (weighInPrompt) {
+    if (weighInPrompt && !hasPriorityDecision) {
       weighInHtml = `
         ${pendingOffers.length === 0 ? '<div class="section-label" data-reveal>Decisões Pendentes</div>' : ''}
         <div class="card mb-4" data-reveal style="border-top-color:var(--gold)">
@@ -362,7 +365,7 @@ export class DashboardView {
 
     // ===== Redes sociais em semana livre (§D.2) =====
     let socialHtml = '';
-    if (socialPrompt) {
+    if (socialPrompt && !hasPriorityDecision) {
       socialHtml = `
         ${pendingOffers.length === 0 ? '<div class="section-label" data-reveal>Decisões Pendentes</div>' : ''}
         <div class="card mb-4" data-reveal style="border-top-color:var(--gold)">
@@ -384,7 +387,7 @@ export class DashboardView {
 
     // ===== Rivalidade — prompt semanal =====
     let rivalryHtml = '';
-    if (rivalryPrompt) {
+    if (rivalryPrompt && !hasPriorityDecision) {
       rivalryHtml = `
         ${pendingOffers.length === 0 && !socialPrompt ? '<div class="section-label" data-reveal>Decisões Pendentes</div>' : ''}
         <div class="card mb-4" data-reveal style="border-top-color:var(--danger)">
@@ -402,7 +405,7 @@ export class DashboardView {
 
     // ===== Evento narrativo (Fase 1) =====
     let narrativeHtml = '';
-    if (narrativePrompt) {
+    if (narrativePrompt && !hasPriorityDecision) {
       narrativeHtml = `
         ${pendingOffers.length === 0 && !socialPrompt && !rivalryPrompt ? '<div class="section-label" data-reveal>Decisões Pendentes</div>' : ''}
         <div class="card mb-4" data-reveal style="border-top-color:var(--gold)">
@@ -421,7 +424,7 @@ export class DashboardView {
     }
 
     // ===== P5.3: Fim de carreira — Último Capítulo =====
-    const endCareerHtml = endCareerPrompt ? `
+    const endCareerHtml = endCareerPrompt && !hasPriorityDecision ? `
       <div class="section-label" data-reveal>🕊️ Último Capítulo</div>
       <div class="card mb-4" data-reveal style="border-top-color:var(--gold);border-width:2px">
         <div class="card-header">

@@ -12,7 +12,7 @@ function rivalryTypeInfo(type) {
 }
 
 export class RivalriesView {
-  static _renderNewsClip(rivalry, nameA, nameB, { archived = false } = {}) {
+  static _renderNewsClip(rivalry, nameA, nameB, { archived = false, fighterA = null, fighterB = null } = {}) {
     const typeInfo = rivalryTypeInfo(rivalry.type);
     const intensity = Math.max(0, Math.min(10, Number(rivalry.intensity) || 0));
     const headline = archived
@@ -27,6 +27,11 @@ export class RivalriesView {
       ? arc.map(item => `<p class="news-para">${e(item.description || item.type || '')}</p>`).join('')
       : '<p class="news-para news-para--muted">Os bastidores ainda estão quietos. Uma luta pode mudar isso.</p>';
 
+    const h2h = fighterA && fighterB
+      ? [...(fighterA.fights || []), ...(fighterB.fights || [])].filter(f => f.opponentId === fighterA.id || f.opponentId === fighterB.id)
+      : [];
+    const winsA = (fighterA?.fights || []).filter(f => f.opponentId === fighterB?.id && f.won === true).length;
+
     return `
       <article class="news-clip ${archived ? 'rivalry-dossier--archived' : ''}" data-reveal>
         <div class="news-masthead">
@@ -36,6 +41,11 @@ export class RivalriesView {
         <h3 class="news-headline">${e(headline)}</h3>
         <div class="news-byline">Coluna de bastidores · ${(rivalry.history || []).length} capítulo${(rivalry.history || []).length === 1 ? '' : 's'}</div>
         <div class="news-body">${body}</div>
+        <div class="rivalry-meta" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.75rem;font-size:0.75rem;color:var(--text-muted)">
+          <span>Capítulos: ${(rivalry.history || []).length}</span>
+          <span>Último calor: ${rivalry.lastHeatAbsWeek ?? '—'}</span>
+          ${h2h.length ? `<span>H2H registrado: ${winsA} vitória${winsA === 1 ? '' : 's'} de ${e(nameA)}</span>` : '<span>H2H: ainda sem revanche</span>'}
+        </div>
         <div class="news-meter" aria-hidden="true"><div class="news-meter-fill" style="width:${intensity * 10}%"></div></div>
       </article>
     `;
@@ -50,7 +60,7 @@ export class RivalriesView {
       rivalry,
       getFighterName(rivalry.fighterAId),
       getFighterName(rivalry.fighterBId),
-      options,
+      { ...options, fighterA: fighters.find(f => f.id === rivalry.fighterAId), fighterB: fighters.find(f => f.id === rivalry.fighterBId) },
     );
     const activeHtml = rivalries.length
       ? `<div class="grid grid-cols-2 gap-4">${rivalries.map(rivalry => clip(rivalry)).join('')}</div>`

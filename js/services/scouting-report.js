@@ -58,6 +58,7 @@ export function deriveScoutingReads(dossier) {
 
   return {
     level,
+    visibility: level >= 3 ? 'revealed' : level > 0 ? 'partial' : 'unknown',
     coveragePct: COVERAGE_PCT[level] ?? 0,
     confidence: CONFIDENCE[level] ?? '—',
     threats,

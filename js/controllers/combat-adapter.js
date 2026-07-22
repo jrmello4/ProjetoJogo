@@ -23,6 +23,7 @@ export class CombatAdapter {
     this.container = null;
     this.metaProgressionService = null;
     this.interactive = true;
+    this.isResolving = false;
   }
 
   setContainer(container) {
@@ -81,6 +82,8 @@ export class CombatAdapter {
 
     const s = this.engine._initState(fighterA, fighterB, fiveRounds, loadoutA, loadoutB);
     const state = s;
+    state.isResolving = false;
+    state.roundDetails = {};
     // _initState() only builds and returns the state object — it does not
     // assign it to this.engine.state. CombatEngine's own playCard/moveManual/
     // _computeDecision/_buildResult all read/mutate `this.state` internally
@@ -94,6 +97,7 @@ export class CombatAdapter {
         onCardPlay: (cardId) => this._onPlayerCardSelected(cardId),
         onMove: (pos) => this._onPlayerMove(pos),
         onPass: () => this._onPlayerPass(),
+        isResolving: () => this.isResolving,
       });
     }
 
@@ -249,8 +253,12 @@ export class CombatAdapter {
             this._flashStaminaHit(turnResult);
             await this._delay(400);
           }
+          this.isResolving = false;
+          state.isResolving = false;
           this.view.update(this.container, state);
         }
+
+        this._recordRoundAction(state, r, turnResult, playerAction, aiCard, moveSide, moveTo, takedownStuffed);
 
         if (finish) {
           state.ended = true;
@@ -265,6 +273,7 @@ export class CombatAdapter {
       if (!state.ended && roundTurns.length > 0) {
         const roundScore = CombatResolver.scoreRound(roundTurns);
         state.roundScores.push(roundScore);
+        state.roundDetails[r] = this._buildRoundDetails(state, r, roundScore);
         roundTurns.length = 0; // reset for next round
       }
 
@@ -377,13 +386,17 @@ export class CombatAdapter {
   // this on the fast-forward path (use _selectAiSideAction instead).
   _waitForPlayerAction(state) {
     return new Promise(resolve => {
+      this.isResolving = false;
+      state.isResolving = false;
       this._pendingAction = resolve;
       if (this.container) this.view.update(this.container, state);
     });
   }
 
   _onPlayerCardSelected(cardId) {
-    if (this._pendingAction) {
+    if (this._pendingAction && !this.isResolving) {
+      this.isResolving = true;
+      this.engine.state.isResolving = true;
       const resolve = this._pendingAction;
       this._pendingAction = null;
       resolve({ type: 'card', cardId });
@@ -391,7 +404,9 @@ export class CombatAdapter {
   }
 
   _onPlayerMove(position) {
-    if (this._pendingAction) {
+    if (this._pendingAction && !this.isResolving) {
+      this.isResolving = true;
+      this.engine.state.isResolving = true;
       const resolve = this._pendingAction;
       this._pendingAction = null;
       resolve({ type: 'move', position });
@@ -399,7 +414,9 @@ export class CombatAdapter {
   }
 
   _onPlayerPass() {
-    if (this._pendingAction) {
+    if (this._pendingAction && !this.isResolving) {
+      this.isResolving = true;
+      this.engine.state.isResolving = true;
       const resolve = this._pendingAction;
       this._pendingAction = null;
       resolve({ type: 'pass' });
@@ -653,6 +670,45 @@ export class CombatAdapter {
       header.classList.add('combat-header-shake');
       setTimeout(() => header.classList.remove('combat-header-shake'), 400);
     }
+  }
+
+  _recordRoundAction(state, round, turnResult, playerAction, aiCard, moveSide, moveTo, takedownStuffed) {
+    const details = (state.roundActionLog ||= {});
+    const actions = (details[round] ||= []);
+    const cardA = turnResult?.cardA || (playerAction?.type === 'card' ? ACTIVE_CARDS[playerAction.cardId] : null);
+    const cardB = turnResult?.cardB || aiCard;
+    if (cardA) actions.push({
+      fighterId: state.fighterA.ref.id,
+      detail: `Você usou ${cardA.name}${turnResult?.damageA ? ` e causou ${turnResult.damageA} de dano` : ''}.`,
+      type: cardA.type === 'takedown' ? 'takedown' : cardA.type === 'submission' ? 'submission' : 'strike',
+    });
+    if (cardB) actions.push({
+      fighterId: state.fighterB.ref.id,
+      detail: `${state.fighterB.ref.name} usou ${cardB.name}${turnResult?.damageB ? ` e causou ${turnResult.damageB} de dano` : ''}.`,
+      type: cardB.type === 'takedown' ? 'takedown' : cardB.type === 'submission' ? 'submission' : 'strike',
+    });
+    if (!cardA && !cardB && moveSide && moveTo) {
+      const name = moveSide === 'A' ? 'Você' : state.fighterB.ref.name;
+      actions.push({ fighterId: moveSide === 'A' ? state.fighterA.ref.id : state.fighterB.ref.id, detail: `${name} mudou para ${moveTo}.`, type: 'clinch' });
+    }
+    if (takedownStuffed) actions.push({ fighterId: state.fighterA.ref.id, detail: 'A queda foi defendida.', type: 'takedown' });
+  }
+
+  _buildRoundDetails(state, round, score) {
+    const roundLog = state.roundActionLog?.[round] || [];
+    const moments = roundLog.filter(item => ['takedown', 'submission'].includes(item.type)).map(item => ({
+      actorName: item.fighterId === state.fighterA.ref.id ? 'Você' : state.fighterB.ref.name,
+      targetName: item.fighterId === state.fighterA.ref.id ? state.fighterB.ref.name : 'Você',
+      type: item.type,
+      success: true,
+    }));
+    return {
+      scoreA: score.scoreA,
+      scoreB: score.scoreB,
+      finished: false,
+      roundLog,
+      moments,
+    };
   }
 
   _delay(ms) {

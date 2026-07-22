@@ -25,6 +25,7 @@ export function careerLogEntryLabel(entry) {
     case 'manager_switch': return { icon: '🤝', text: 'Trocou de empresário' };
     case 'provocation': return { icon: '🗣️', text: d.text || 'Provocação pública' };
     case 'viral': return { icon: '📱', text: d.text || 'Post viral' };
+    case 'narrative_choice': return { icon: '📰', text: d.choice ? `Decisão: ${d.choice}` : 'Decisão de carreira' };
     case 'rematch': return { icon: '🔁', text: `Revanche${d.opponentName ? ` vs ${d.opponentName}` : ''}` };
     case 'year_review': return { icon: '📅', text: `Retrospectiva do ano ${d.yearNumber || ''}`.trim() };
     default: return { icon: '•', text: String((entry && entry.type) || 'Momento').replace(/_/g, ' ') };

@@ -91,7 +91,8 @@ export class NotificationsView {
 
       <div class="card">
         ${filtered.length === 0 ? '<div class="text-muted text-sm p-3">Nenhuma notificação nesta categoria.</div>' : ''}
-        ${filtered.slice(0, NotificationsView.MAX_RENDERED).map(n => `
+        ${filtered.slice(0, NotificationsView.MAX_RENDERED).map((n, index, list) => `
+          ${index === 0 || (n.atAbsWeek != null && n.atAbsWeek !== list[index - 1]?.atAbsWeek) ? `<div class="notif-group-label" style="padding:0.75rem 0 0.35rem;color:var(--text-muted);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em">${n.atAbsWeek != null ? `Semana ${n.atAbsWeek}` : formatDateShort(n.timestamp)}</div>` : ''}
           <div class="notif-item ${n.read ? 'notif-read' : 'notif-unread'} ${n.type === 'hall-of-fame' ? 'nav-link' : ''}" style="padding:0.75rem 0;border-bottom:1px solid var(--border)" ${n.type === 'hall-of-fame' ? 'data-view="retirement"' : ''}>
             <div class="flex items-start justify-between">
               <div class="flex items-start gap-2" style="flex:1">

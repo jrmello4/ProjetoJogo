@@ -1755,6 +1755,12 @@ export class GameController {
         absWeek: booking.eventAbsWeek,
         isTitleFight: !!booking.isTitleFight,
       } : null,
+      medicalStatus: fighter.availableFromAbsWeek > now ? {
+        availableFromAbsWeek: fighter.availableFromAbsWeek,
+        weeksRemaining: fighter.availableFromAbsWeek - now,
+        diagnosis: fighter.injury?.description || 'Suspensão médica preventiva após a luta',
+        stage: fighter.injury?.stage || 'suspension',
+      } : null,
     };
   }
 

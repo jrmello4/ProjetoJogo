@@ -4,7 +4,7 @@ export function renderCalendar(calendarData) {
     return `<div class="card"><div class="card-body"><p class="text-center text-muted">Nenhum dado disponível.</p></div></div>`;
   }
 
-  const { entries, upcomingFight } = calendarData;
+  const { entries, upcomingFight, medicalStatus } = calendarData;
 
   const entriesHtml = entries.map(entry => {
     const classes = [
@@ -19,7 +19,7 @@ export function renderCalendar(calendarData) {
       <div class="${classes}">
         <div class="calendar-entry-week">${e(entry.label)}</div>
         <div class="calendar-entry-icon">${entry.icon || ''}</div>
-        <div class="calendar-entry-detail">${entry.details ? e(entry.details) : '&nbsp;'}</div>
+      <div class="calendar-entry-detail">${entry.details ? e(entry.details) : '&nbsp;'}</div>
       </div>`;
   }).join('');
 
@@ -42,6 +42,14 @@ export function renderCalendar(calendarData) {
         </div>
       </div>
     `}
+    ${medicalStatus ? `
+      <div class="card" style="border-left:4px solid var(--warning);margin-bottom:1.5rem">
+        <div class="card-body">
+          <strong>⏳ Retorno médico em ${medicalStatus.weeksRemaining} semana${medicalStatus.weeksRemaining === 1 ? '' : 's'}</strong>
+          <div class="text-sm text-muted mt-1">${e(medicalStatus.diagnosis)}</div>
+          <div class="text-xs text-muted mt-1">Fisioterapia e recuperação reduzem o tempo restante quando disponíveis.</div>
+        </div>
+      </div>` : ''}
     <div class="calendar-legend" style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;font-size:0.85rem">
       <span>💪 Treino</span>
       <span>🔥 Camp</span>

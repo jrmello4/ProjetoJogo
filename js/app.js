@@ -43,6 +43,7 @@ import { SettingsView } from './views/settings.js';
 import { TutorialCoach } from './services/tutorial-coach.js';
 import { FightFeedbackService } from './services/fight-feedback-service.js';
 import { motion } from './motion/motion-engine.js';
+import { SidebarState } from './runtimes/SidebarState.js';
 import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, ARCHETYPES, ORIGINS, absWeekToLabel, FIGHTING_STYLES, PERKS, CHALLENGE_MODES } from './config/game-config.js';
 import { formatCurrency, getAdjacentWeightClasses, sanitizePlayerName, e } from './utils/helpers.js';
 import { validateCharCreateStep } from './utils/char-create-validate.js';
@@ -147,6 +148,14 @@ class App {
     let playerFighter;
     try {
       playerFighter = await this.game.init();
+      const dashboardData = await this.game.getDashboard();
+      const sidebarState = SidebarState.compute(
+        dashboardData.fighter,
+        dashboardData.bookings,
+        dashboardData.pendingOffers
+      );
+      LayoutView.renderSidebar(sidebarState.sections);
+      window.__currentView = 'dashboard';
     } catch (err) {
       console.error('Failed to init game:', err);
       document.getElementById('mainContent').innerHTML = `
@@ -168,7 +177,12 @@ class App {
     this._initThreeBackground();
 
     window.addEventListener('navigate', (e) => {
-      this.navigateTo(e.detail.view);
+      const view = e.detail?.view;
+      if (!view) return;
+      this.navigateTo(view);
+      document.querySelectorAll('.nav-link[data-view]').forEach(l => {
+        l.classList.toggle('active', l.dataset.view === view);
+      });
     });
 
     document.addEventListener('click', (e) => {
@@ -759,6 +773,26 @@ class App {
           break;
         case 'press-conference':
           await this.renderPressConference();
+          break;
+        case 'overview':
+          // Visao Geral — mostra dashboard resumido focado em carreira
+          await this.renderDashboard();
+          break;
+        case 'management':
+          // Gestao — financas + ofertas + contrato
+          await this.renderFinance();
+          break;
+        case 'opponent':
+          // Estudo da Luta — scouting do oponente (redireciona para ofertas com foco na luta atual)
+          await this.renderOffers();
+          break;
+        case 'timeline':
+          // Linha do Tempo — podcast + biografia (redireciona para hall da fama / dashboard)
+          await this.renderDashboard();
+          break;
+        case 'fight':
+          // Combate — a luta em si
+          await this.renderDashboard(); // fallback — luta e iniciada pelo fluxo semanal
           break;
         default:
           await this.renderDashboard();

@@ -953,7 +953,8 @@ class App {
     // corrida de fechamento com data.closing.
     const pendingDecision = DashboardView.getDecisionOverlayHtml(data);
     if (pendingDecision) {
-      LayoutView.showDecisionOverlay(pendingDecision.html);
+      const overlay = LayoutView.showDecisionOverlay(pendingDecision.html);
+      this._bindDecisionOverlayActions(overlay, data.fighter);
     }
 
     // Fase 9: collapsible sections
@@ -982,6 +983,80 @@ class App {
 
     this._bindFighterClicks();
     this._bindEventClicks();
+  }
+
+  // Overlays de decisão entram no document.body depois dos handlers do
+  // dashboard. Cada botão precisa receber listener na hora em que nasce.
+  _bindDecisionOverlayActions(overlay, fighter) {
+    if (!overlay) return;
+
+    const bind = (selector, handler) => {
+      overlay.querySelectorAll(selector).forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (btn.dataset.pending === '1') return;
+          btn.dataset.pending = '1';
+          btn.disabled = true;
+          try {
+            await handler(btn);
+          } catch (error) {
+            console.error('Falha ao resolver decisão do overlay:', error);
+            await this.notificationService.add(
+              'warning',
+              'Decisão não concluída',
+              'Não foi possível registrar sua escolha. Tente novamente.'
+            );
+            delete btn.dataset.pending;
+            btn.disabled = false;
+          }
+        });
+      });
+    };
+
+    bind('[data-social-choice]', async btn => {
+      const result = await this.game.resolveSocialPrompt(btn.dataset.socialChoice);
+      if (!result.ok) {
+        await this.notificationService.add('warning', 'Redes Sociais', result.reason);
+      }
+      await this.renderDashboard();
+    });
+
+    bind('[data-weigh-in-choice]', async btn => {
+      const result = await this.game.resolveWeighIn(btn.dataset.weighInChoice);
+      if (!result.ok) {
+        await this.notificationService.add('warning', 'Pesagem', result.reason);
+      }
+      await this.renderDashboard();
+    });
+
+    bind('.rivalry-choice', async btn => {
+      const result = await this.game.resolveRivalryInteraction(btn.dataset.choice);
+      if (!result.ok) {
+        await this.notificationService.add('warning', 'Rivalidade', result.reason);
+      }
+      await this.renderDashboard();
+    });
+
+    bind('.narrative-choice', async btn => {
+      const result = await this.game.resolveNarrativeChoice(btn.dataset.narrativeChoice);
+      if (result.ok) {
+        await this.notificationService.add('info', 'Decisão', result.choice);
+      } else {
+        await this.notificationService.add('warning', 'Evento Narrativo', result.reason);
+      }
+      await this.renderDashboard();
+    });
+
+    bind('.end-career-choice', async btn => {
+      if (!fighter?.id) throw new Error('Lutador não encontrado.');
+      const result = await this.game.resolveEndCareer(fighter.id, btn.dataset.endCareer);
+      if (result.ok) {
+        const choiceLabel = btn.querySelector('.font-bold')?.textContent || result.choice;
+        await this.notificationService.add('info', 'Último Capítulo', `Você escolheu: ${choiceLabel}`);
+      } else {
+        await this.notificationService.add('warning', 'Fim de Carreira', result.reason || 'Erro ao processar escolha.');
+      }
+      await this.renderDashboard();
+    });
   }
 
   _showCinematicMoment(moment) {

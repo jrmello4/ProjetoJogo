@@ -24,9 +24,6 @@ import { TrainingCamp } from './controllers/training-camp.js';
 import { OnboardingService } from './services/onboarding-service.js';
 import { PressConference } from './controllers/press-conference.js';
 import { WeeklyTrainingController } from './controllers/weekly-training.js';
-import { CombatAdapter } from './controllers/combat-adapter.js';
-import { MetaProgressionService } from './services/meta-progression-service.js';
-import * as PerksScreenView from './views/perks-screen.js';
 import { RivalryService } from './services/rivalry-service.js';
 import { SeasonService } from './services/season-service.js';
 import { NotificationService } from './services/notification-service.js';
@@ -40,6 +37,8 @@ import { PortraitService } from './services/portrait-service.js';
 import { VisualIdentityService } from './services/visual-identity-service.js';
 import { AppearanceEditor } from './views/appearance-editor.js';
 import { SettingsView } from './views/settings.js';
+import { LegalView } from './views/legal.js';
+import { PwaService } from './services/pwa-service.js';
 import { TutorialCoach } from './services/tutorial-coach.js';
 import { FightFeedbackService } from './services/fight-feedback-service.js';
 import { CAREER_EVENT } from './services/career-events.js';
@@ -47,6 +46,7 @@ import { GameFeedback } from './services/game-feedback.js';
 import { motion } from './motion/motion-engine.js';
 import { SidebarState } from './runtimes/SidebarState.js';
 import { HudState } from './runtimes/HudState.js';
+import { gsap } from 'gsap';
 import { DIFFICULTIES, MILESTONE_LABELS, SIMULATE_PERIOD_PRESETS, TRAINING_FOCUS_META, ARCHETYPES, ORIGINS, absWeekToLabel, FIGHTING_STYLES, PERKS, CHALLENGE_MODES } from './config/game-config.js';
 import { formatCurrency, getAdjacentWeightClasses, sanitizePlayerName, e } from './utils/helpers.js';
 import { validateCharCreateStep } from './utils/char-create-validate.js';
@@ -55,10 +55,6 @@ import { CAMP_CONFIG, HYPE_PURSE_RATIO, absWeek } from './config/game-config.js'
 // Combate por cartas é o motor oficial das lutas do jogador (WorldService
 // + CombatAdapter). ?cardCombat=true permanece como flag legada de dev e
 // expõe app.runCardFight no console se quiser testar fora do fluxo semanal.
-if (new URLSearchParams(window.location.search).has('cardCombat')) {
-  window.__useCardCombat = true;
-}
-
 // Depois de publicar no itch.io, cole a URL da página do jogo aqui pra ela
 // aparecer nos textos de compartilhamento (resultado de luta, Hall da Fama).
 // Vazio = compartilha só o texto, sem link.
@@ -143,9 +139,11 @@ class App {
     this.threeBackground = null;
     this.shownMoments = new Set();
     this._sidebarEventUnsubscribers = [];
+    this._transientViewCleanup = null;
   }
 
   async init() {
+    PwaService.register();
     try { motion.init(); } catch(e) { console.warn('Motion init failed:', e); }
     AudioService.init();
     LayoutView.initNavigation();
@@ -182,6 +180,10 @@ class App {
       this.navigateTo(view);
     });
     window.addEventListener('advance-week', () => this.advanceWeek());
+    window.addEventListener('open-player-profile', async () => {
+      const fighter = await this.game.getPlayerFighter().catch(() => null);
+      if (fighter) await this.showFighterProfile(fighter.id);
+    });
 
     document.addEventListener('click', (e) => {
       const navEl = e.target.closest('[data-nav]');
@@ -771,11 +773,12 @@ class App {
     if (['events', 'rankings', 'calendar'].includes(view)) return 'world';
     if (['management', 'finance', 'academy', 'offers'].includes(view)) return 'management';
     if (['rivalries', 'timeline', 'hall-of-fame', 'retirement'].includes(view)) return 'legacy';
-    if (['settings', 'notifications'].includes(view)) return 'utility';
+    if (['settings', 'legal', 'notifications'].includes(view)) return 'utility';
     return 'career';
   }
 
   async navigateTo(view) {
+    this._disposeTransientViewWork();
     this.previousView = this.currentView;
     this.currentView = view;
     this._setActiveNavView(view);
@@ -815,6 +818,9 @@ class App {
           break;
         case 'settings':
           await this.renderSettings();
+          break;
+        case 'legal':
+          await this.renderLegal();
           break;
         case 'notifications':
           await this.renderNotifications();
@@ -1029,11 +1035,6 @@ class App {
       });
     });
 
-    // Fase 1: Weekly training micro-decision modal
-    if (data.weeklyTrainingPrompt?.active) {
-      this._showWeeklyTrainingModal(data.fighter);
-    }
-
     // Fase 9: overlay de decisão prioritária após dashboard renderizar
     // Os handlers inline (social, rivalry, narrative, etc.) já chamam
     // renderDashboard que limpa o overlay — handler extra causaria
@@ -1041,7 +1042,17 @@ class App {
     const pendingDecision = DashboardView.getDecisionOverlayHtml(data);
     if (pendingDecision) {
       const overlay = LayoutView.showDecisionOverlay(pendingDecision.html);
-      this._bindDecisionOverlayActions(overlay, data.fighter);
+      if (overlay) {
+        if (['rivalry', 'narrative'].includes(pendingDecision.type) && pendingDecision.eventId) {
+          await this.game.markDecisionViewed(pendingDecision.type, pendingDecision.eventId)
+            .catch(error => console.warn('Falha ao registrar visualização da rivalidade:', error));
+        }
+        this._bindDecisionOverlayActions(overlay, data.fighter);
+      }
+    } else if (data.weeklyTrainingPrompt?.active) {
+      // Treino é uma decisão secundária: nunca compete com pesagem,
+      // narrativa, redes, rivalidade ou fim de carreira.
+      this._showWeeklyTrainingModal(data.fighter);
     }
 
     // Fase 9: collapsible sections
@@ -1049,8 +1060,15 @@ class App {
 
     // Fase 12: momento cinematográfico (milestones) — só mostra 1x
     const moment = detectCinematicMoment(data);
-    if (moment && !this.shownMoments.has(moment.id)) {
-      this.shownMoments.add(moment.id);
+    const hasBlockingDecision = Boolean(pendingDecision || data.weeklyTrainingPrompt?.active);
+    const momentKey = moment ? `${data.fighter?.id}:${moment.id}` : null;
+    const momentWasShown = momentKey
+      ? this.shownMoments.has(momentKey)
+        || await this.game.careerLogService.hasCareerMomentShown(data.fighter.id, moment.id)
+      : false;
+    if (moment && !hasBlockingDecision && !momentWasShown) {
+      this.shownMoments.add(momentKey);
+      await this.game.careerLogService.markCareerMomentShown(data.fighter.id, moment.id, data.now);
       setTimeout(() => this._showCinematicMoment(moment), 400);
     }
 
@@ -1155,12 +1173,12 @@ class App {
     const overlay = document.createElement('div');
     overlay.className = 'cinematic-moment-overlay';
     overlay.innerHTML = `
-      <div class="cinematic-moment-card">
+      <div class="cinematic-moment-card" role="dialog" aria-modal="true" aria-labelledby="momentTitle" tabindex="-1">
         <span class="moment-icon">${moment.icon}</span>
-        <div class="moment-title">${moment.title}</div>
+        <div class="moment-title" id="momentTitle">${moment.title}</div>
         <div class="moment-subtitle">${moment.subtitle}</div>
         <div class="moment-description">${moment.desc}</div>
-        <button class="moment-continue">Continuar</button>
+        <button class="moment-continue" type="button">Continuar</button>
       </div>`;
     document.body.appendChild(overlay);
 
@@ -1180,6 +1198,10 @@ class App {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) close();
     });
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') close();
+    });
+    overlay.querySelector('.moment-continue')?.focus();
   }
 
   initThreeArena(fighter = null) {
@@ -1326,7 +1348,7 @@ class App {
             };
           }
           this._playLiveHub(featured.results, featured.playerFighterIds, fA, fB);
-          document.getElementById('hubBackBtn')?.addEventListener('click', () => this.renderDashboard());
+          document.getElementById('hubBackBtn')?.addEventListener('click', () => this.navigateTo('dashboard'));
           document.getElementById('shareFightBtn')?.addEventListener('click', () => {
             const fText = `${playerResult._won ? '🏆' : '😔'} ${e(fA.name)} ${playerResult._won ? 'venceu' : 'perdeu'} por ${e(playerResult.method)} no R${playerResult.round}!`;
             const shareText = `${fText}\n💰 Bolsa: $${(playerResult._purse || 0).toLocaleString()} | Líquido: $${(playerResult._netPurse || 0).toLocaleString()}\n📊 Recorde: ${fA.record.wins}-${fA.record.losses}-${fA.record.draws}${SHARE_URL ? `\n\nJogue MMA Manager: ${SHARE_URL}` : ''}`;
@@ -1345,7 +1367,7 @@ class App {
       await LayoutView.render(html);
       this._playLiveBroadcast();
       document.querySelectorAll('.event-back').forEach(b => {
-        b.addEventListener('click', () => this.renderDashboard());
+        b.addEventListener('click', () => this.navigateTo('dashboard'));
       });
       return { summary, suppressFeedback: true };
     }
@@ -1881,6 +1903,7 @@ class App {
 
   // Fase 2: Live Fight Hub — revelação temporizada round a round
   _playLiveHub(allResults, playerFighterIds, fighterA = null, fighterB = null) {
+    this._disposeTransientViewWork();
     const statusText = document.getElementById('liveStatusText');
     const statusCard = document.getElementById('liveHubStatus');
     const rounds = document.querySelectorAll('.live-round');
@@ -1891,10 +1914,11 @@ class App {
     let roundIdx = 0;
     let beatIdx = 0;
     let cancelled = false;
+    let finished = false;
+    const scheduledCalls = new Set();
     // O CDN de animação é um aprimoramento, nunca pré-requisito para o
     // resultado da luta. A transmissão ainda precisa terminar se ele cair.
-    const gsap = window.gsap;
-    let tl = gsap?.timeline() || null;
+    let tl = gsap.timeline();
     const monetizationPromise = this.monetizationService.getState();
     const playerResult = (allResults || []).find(result =>
       playerFighterIds?.has?.(result.fighterAId) || playerFighterIds?.has?.(result.fighterBId)
@@ -1906,6 +1930,28 @@ class App {
 
     const faceOff = document.getElementById('hubFaceOff');
     let threeFaceOff = null;
+    const schedule = (delay, callback) => {
+      let call = null;
+      call = gsap.delayedCall(delay, () => {
+        scheduledCalls.delete(call);
+        callback();
+      });
+      scheduledCalls.add(call);
+      return call;
+    };
+    const stopScheduledWork = () => {
+      scheduledCalls.forEach(call => call.kill());
+      scheduledCalls.clear();
+    };
+    const cleanup = () => {
+      cancelled = true;
+      stopScheduledWork();
+      tl?.kill();
+      skipBtn?.removeEventListener('click', finish);
+      threeFaceOff?.dispose?.();
+      threeFaceOff = null;
+    };
+    this._transientViewCleanup = cleanup;
     try {
       import('./three-faceoff.js').then(mod => {
         if (!cancelled && faceOff) {
@@ -1921,9 +1967,12 @@ class App {
     };
 
     const finish = async () => {
+      if (finished) return;
+      finished = true;
       cancelled = true;
+      stopScheduledWork();
       tl?.kill();
-      tl = gsap?.timeline() || null;
+      tl = gsap.timeline();
 
       rounds.forEach(r => r.style.display = 'block');
       rounds.forEach(r => {
@@ -1984,7 +2033,7 @@ class App {
       const beats = round.querySelectorAll('.live-beat');
 
       if (!beats.length || beatIdx >= beats.length) {
-        gsap.delayedCall(1, () => {
+        schedule(1, () => {
           if (cancelled) return;
           roundIdx++;
           beatIdx = 0;
@@ -1992,7 +2041,7 @@ class App {
           rounds[roundIdx].style.display = 'block';
           applyArenaFeedback();
           if (statusText) statusText.textContent = `Round ${roundIdx + 1} de ${rounds.length}`;
-          gsap.delayedCall(0.6, showBeat);
+          schedule(0.6, showBeat);
         });
         return;
       }
@@ -2027,7 +2076,7 @@ class App {
 
       beatIdx++;
       const nextDelay = beatType === 'finish' ? 1.6 : beatType === 'knockdown' ? 0.9 : 0.45;
-      gsap.delayedCall(nextDelay, showBeat);
+      schedule(nextDelay, showBeat);
     };
 
     if (rounds.length === 0 || cancelled) { finish(); return; }
@@ -2044,7 +2093,7 @@ class App {
       .to(title, { opacity: 1, y: 0, duration: 0.4, ease: 'back.out(1.2)' }, '-=0.1')
       .to(subtitle, { opacity: 1, duration: 0.3 }, '-=0.15');
 
-    gsap.delayedCall(0.8, () => {
+    schedule(0.8, () => {
       if (!cancelled) {
         AudioService.play('bell');
         rounds[0].style.display = 'block';
@@ -2055,7 +2104,7 @@ class App {
 
     skipBtn?.addEventListener('click', finish);
 
-    gsap.delayedCall(1.2, showBeat);
+    schedule(1.2, showBeat);
   }
 
   // Cosmético "Confete na Vitória" (COSMETIC_ITEMS, game-config.js) — puramente
@@ -2063,8 +2112,6 @@ class App {
   // no fluxo do documento, pra nunca empurrar layout.
   _fireConfetti(anchorEl) {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const gsap = window.gsap;
-    if (!gsap) return;
     const rect = anchorEl.getBoundingClientRect();
     const colors = ['#f3efe9', '#c9a227', '#8e857c', '#ef5f6b'];
 
@@ -2092,15 +2139,26 @@ class App {
   }
 
   _playLiveBroadcast() {
+    this._disposeTransientViewWork();
     const status = document.getElementById('liveStatus');
     const fights = Array.from(document.querySelectorAll('#liveFights .live-fight'));
     const summary = document.getElementById('liveSummary');
     const skipBtn = document.getElementById('skipLiveBtn');
     let idx = 0;
     let timer = null;
+    let finished = false;
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      timer = null;
+      skipBtn?.removeEventListener('click', finish);
+    };
+    this._transientViewCleanup = cleanup;
 
     const finish = () => {
-      clearTimeout(timer);
+      if (finished) return;
+      finished = true;
+      cleanup();
       fights.forEach(f => f.classList.add('live-fight--shown'));
       if (summary) summary.classList.add('live-fight--shown');
       if (status) status.textContent = 'Evento encerrado';
@@ -2130,7 +2188,19 @@ class App {
     timer = setTimeout(showNext, 700);
   }
 
+  _disposeTransientViewWork() {
+    if (!this._transientViewCleanup) return;
+    const cleanup = this._transientViewCleanup;
+    this._transientViewCleanup = null;
+    cleanup();
+  }
+
   async showFighterProfile(fighterId) {
+    if (this.currentView !== 'fighter-profile') {
+      this.previousView = this.currentView;
+      this.currentView = 'fighter-profile';
+      this._setActiveNavView('');
+    }
     const fighter = await this.game.fighterCtrl.getFighter(fighterId);
     if (!fighter) return;
 
@@ -2813,6 +2883,7 @@ class App {
     });
 
     document.getElementById('settingsSaveLoad')?.addEventListener('click', () => this.handleSaveLoad());
+    document.getElementById('settingsLegal')?.addEventListener('click', () => this.navigateTo('legal'));
 
     document.getElementById('settingsExport')?.addEventListener('click', async () => {
       const json = await this.saveService.exportSave();
@@ -2900,6 +2971,11 @@ class App {
         msg.style.color = 'var(--red-ink)';
       }
     });
+  }
+
+  async renderLegal() {
+    await LayoutView.render(LegalView.render());
+    document.querySelector('[data-legal-back]')?.addEventListener('click', () => this.navigateTo('settings'));
   }
 
   async renderNotifications(category = 'all') {
@@ -3064,41 +3140,12 @@ class App {
 
   // ===== Combate por cartas — ponto de entrada standalone/dev (console).
   // O fluxo oficial da semana usa prepareCardFight → WorldService → CombatAdapter. =====
-  async runCardFight(fighterA, fighterB, promo, gamePlanKey) {
-    await LayoutView.render('<div id="fight-container" class="card-fight-host"></div>');
-    const adapter = new CombatAdapter();
-    adapter.setContainer(document.getElementById('fight-container'));
-    const fiveRounds = promo?.tier === 1;
-    return adapter.runFight(fighterA, fighterB, fiveRounds, gamePlanKey, promo?.tier ?? 3, false, true);
-  }
-
   // Standalone meta-progression perks screen — same opt-in/dev-testing
   // spirit as runCardFight above: not called from anywhere else yet, not
   // wired into renderRetirementCeremony or any other live flow (see task-10
   // brief). `service` is passed on the internal re-render after an unlock
   // so we don't re-load() from IndexedDB and race unlockPerk's
   // fire-and-forget save().
-  async renderPerksScreen(service = null) {
-    if (!service) {
-      service = new MetaProgressionService(this.game.db);
-      await service.load();
-    }
-
-    const html = PerksScreenView.render({
-      legacyPoints: service.legacyPoints,
-      unlockedPerks: service.unlockedPerks,
-    });
-    await LayoutView.render(html);
-
-    document.querySelectorAll('.perk-unlock-btn').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const perkId = btn.dataset.perkId;
-        const cost = parseInt(btn.dataset.perkCost, 10);
-        service.unlockPerk(perkId, cost);
-        await this.renderPerksScreen(service);
-      });
-    });
-  }
 }
 
 const app = new App();

@@ -119,21 +119,29 @@ export class NarrativeController {
         if (!existing) {
           const poolKey = rivalWon ? 'rival_victory' : 'rival_loss';
           const template = (NARRATIVE_EVENTS[poolKey] || [])[0];
-          const filled = CareerLogService.fillEventTemplate(template, {
+          const filled = CareerLogService.fillEventTemplate({ ...template, topicKey: `${poolKey}:0` }, {
             rivalName: rival.name,
             opponentName: last.opponent || 'o adversário',
             method: last.method || 'decisão',
           });
-          if (filled) {
+          const seenTopics = await this.careerLogService.seenNarrativeTopics(fighter.id);
+          const alreadyShown = seenTopics.has(filled?.topicKey);
+          if (filled && !alreadyShown) {
             const choices = filled.choices.map((c, i) => ({ ...c, key: `n_${i}` }));
-            await this.db.put('gameState', {
+            const prompt = {
               id: 'narrative-prompt',
               prompt: filled.prompt,
+              topicKey: filled.topicKey,
+              eventId: `narrative:${fighter.id}:${filled.topicKey}:${now}`,
               choices,
               createdAbsWeek: now,
+              viewedAbsWeek: null,
+              status: 'generated',
               source: 'rival_arc',
-            });
-            await this.notifService.add('headline', '📰 Momento da Carreira', filled.prompt);
+            };
+            await this.db.put('gameState', prompt);
+            await this.careerLogService.recordNarrativeGenerated(fighter.id, prompt);
+            await this.notifService.add('headline', 'Momento da Carreira', filled.prompt);
             openedNarrative = true;
           }
         }
@@ -385,11 +393,20 @@ export class NarrativeController {
     const seasonState = await this.seasonService.getState();
     const now = absWeek(seasonState);
     if (state.expiresAbsWeek != null && state.expiresAbsWeek <= now) {
+      const expiredRivalry = state.rivalryId
+        ? await this.db.get('rivalries', state.rivalryId).catch(() => null)
+        : null;
+      await this.rivalryService.markInteractionResolved(
+        fighter.id,
+        state,
+        expiredRivalry,
+        now,
+        'expired'
+      );
       await this.db.delete('gameState', 'rivalry-prompt').catch(() => {});
       return { ok: false, reason: 'Esse momento de rivalidade já passou.' };
     }
     if (!state.choices.some(c => c.key === choice)) return { ok: false, reason: 'Escolha de rivalidade inválida.' };
-    await this.db.delete('gameState', 'rivalry-prompt').catch(() => {});
 
     const rival = await this.fighterCtrl.getFighter(state.rivalFighterId);
     const rivalryData = await this.db.get('rivalries', state.rivalryId);
@@ -461,6 +478,8 @@ export class NarrativeController {
 
     await this.db.put('rivalries', rivalry);
     await this.fighterCtrl.updateFighter(fighter);
+    await this.rivalryService.markInteractionResolved(fighter.id, state, rivalry, now, choice);
+    await this.db.delete('gameState', 'rivalry-prompt').catch(() => {});
 
     const messages = {
       provoke: `Você provocou ${displayRivalName}.${finalIntensityGain > 0 ? ' A rivalidade esquentou!' : ' O rival ignorou.'}`,
@@ -554,6 +573,12 @@ export class NarrativeController {
     }
 
     await this.fighterCtrl.updateFighter(fighter);
+    await this.careerLogService?.markNarrativeResolved(
+      fighter.id,
+      promptData,
+      absWeekNow,
+      choiceKey
+    );
     await this.db.delete('gameState', 'narrative-prompt');
 
     if (this.careerLogService) {

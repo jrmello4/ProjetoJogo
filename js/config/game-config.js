@@ -895,6 +895,7 @@ export const RIVALRY_CONFIG = {
   GRUDGE_PRESSURE_BONUS: 20, // §C.3 — pressão extra numa revanche de rivalidade grudge
   INTERACTION_WEEKLY_CHANCE: 0.30,
   INTERACTION_PROMPT_EXPIRY_WEEKS: 2,
+  INTERACTION_COOLDOWN_WEEKS: 6,
   HYPE_PER_INTENSITY: 3,      // luta de rival vende mais ingresso — mesmo bônus de bolsa do hype de coletiva
   REMATCH_MIN_INTENSITY: 6,   // só rivalidade "Intensa"+ tenta forçar a revanche no matchmaking
   REMATCH_CHANCE: 0.35,       // chance da promoção priorizar o rival como próximo adversário
@@ -1560,7 +1561,7 @@ export const ONBOARDING_STEPS = [
 //      Configurações. Ver nota de segurança em MonetizationService — é
 //      hash SHA-256, não é DRM de verdade, e não precisa ser.
 export const MONETIZATION_CONFIG = {
-  SUPPORT_URL: 'https://ko-fi.com/SEU_USUARIO_AQUI', // TODO: trocar antes de publicar
+  SUPPORT_URL: 'https://ko-fi.com/jmello03',
   // sha256("OBRIGADO2026") — troque o código enviado aos apoiadores e
   // recalcule o hash (crypto.createHash('sha256').update(code).digest('hex'))
   // sempre que quiser invalidar códigos antigos.

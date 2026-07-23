@@ -84,6 +84,13 @@ export class SettingsView {
         <p class="text-xs text-muted mt-2">O backup é um arquivo JSON com o mundo inteiro — guarde antes de experimentar decisões arriscadas.</p>
       </div>
 
+      <div class="section-label" data-reveal>Legal</div>
+      <div class="card mb-4" data-reveal>
+        <div class="card-header"><span class="card-title">Privacidade e termos</span></div>
+        <p class="text-xs text-muted mb-2">Veja quais dados ficam no seu aparelho e as regras de uso da versão offline.</p>
+        <button class="btn btn-secondary" id="settingsLegal">Abrir privacidade e termos</button>
+      </div>
+
       ${SettingsView._renderStore(monetization)}
     `;
   }

@@ -4,6 +4,7 @@ import { motion } from '../motion/motion-engine.js';
 import { PortraitService } from '../services/portrait-service.js';
 import { formatCurrency, e } from '../utils/helpers.js';
 import { PixelIcon } from './pixel-icon.js';
+import { gsap } from 'gsap';
 
 export class LayoutView {
   static _renderSeq = 0;
@@ -25,7 +26,7 @@ export class LayoutView {
         // concorrente que mate essa tween deixaria o contêiner preso em
         // opacity:0 — tela em branco com o HTML já no DOM. A entrada é
         // toda feita pelos filhos (data-reveal) via animatePageEnter.
-        window.gsap?.killTweensOf(mainContent);
+        gsap.killTweensOf(mainContent);
 
         mainContent.innerHTML = content;
         motion.scrollToTop();
@@ -40,7 +41,6 @@ export class LayoutView {
   }
 
   static _animateStats(container) {
-    const gsap = window.gsap;
     container.querySelectorAll('.stat-value').forEach((el) => {
       const text = el.textContent.trim();
 
@@ -186,16 +186,18 @@ export class LayoutView {
       if (isEditable) return;
 
       if (e.key === 'Escape') {
-        const cinematic = document.querySelector('.cinematic-overlay');
-        if (cinematic) return; // CinematicService já tem seu próprio handler de Esc
+        const cinematic = document.querySelector('.cinematic-overlay, .cinematic-moment-overlay');
+        if (cinematic) return; // Cinemáticas já têm seu próprio handler de Esc
         // Criação de personagem é hard-gate (primeiro boot + nova carreira):
         // Esc não pode fechar — senão init() já retornou e o app soft-locka.
-        const topModal = document.querySelector('.modal-overlay');
+        const openModals = [...document.querySelectorAll('.modal-overlay')];
+        const topModal = openModals[openModals.length - 1];
         if (topModal?.id === 'characterCreationModal') return;
-        const closeBtn = document.querySelector('.modal-overlay [data-close]');
+        const closeBtn = topModal?.querySelector('[data-close]');
         if (closeBtn) { closeBtn.click(); return; }
-        const modal = document.querySelector('.modal-overlay');
-        if (modal) { this.closeModal(modal); return; }
+        if (topModal) { this.closeModal(topModal); return; }
+        const decision = document.querySelector('.decision-overlay');
+        if (decision) { this.closeDecisionOverlay(decision); return; }
         if (document.getElementById('sidebar')?.classList.contains('open')) {
           this.setSidebarOpen(false);
         }
@@ -205,7 +207,7 @@ export class LayoutView {
       if (e.code === 'Space') {
         // Bloqueado com modal ou cinemática abertos — espaço não deve
         // disparar avanço de semana por baixo de uma decisão pendente.
-        if (document.querySelector('.modal-overlay, .cinematic-overlay')) return;
+        if (document.querySelector('.modal-overlay, .decision-overlay, .cinematic-overlay, .cinematic-moment-overlay')) return;
         const btn = document.querySelector('[data-week-advance], [data-hud-advance], [data-fight-day-advance]');
         if (btn && !btn.disabled && btn.offsetParent !== null) {
           e.preventDefault();
@@ -263,18 +265,24 @@ export class LayoutView {
   // qualquer coisa na página por baixo.
   static _initModalA11y() {
     const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-    let lastFocused = null;
-    let trapHandler = null;
+    const stack = [];
 
     const onOpen = (modal) => {
       if (!modal.hasAttribute('role')) modal.setAttribute('role', 'dialog');
       if (!modal.hasAttribute('aria-modal')) modal.setAttribute('aria-modal', 'true');
 
-      lastFocused = document.activeElement;
-      const focusables = [...modal.querySelectorAll(FOCUSABLE)];
-      (focusables[0] || modal).focus?.({ preventScroll: true });
+      const previous = stack[stack.length - 1];
+      if (previous) {
+        previous.modal.inert = true;
+        previous.modal.setAttribute('aria-hidden', 'true');
+      }
 
-      trapHandler = (e) => {
+      const entry = {
+        modal,
+        lastFocused: document.activeElement,
+        trapHandler: null,
+      };
+      entry.trapHandler = (e) => {
         if (e.key !== 'Tab') return;
         const current = [...modal.querySelectorAll(FOCUSABLE)].filter(el => el.offsetParent !== null);
         if (current.length === 0) return;
@@ -288,15 +296,34 @@ export class LayoutView {
           first.focus();
         }
       };
-      modal.addEventListener('keydown', trapHandler);
+      modal.addEventListener('keydown', entry.trapHandler);
+      modal.inert = false;
+      modal.removeAttribute('aria-hidden');
+      stack.push(entry);
+
+      const focusables = [...modal.querySelectorAll(FOCUSABLE)];
+      if (focusables.length === 0) modal.tabIndex = -1;
+      requestAnimationFrame(() => (focusables[0] || modal).focus?.({ preventScroll: true }));
     };
 
-    const onClose = () => {
-      trapHandler = null;
+    const onClose = (modal) => {
+      const index = stack.findIndex(entry => entry.modal === modal);
+      if (index < 0) return;
+      const [closed] = stack.splice(index, 1);
+      closed.modal.removeEventListener('keydown', closed.trapHandler);
+
+      const next = stack[stack.length - 1];
+      if (next) {
+        next.modal.inert = false;
+        next.modal.removeAttribute('aria-hidden');
+      }
+
       // O elemento que abriu o modal pode ter sido substituído por um
       // re-render entretanto — só devolve o foco se ele ainda existe no DOM.
-      if (lastFocused?.isConnected) lastFocused.focus?.({ preventScroll: true });
-      lastFocused = null;
+      const target = closed.lastFocused?.isConnected
+        ? closed.lastFocused
+        : next?.modal.querySelector(FOCUSABLE);
+      target?.focus?.({ preventScroll: true });
     };
 
     new MutationObserver((mutations) => {
@@ -305,7 +332,7 @@ export class LayoutView {
           if (node.nodeType === 1 && node.classList?.contains('modal-overlay')) onOpen(node);
         }
         for (const node of m.removedNodes) {
-          if (node.nodeType === 1 && node.classList?.contains('modal-overlay')) onClose();
+          if (node.nodeType === 1 && node.classList?.contains('modal-overlay')) onClose(node);
         }
       }
     }).observe(document.body, { childList: true });
@@ -335,9 +362,14 @@ export class LayoutView {
   static renderDrawer(title, contentHtml) {
     const titleEl = document.getElementById('drawerTitle');
     const body = document.getElementById('drawerBody');
+    const drawer = document.getElementById('drawer');
     if (titleEl) titleEl.textContent = title;
     if (body) body.innerHTML = contentHtml;
-    document.getElementById('drawer')?.classList.add('is-open');
+    if (drawer) {
+      drawer.inert = false;
+      drawer.removeAttribute('aria-hidden');
+      drawer.classList.add('is-open');
+    }
     document.getElementById('drawerBackdrop')?.classList.add('is-open');
     document.body.classList.add('drawer-open');
 
@@ -346,7 +378,12 @@ export class LayoutView {
   }
 
   static closeDrawer() {
-    document.getElementById('drawer')?.classList.remove('is-open');
+    const drawer = document.getElementById('drawer');
+    if (drawer) {
+      drawer.classList.remove('is-open');
+      drawer.setAttribute('aria-hidden', 'true');
+      drawer.inert = true;
+    }
     document.getElementById('drawerBackdrop')?.classList.remove('is-open');
     document.body.classList.remove('drawer-open');
   }
@@ -365,12 +402,14 @@ export class LayoutView {
 
   // ===== Decision overlay (Fase 9) =====
   static showDecisionOverlay(html) {
+    if (document.querySelector('.modal-overlay')) return null;
     const existing = document.querySelector('.decision-overlay');
     if (existing) existing.remove();
 
     const overlay = document.createElement('div');
     overlay.className = 'decision-overlay';
-    overlay.innerHTML = `<div class="decision-card">${html}</div>`;
+    overlay._returnFocus = document.activeElement;
+    overlay.innerHTML = `<div class="decision-card" role="dialog" aria-modal="true">${html}</div>`;
     document.body.appendChild(overlay);
 
     requestAnimationFrame(() => {
@@ -384,6 +423,12 @@ export class LayoutView {
     });
 
     const trapHandler = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        this.closeDecisionOverlay(overlay);
+        return;
+      }
       if (e.key !== 'Tab') return;
       const focusables = [...overlay.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(el => el.offsetParent !== null);
       if (focusables.length === 0) return;
@@ -404,6 +449,9 @@ export class LayoutView {
     if (card) card.classList.add('is-closing');
     setTimeout(() => {
       if (overlay.isConnected) overlay.remove();
+      if (overlay._returnFocus?.isConnected) {
+        overlay._returnFocus.focus?.({ preventScroll: true });
+      }
     }, 180);
   }
 
@@ -500,7 +548,7 @@ export class LayoutView {
 
     host.innerHTML = `
       <header class="game-hud" aria-label="Estado atual da carreira">
-        <button class="hud-fighter" type="button" data-hud-nav="overview" aria-label="Abrir perfil de ${e(state.fighterName)}">
+        <button class="hud-fighter" type="button" data-hud-fighter aria-label="Abrir perfil de ${e(state.fighterName)}">
           <span class="hud-portrait">${PortraitService.renderFighter(state.fighter, { size: 48 })}</span>
           <span class="hud-fighter-copy">
             <span class="hud-fighter-name">${e(state.fighterName)}</span>
@@ -543,6 +591,9 @@ export class LayoutView {
       button.addEventListener('click', () => {
         window.dispatchEvent(new CustomEvent('navigate', { detail: { view: button.dataset.hudNav } }));
       });
+    });
+    host.querySelector('[data-hud-fighter]')?.addEventListener('click', () => {
+      window.dispatchEvent(new CustomEvent('open-player-profile'));
     });
     host.querySelector('[data-hud-advance]')?.addEventListener('click', () => {
       window.dispatchEvent(new CustomEvent('advance-week'));

@@ -91,6 +91,83 @@ describe('CareerLogService.selectNarrativeEvent', () => {
     }
     expect(hit).toBe(true);
   });
+  it('não recicla um assunto narrativo já apresentado', () => {
+    const fighter = makeFighter({
+      fights: [], winStreak: 0, ranking: 99, titlesWon: 0, cash: 50000,
+      injury: null, injuryCount: 0, popularity: 10,
+    });
+    const first = svc.selectNarrativeEvent(fighter, { hasActiveRival: true });
+    const second = svc.selectNarrativeEvent(fighter, {
+      hasActiveRival: true,
+      excludedPrompts: new Set([first.prompt]),
+    });
+    expect(second?.prompt).not.toBe(first.prompt);
+  });
+
+  it('exclui o tópico persistente mesmo sem depender do texto da notificação', () => {
+    const fighter = makeFighter({
+      fights: [], winStreak: 0, ranking: 99, titlesWon: 0, cash: 50000,
+      injury: null, injuryCount: 0, popularity: 10,
+    });
+    const first = svc.selectNarrativeEvent(fighter, { hasActiveRival: true });
+    const second = svc.selectNarrativeEvent(fighter, {
+      hasActiveRival: true,
+      excludedTopics: new Set([first.topicKey]),
+    });
+    expect(second?.topicKey).not.toBe(first.topicKey);
+  });
+});
+
+describe('CareerLogService narrative ledger', () => {
+  it('registra geração, visualização e resolução sem reciclar o tópico', async () => {
+    const docs = new Map();
+    const service = new CareerLogService({
+      get: async (_store, id) => structuredClone(docs.get(id) || null),
+      put: async (_store, value) => docs.set(value.id, structuredClone(value)),
+    });
+    const prompt = {
+      id: 'narrative-prompt',
+      eventId: 'narrative:fighter-1:after_loss:0:12',
+      topicKey: 'after_loss:0',
+      prompt: 'A imprensa questiona sua derrota.',
+      createdAbsWeek: 12,
+      viewedAbsWeek: null,
+      status: 'generated',
+    };
+    docs.set(prompt.id, structuredClone(prompt));
+
+    await service.recordNarrativeGenerated('fighter-1', prompt);
+    await expect(service.markNarrativeViewed('fighter-1', prompt.eventId, 12))
+      .resolves.toEqual({ ok: true });
+    await service.markNarrativeResolved('fighter-1', prompt, 13, 'n_1');
+
+    expect(await service.seenNarrativeTopics('fighter-1')).toEqual(new Set(['after_loss:0']));
+    expect(docs.get('narrative-event-ledger').topics['after_loss:0']).toMatchObject({
+      status: 'resolved',
+      viewedAbsWeek: 12,
+      resolvedAbsWeek: 13,
+      ignored: false,
+      choiceKey: 'n_1',
+    });
+  });
+
+  it('persiste marcos cinematográficos por carreira e não os repete após reload', async () => {
+    const docs = new Map();
+    const db = {
+      get: async (_store, id) => structuredClone(docs.get(id) || null),
+      put: async (_store, value) => docs.set(value.id, structuredClone(value)),
+    };
+    const firstSession = new CareerLogService(db);
+
+    expect(await firstSession.hasCareerMomentShown('fighter-1', 'first_loss')).toBe(false);
+    await firstSession.markCareerMomentShown('fighter-1', 'first_loss', 12);
+
+    const reloadedSession = new CareerLogService(db);
+    expect(await reloadedSession.hasCareerMomentShown('fighter-1', 'first_loss')).toBe(true);
+    expect(await reloadedSession.hasCareerMomentShown('fighter-2', 'first_loss')).toBe(false);
+    expect(docs.get('career-moments:fighter-1').moments.first_loss)
+      .toEqual({ shown: true, shownAbsWeek: 12 });
+  });
 });
 
 describe('BiographyService', () => {

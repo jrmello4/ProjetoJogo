@@ -281,7 +281,9 @@ export class DashboardView {
     const { fighter, academy, manager, belts = [], contenderStatus, pendingOffers, bookings, promotions, pastEvents, milestones, socialPrompt, rivalryPrompt, narrativePrompt, weighInPrompt, pendingRehab, readiness, now, endCareerPrompt, onboarding, podcastEpisode, yearReview, crowdSnapshot, mediaCompare } = data;
     // A decisão prioritária vive no overlay. Mantê-la também no dashboard
     // criava duas versões clicáveis do mesmo evento.
-    const hasPriorityDecision = Boolean(endCareerPrompt || weighInPrompt || narrativePrompt || socialPrompt || rivalryPrompt);
+    const rivalryNeedsOverlay = Boolean(rivalryPrompt && rivalryPrompt.viewedAbsWeek == null);
+    const narrativeNeedsOverlay = Boolean(narrativePrompt && narrativePrompt.viewedAbsWeek == null);
+    const hasPriorityDecision = Boolean(endCareerPrompt || weighInPrompt || narrativeNeedsOverlay || socialPrompt || rivalryNeedsOverlay);
 
     const tierBadge = (tier) => `<span class="badge ${tierBadgeCls(tier)}">${TIER_LABELS[tier]}</span>`;
 
@@ -387,7 +389,7 @@ export class DashboardView {
 
     // ===== Rivalidade — prompt semanal =====
     let rivalryHtml = '';
-    if (rivalryPrompt && !hasPriorityDecision) {
+    if (rivalryPrompt && rivalryPrompt.viewedAbsWeek != null && !hasPriorityDecision) {
       rivalryHtml = `
         ${pendingOffers.length === 0 && !socialPrompt ? '<div class="section-label" data-reveal>Decisões Pendentes</div>' : ''}
         <div class="card mb-4" data-reveal style="border-top-color:var(--danger)">
@@ -405,7 +407,7 @@ export class DashboardView {
 
     // ===== Evento narrativo (Fase 1) =====
     let narrativeHtml = '';
-    if (narrativePrompt && !hasPriorityDecision) {
+    if (narrativePrompt && narrativePrompt.viewedAbsWeek != null && !hasPriorityDecision) {
       narrativeHtml = `
         ${pendingOffers.length === 0 && !socialPrompt && !rivalryPrompt ? '<div class="section-label" data-reveal>Decisões Pendentes</div>' : ''}
         <div class="card mb-4" data-reveal style="border-top-color:var(--gold)">
@@ -942,10 +944,11 @@ export class DashboardView {
       };
     }
 
-    if (narrativePrompt) {
+    if (narrativePrompt && narrativePrompt.viewedAbsWeek == null) {
       return {
         priority: 3,
         type: 'narrative',
+        eventId: narrativePrompt.eventId || narrativePrompt.prompt,
         title: '📰 Momento da Carreira',
         html: `
           <div class="decision-card-header">📰 Momento da Carreira</div>
@@ -983,10 +986,11 @@ export class DashboardView {
       };
     }
 
-    if (rivalryPrompt) {
+    if (rivalryPrompt && rivalryPrompt.viewedAbsWeek == null) {
       return {
         priority: 1,
         type: 'rivalry',
+        eventId: rivalryPrompt.eventId,
         title: '⚔️ Rivalidade',
         html: `
           <div class="decision-card-header">⚔️ Rivalidade</div>

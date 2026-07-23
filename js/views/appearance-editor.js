@@ -15,6 +15,7 @@ export class AppearanceEditor {
     const activeGroup = ui.group || 'rosto';
     const desc = PortraitService.describe(appearance);
     const groupCats = APPEARANCE_CATEGORIES.filter(c => c.group === activeGroup);
+    const activeGroupMeta = APPEARANCE_GROUPS.find(group => group.id === activeGroup);
     const identity = ui.fighter
       ? VisualIdentityService.describeIdentity({ ...ui.fighter, appearance })
       : null;
@@ -22,7 +23,13 @@ export class AppearanceEditor {
     return `
       <div class="appearance-editor" data-active-group="${e(activeGroup)}">
         <div class="appearance-preview-wrap">
-          <div class="appearance-preview">${PortraitService.render(appearance, { size: 156 })}</div>
+          <div class="appearance-preview appearance-preview--studio">
+            <span class="appearance-preview-kicker">FICHA DO LUTADOR</span>
+            <span class="appearance-preview-corner" aria-hidden="true"></span>
+            ${PortraitService.render(appearance, { size: 156 })}
+            <span class="appearance-preview-caption">PREVIEW AO VIVO</span>
+            <span class="appearance-preview-status" aria-live="polite">${e(activeGroupMeta?.label || 'Aparência')} selecionado</span>
+          </div>
           <div class="appearance-identity">
             ${identity ? `
               <div class="appearance-identity-line"><span>Arco</span> ${e(identity.archetypeLabel)}</div>
@@ -38,14 +45,16 @@ export class AppearanceEditor {
         <div class="appearance-tabs" role="tablist" aria-label="Categorias de aparência">
           ${APPEARANCE_GROUPS.map(g => `
             <button type="button" role="tab" class="appearance-tab ${g.id === activeGroup ? 'is-active' : ''}"
-              data-appearance-group="${g.id}" aria-selected="${g.id === activeGroup}">
+              id="appearance-tab-${g.id}" data-appearance-group="${g.id}"
+              aria-label="${e(g.label)}"
+              aria-selected="${g.id === activeGroup}" tabindex="${g.id === activeGroup ? '0' : '-1'}">
               <span class="appearance-tab-icon">${g.icon}</span>
               <span class="appearance-tab-label">${e(g.label)}</span>
             </button>
           `).join('')}
         </div>
 
-        <div class="appearance-controls" role="tabpanel">
+        <div class="appearance-controls" role="tabpanel" aria-labelledby="appearance-tab-${e(activeGroup)}">
           ${groupCats.map(cat => AppearanceEditor._controlRow(cat, appearance)).join('')}
         </div>
 
@@ -71,6 +80,7 @@ export class AppearanceEditor {
             ${cat.options.map((o, i) => `
               <button type="button" class="appearance-swatch ${i === idx ? 'is-active' : ''}"
                 data-swatch="${i}" title="${e(o.label)}"
+                aria-label="${e(cat.label)}: ${e(o.label)}" aria-pressed="${i === idx}"
                 style="background:${o.base || o.value}"></button>`).join('')}
           </span>
         </div>`;
@@ -79,9 +89,9 @@ export class AppearanceEditor {
       <div class="appearance-row" data-appearance-key="${cat.key}">
         <span class="appearance-label">${e(cat.label)}</span>
         <span class="appearance-stepper">
-          <button type="button" class="appearance-arrow" data-dir="-1" aria-label="Anterior">‹</button>
-          <span class="appearance-value" title="${e(opt.label)}">${e(opt.label)}</span>
-          <button type="button" class="appearance-arrow" data-dir="1" aria-label="Próximo">›</button>
+          <button type="button" class="appearance-arrow" data-dir="-1" aria-label="${e(cat.label)} anterior">‹</button>
+          <span class="appearance-value" title="${e(opt.label)}" aria-live="polite">${e(opt.label)}</span>
+          <button type="button" class="appearance-arrow" data-dir="1" aria-label="Próximo ${e(cat.label)}">›</button>
         </span>
       </div>`;
   }
@@ -103,13 +113,32 @@ export class AppearanceEditor {
         fighter: opts.fighter,
         context: opts.context,
       });
+      const preview = root.querySelector('.appearance-preview--studio');
+      preview?.classList.add('is-changing');
+      clearTimeout(root._appearancePreviewTimer);
+      root._appearancePreviewTimer = setTimeout(() => {
+        preview?.classList.remove('is-changing');
+        root._appearancePreviewTimer = null;
+      }, 220);
       AppearanceEditor.wire(root, state, opts);
     };
 
-    editor.querySelectorAll('.appearance-tab').forEach(tab => {
+    const tabs = [...editor.querySelectorAll('.appearance-tab')];
+    tabs.forEach((tab, tabIndex) => {
       tab.addEventListener('click', () => {
         activeGroup = tab.dataset.appearanceGroup || 'rosto';
         rerender();
+      });
+      tab.addEventListener('keydown', (event) => {
+        const last = tabs.length - 1;
+        let target = null;
+        if (event.key === 'ArrowRight') target = tabIndex === last ? 0 : tabIndex + 1;
+        if (event.key === 'ArrowLeft') target = tabIndex === 0 ? last : tabIndex - 1;
+        if (event.key === 'Home') target = 0;
+        if (event.key === 'End') target = last;
+        if (target == null) return;
+        event.preventDefault();
+        tabs[target].click();
       });
     });
 

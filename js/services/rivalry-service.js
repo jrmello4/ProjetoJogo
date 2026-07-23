@@ -1,6 +1,8 @@
 import { Rivalry } from '../models/rivalry.js';
 import { ACADEMIES, RIVALRY_CONFIG } from '../config/game-config.js';
 
+const INTERACTION_LEDGER_ID = 'rivalry-interaction-ledger';
+
 export class RivalryService {
   // careerLogService (opcional/nullable, mesmo padrão de SponsorService) —
   // sem ele, a derivação de tipo 'grudge' (§D.3) simplesmente não dispara,
@@ -160,6 +162,89 @@ export class RivalryService {
       .filter(r => r.fighterAId === fighterId || r.fighterBId === fighterId)
       .map(r => new Rivalry(r))
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  }
+
+  interactionContext(rivalry) {
+    const history = rivalry?.history || [];
+    const lastEvent = history[history.length - 1];
+    return [
+      rivalry?.id || '',
+      rivalry?.intensity || 0,
+      rivalry?.lastHeatAbsWeek ?? '',
+      history.length,
+      lastEvent?.type || '',
+    ].join(':');
+  }
+
+  async _interactionLedger(fighterId) {
+    let ledger = null;
+    try { ledger = await this.db.get('gameState', INTERACTION_LEDGER_ID); } catch { /* banco antigo/vazio */ }
+    if (!ledger || ledger.fighterId !== fighterId) {
+      return { id: INTERACTION_LEDGER_ID, fighterId, byRivalry: {} };
+    }
+    ledger.byRivalry ||= {};
+    return ledger;
+  }
+
+  async canGenerateInteraction(fighterId, rivalry, absWeekNow) {
+    const ledger = await this._interactionLedger(fighterId);
+    const previous = ledger.byRivalry[rivalry.id];
+    if (!previous) return true;
+
+    const cooledDown = absWeekNow - (previous.lastGeneratedAbsWeek ?? -Infinity)
+      >= RIVALRY_CONFIG.INTERACTION_COOLDOWN_WEEKS;
+    const contextChanged = previous.contextKey !== this.interactionContext(rivalry);
+    return cooledDown && contextChanged;
+  }
+
+  async recordInteractionGenerated(fighterId, rivalry, prompt) {
+    const ledger = await this._interactionLedger(fighterId);
+    ledger.byRivalry[rivalry.id] = {
+      eventId: prompt.eventId,
+      contextKey: prompt.contextKey,
+      status: 'generated',
+      lastGeneratedAbsWeek: prompt.createdAbsWeek,
+      viewedAbsWeek: null,
+      resolvedAbsWeek: null,
+      ignored: false,
+    };
+    await this.db.put('gameState', ledger);
+  }
+
+  async markInteractionViewed(fighterId, eventId, absWeekNow) {
+    const prompt = await this.db.get('gameState', 'rivalry-prompt');
+    if (!prompt || prompt.eventId !== eventId) return { ok: false, reason: 'Evento não está mais pendente.' };
+    if (prompt.viewedAbsWeek == null) {
+      prompt.viewedAbsWeek = absWeekNow;
+      prompt.status = 'viewed';
+      await this.db.put('gameState', prompt);
+    }
+
+    const ledger = await this._interactionLedger(fighterId);
+    const entry = ledger.byRivalry[prompt.rivalryId];
+    if (entry?.eventId === eventId) {
+      entry.status = 'viewed';
+      entry.viewedAbsWeek ??= absWeekNow;
+      await this.db.put('gameState', ledger);
+    }
+    return { ok: true };
+  }
+
+  async markInteractionResolved(fighterId, prompt, rivalry, absWeekNow, choice) {
+    const ledger = await this._interactionLedger(fighterId);
+    const current = ledger.byRivalry[prompt.rivalryId] || {};
+    ledger.byRivalry[prompt.rivalryId] = {
+      ...current,
+      eventId: prompt.eventId,
+      contextKey: rivalry ? this.interactionContext(rivalry) : prompt.contextKey,
+      status: choice === 'expired' ? 'expired' : 'resolved',
+      lastGeneratedAbsWeek: prompt.createdAbsWeek,
+      viewedAbsWeek: prompt.viewedAbsWeek ?? current.viewedAbsWeek ?? absWeekNow,
+      resolvedAbsWeek: absWeekNow,
+      ignored: choice === 'ignore' || choice === 'expired',
+      choice,
+    };
+    await this.db.put('gameState', ledger);
   }
 
   // Épico F1: a provocação na coletiva de imprensa esquenta a rivalidade

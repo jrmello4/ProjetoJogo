@@ -2,6 +2,14 @@
 import { ACTIVE_CARDS } from '../config/card-config.js';
 
 export class CombatResolver {
+  static tacticalMultiplier(fighter) {
+    const iq = Number(fighter?.attributes?.fightIQ ?? 50);
+    // IQ is the fighter's decision quality: it should matter every turn,
+    // without drowning out the technique attributes on the card itself.
+    // 50 = neutral; 70 = +6%; 30 = -6%; hard caps protect generated outliers.
+    return Math.max(0.85, Math.min(1.15, 1 + (iq - 50) * 0.003));
+  }
+
   // Calculate damage from a card based on fighter attributes
   static calcCardDamage(card, fighter) {
     const attr = fighter.attributes || {};
@@ -59,8 +67,8 @@ export class CombatResolver {
     const positionBonusA = this._positionBonus(fighterA.position, cardA);
     const positionBonusB = this._positionBonus(fighterB.position, cardB);
 
-    const totalA = effectiveA * (1 + positionBonusA);
-    const totalB = effectiveB * (1 + positionBonusB);
+    const totalA = effectiveA * (1 + positionBonusA) * this.tacticalMultiplier(fighterA.ref);
+    const totalB = effectiveB * (1 + positionBonusB) * this.tacticalMultiplier(fighterB.ref);
 
     // Apply stamina debt for aggressive cards
     state.staminaDebtA += (cardA.tags?.includes('heavy') ? 5 : 0);

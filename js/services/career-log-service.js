@@ -2,6 +2,8 @@ import { NARRATIVE_EVENTS } from '../config/game-config.js';
 import { generateId } from '../utils/helpers.js';
 
 const DOC_ID = 'careerLog';
+const NARRATIVE_LEDGER_ID = 'narrative-event-ledger';
+const CAREER_MOMENT_LEDGER_PREFIX = 'career-moments:';
 const MAX_ENTRIES = 300;
 
 // Motor de histórias emergentes — ver spec §F. Log append-only de eventos
@@ -88,6 +90,101 @@ export class CareerLogService {
 
   async recentSince(absWeekNow, windowWeeks) {
     return (await this.all()).filter(e => e.atAbsWeek >= absWeekNow - windowWeeks);
+  }
+
+  async _narrativeLedger(fighterId) {
+    const stored = await this.db.get('gameState', NARRATIVE_LEDGER_ID);
+    if (!stored || stored.fighterId !== fighterId) {
+      return { id: NARRATIVE_LEDGER_ID, fighterId, topics: {} };
+    }
+    return { ...stored, topics: stored.topics || {} };
+  }
+
+  async seenNarrativeTopics(fighterId) {
+    const ledger = await this._narrativeLedger(fighterId);
+    return new Set(Object.keys(ledger.topics));
+  }
+
+  async hasCareerMomentShown(fighterId, momentId) {
+    if (!fighterId || !momentId) return false;
+    const id = `${CAREER_MOMENT_LEDGER_PREFIX}${fighterId}`;
+    const ledger = await this.db.get('gameState', id);
+    return Boolean(ledger?.moments?.[momentId]?.shown);
+  }
+
+  async markCareerMomentShown(fighterId, momentId, absWeekNow) {
+    if (!fighterId || !momentId) return null;
+    const id = `${CAREER_MOMENT_LEDGER_PREFIX}${fighterId}`;
+    const ledger = await this.db.get('gameState', id) || {
+      id,
+      fighterId,
+      moments: {},
+    };
+    ledger.moments ||= {};
+    ledger.moments[momentId] = {
+      shown: true,
+      shownAbsWeek: absWeekNow,
+    };
+    await this.db.put('gameState', ledger);
+    return ledger.moments[momentId];
+  }
+
+  async recordNarrativeGenerated(fighterId, prompt) {
+    if (!prompt?.topicKey) return null;
+    const ledger = await this._narrativeLedger(fighterId);
+    ledger.topics[prompt.topicKey] = {
+      topicKey: prompt.topicKey,
+      prompt: prompt.prompt,
+      eventId: prompt.eventId,
+      status: 'generated',
+      generatedAbsWeek: prompt.createdAbsWeek,
+      viewedAbsWeek: null,
+      resolvedAbsWeek: null,
+      ignored: false,
+    };
+    await this.db.put('gameState', ledger);
+    return ledger.topics[prompt.topicKey];
+  }
+
+  async markNarrativeViewed(fighterId, eventId, absWeekNow) {
+    const prompt = await this.db.get('gameState', 'narrative-prompt');
+    if (!prompt || (prompt.eventId || prompt.prompt) !== eventId) {
+      return { ok: false, reason: 'Evento narrativo não está mais ativo.' };
+    }
+    if (prompt.viewedAbsWeek == null) {
+      prompt.viewedAbsWeek = absWeekNow;
+      prompt.status = 'viewed';
+      await this.db.put('gameState', prompt);
+    }
+    const ledger = await this._narrativeLedger(fighterId);
+    const entry = ledger.topics[prompt.topicKey];
+    if (entry) {
+      entry.status = 'viewed';
+      entry.viewedAbsWeek ??= absWeekNow;
+      await this.db.put('gameState', ledger);
+    }
+    return { ok: true };
+  }
+
+  async markNarrativeResolved(fighterId, prompt, absWeekNow, choiceKey) {
+    if (!prompt?.topicKey) return null;
+    const ledger = await this._narrativeLedger(fighterId);
+    const entry = ledger.topics[prompt.topicKey] || {
+      topicKey: prompt.topicKey,
+      prompt: prompt.prompt,
+      eventId: prompt.eventId,
+      generatedAbsWeek: prompt.createdAbsWeek,
+    };
+    Object.assign(entry, {
+      status: 'resolved',
+      viewedAbsWeek: entry.viewedAbsWeek ?? prompt.viewedAbsWeek ?? absWeekNow,
+      resolvedAbsWeek: absWeekNow,
+      ignored: false,
+      choiceKey,
+    });
+    ledger.topics[prompt.topicKey] = entry;
+    await this.db.put('gameState', ledger);
+    return entry;
   }
 
   // Retorna um evento narrativo aleatório compatível com o contexto
@@ -180,11 +277,30 @@ export class CareerLogService {
       events.push(...(NARRATIVE_EVENTS.heel_turn || []));
     }
 
-    if (events.length === 0) return null;
+    const excludedPrompts = ctx.excludedPrompts instanceof Set
+      ? ctx.excludedPrompts
+      : new Set(ctx.excludedPrompts || []);
+    const excludedTopics = ctx.excludedTopics instanceof Set
+      ? ctx.excludedTopics
+      : new Set(ctx.excludedTopics || []);
+    const unseenEvents = events.filter(event => {
+      if (excludedPrompts.has(event.prompt)) return false;
+      for (const [group, templates] of Object.entries(NARRATIVE_EVENTS)) {
+        const index = templates.indexOf(event);
+        if (index >= 0) return !excludedTopics.has(`${group}:${index}`);
+      }
+      return !excludedTopics.has(event.topicKey || `prompt:${event.prompt}`);
+    });
+    if (unseenEvents.length === 0) return null;
 
     // Escolhe um evento aleatório do pool reunido
-    const pool = events[Math.floor(Math.random() * events.length)];
-    return pool;
+    const pool = unseenEvents[Math.floor(Math.random() * unseenEvents.length)];
+    if (pool.topicKey) return pool;
+    for (const [group, templates] of Object.entries(NARRATIVE_EVENTS)) {
+      const index = templates.indexOf(pool);
+      if (index >= 0) return { ...pool, topicKey: `${group}:${index}` };
+    }
+    return { ...pool, topicKey: `prompt:${pool.prompt}` };
   }
 
   /**
@@ -194,6 +310,7 @@ export class CareerLogService {
     if (!template) return null;
     const fill = (s) => String(s || '').replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? vars[k] : `{${k}}`));
     return {
+      topicKey: template.topicKey,
       prompt: fill(template.prompt),
       choices: (template.choices || []).map(c => ({
         ...c,

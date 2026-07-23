@@ -194,14 +194,33 @@ export class ConsequencePipeline {
     if (fighter.status === 'retired') return;
     let activePrompt = await this.db.get('gameState', 'rivalry-prompt');
     if (activePrompt?.expiresAbsWeek != null && activePrompt.expiresAbsWeek <= now) {
+      const staleRivalry = activePrompt.rivalryId
+        ? await this.db.get('rivalries', activePrompt.rivalryId).catch(() => null)
+        : null;
+      await this.rivalryService.markInteractionResolved(
+        fighter.id,
+        activePrompt,
+        staleRivalry,
+        now,
+        'expired'
+      );
       await this.db.delete('gameState', 'rivalry-prompt');
       activePrompt = null;
     }
     if (activePrompt) return;
 
     const rivalries = await this.rivalryService.getRivalries(fighter.id);
-    const topRivalry = pickTopRandom(rivalries, r => r.intensity);
-    if (!topRivalry || topRivalry.intensity < 3) return;
+    const eligibleRivalries = [];
+    for (const rivalry of rivalries) {
+      if (
+        rivalry.intensity >= 3
+        && await this.rivalryService.canGenerateInteraction(fighter.id, rivalry, now)
+      ) {
+        eligibleRivalries.push(rivalry);
+      }
+    }
+    const topRivalry = pickTopRandom(eligibleRivalries, rivalry => rivalry.intensity);
+    if (!topRivalry) return;
 
     const rivalId = topRivalry.fighterAId === fighter.id ? topRivalry.fighterBId : topRivalry.fighterAId;
     const rival = await this.fighterCtrl.getFighter(rivalId);
@@ -214,12 +233,20 @@ export class ConsequencePipeline {
     interaction.rivalFighterId = rivalId;
     interaction.createdAbsWeek = now;
     interaction.expiresAbsWeek = now + RIVALRY_CONFIG.INTERACTION_PROMPT_EXPIRY_WEEKS;
+    interaction.contextKey = this.rivalryService.interactionContext(topRivalry);
+    interaction.eventId = `rivalry:${topRivalry.id}:${now}:${interaction.contextKey}`;
+    interaction.status = 'generated';
+    interaction.viewedAbsWeek = null;
+    interaction.ignored = false;
     await this.db.put('gameState', { id: 'rivalry-prompt', ...interaction });
+    await this.rivalryService.recordInteractionGenerated(fighter.id, topRivalry, interaction);
     await this.notifService.add('warning', '⚔️ Rivalidade', `${rival.name} está provocando você. Como reagir?`);
   }
 
   async _processNarrativeEvent(fighter, now) {
-    if (now % 5 !== 0 || fighter.status === 'retired') return;
+    // Dilemas são momentos especiais, não um feed semanal. A cadência baixa
+    // também deixa cada consequência ter tempo de aparecer na carreira.
+    if (now % 12 !== 0 || fighter.status === 'retired') return;
     let narrativePrompt;
     try { narrativePrompt = await this.db.get('gameState', 'narrative-prompt'); } catch { /* ok */ }
     if (narrativePrompt) return;
@@ -232,17 +259,24 @@ export class ConsequencePipeline {
         hasTrainingPartners = (teammates || []).length > 0;
       } catch { /* ok */ }
     }
+    const seenTopics = await this.careerLogService.seenNarrativeTopics(fighter.id);
     const narrativeEvent = this.careerLogService.selectNarrativeEvent(fighter, {
-      hasActiveRival: rivalriesForCtx.length > 0, hasTrainingPartners,
+      hasActiveRival: rivalriesForCtx.length > 0,
+      hasTrainingPartners,
+      excludedTopics: seenTopics,
     });
     if (!narrativeEvent) return;
 
     const choices = narrativeEvent.choices.map((c, i) => ({ ...c, key: `n_${i}` }));
-    await this.db.put('gameState', {
+    const prompt = {
       id: 'narrative-prompt', prompt: narrativeEvent.prompt,
-      choices, createdAbsWeek: now,
-    });
-    await this.notifService.add('headline', '📰 Momento da Carreira', narrativeEvent.prompt);
+      topicKey: narrativeEvent.topicKey,
+      eventId: `narrative:${fighter.id}:${narrativeEvent.topicKey}:${now}`,
+      choices, createdAbsWeek: now, viewedAbsWeek: null, status: 'generated',
+    };
+    await this.db.put('gameState', prompt);
+    await this.careerLogService.recordNarrativeGenerated(fighter.id, prompt);
+    await this.notifService.add('headline', 'Momento da Carreira', narrativeEvent.prompt);
   }
 
   async processCareerMilestones(world, fighter) {

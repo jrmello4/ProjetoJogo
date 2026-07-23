@@ -53,21 +53,35 @@ export class Toast {
         <div class="toast-title">${escapeHtml(title)}</div>
         ${message ? `<div class="toast-message">${escapeHtml(message)}</div>` : ''}
       </div>
-      <button class="toast-close" aria-label="Fechar">&times;</button>
+      <button class="toast-close" type="button" data-toast-dismiss aria-label="Fechar notificação">
+        ${PixelIcon.render('loss')}
+      </button>
     `;
 
+    let autoDismissTimer = null;
+    let removalFallbackTimer = null;
     const dismiss = () => {
-      if (!toast.isConnected) return;
+      if (!toast.isConnected || toast.dataset.dismissed) return;
+      toast.dataset.dismissed = '1';
+      clearTimeout(autoDismissTimer);
       toast.classList.add('toast--leaving');
-      toast.addEventListener('animationend', () => toast.remove(), { once: true });
+      toast.addEventListener('animationend', () => {
+        clearTimeout(removalFallbackTimer);
+        toast.remove();
+      }, { once: true });
       // Fallback caso animações estejam desativadas
-      setTimeout(() => toast.remove(), 400);
+      removalFallbackTimer = setTimeout(() => toast.remove(), 400);
     };
 
-    toast.querySelector('.toast-close').addEventListener('click', dismiss);
+    toast.addEventListener('click', (event) => {
+      if (!event.target.closest('[data-toast-dismiss]')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dismiss();
+    });
     container.appendChild(toast);
 
-    setTimeout(dismiss, duration);
+    autoDismissTimer = setTimeout(dismiss, duration);
     return toast;
   }
 }

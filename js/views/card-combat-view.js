@@ -1,6 +1,7 @@
 // js/views/card-combat-view.js
 import { ACTIVE_CARDS, POSITIONS, POSITION_TRANSITIONS, getCardIllustration } from '../config/card-config.js';
 import { CombatStage } from '../motion/combat-stage.js';
+import { formatCombatDamage } from '../utils/helpers.js';
 
 // Canonical position name map — shared across all position-display methods
 const POSITION_NAMES = {
@@ -60,14 +61,26 @@ function deriveEffect(card) {
   return 'Técnica';
 }
 
+function deriveRarity(card) {
+  const tags = card.tags || [];
+  if (card.type === 'submission' || tags.includes('finish')) return { label: 'LENDÁRIA', tier: 'legendary' };
+  if (tags.includes('risky') || tags.includes('power') || (card.baseDamage || 0) >= 35) return { label: 'RARA', tier: 'rare' };
+  if (card.type === 'takedown' || card.type === 'defense') return { label: 'TÁTICA', tier: 'tactical' };
+  return { label: 'PADRÃO', tier: 'standard' };
+}
+
 export class CardCombatView {
   constructor() {
     this.handlers = null;
     this.stage = new CombatStage();
+    this.handSeen = new Set();
+    this._timers = new Set();
   }
 
   render(container, engineState, actions) {
+    this._clearTimers();
     this.handlers = actions;
+    this.handSeen.clear();
     const fa = engineState.fighterA.ref;
     const fb = engineState.fighterB.ref;
 
@@ -130,9 +143,18 @@ export class CardCombatView {
   _bindInteractions(container) {
     container.querySelectorAll('.card-item:not(.disabled)').forEach(el => {
       el.addEventListener('click', () => {
-        if (el.disabled || this.handlers?.isResolving?.()) return;
+        if (el.disabled || el.classList.contains('is-playing') || this.handlers?.isResolving?.()) return;
+        container.querySelectorAll('.card-item.is-selected').forEach(card => card.classList.remove('is-selected'));
+        el.classList.add('is-selected');
+        el.classList.add('is-playing');
+        el.setAttribute('aria-pressed', 'true');
+        container.querySelectorAll('.card-item:not(.is-selected)').forEach(card => card.classList.add('is-waiting'));
         const cardId = el.dataset.cardId;
         if (this.handlers?.onCardPlay) this.handlers.onCardPlay(cardId);
+        this._schedule(() => {
+          el.classList.remove('is-playing');
+          el.classList.add('is-played');
+        }, 220);
       });
       el.addEventListener('keydown', (event) => {
         if ((event.key === 'Enter' || event.key === ' ') && !el.disabled) {
@@ -192,7 +214,7 @@ export class CardCombatView {
     const uses = side === 'A' ? state.usesA : state.usesB;
     const fighter = side === 'A' ? state.fighterA : state.fighterB;
 
-    return actives.map(id => {
+    return actives.map((id, index) => {
       const card = ACTIVE_CARDS[id];
       if (!card) return '';
       const onCooldown = (cooldowns[id] || 0) > 0;
@@ -200,6 +222,9 @@ export class CardCombatView {
       const noUses = remaining !== undefined && remaining <= 0;
       const wrongPos = !card.positions.includes(fighter.position);
       const disabled = onCooldown || noUses || wrongPos;
+      const cardState = noUses ? 'discarded' : disabled ? 'blocked' : 'ready';
+      const isDrawn = !this.handSeen.has(id);
+      this.handSeen.add(id);
       const posTitle = card.positions.map(p => POSITION_NAMES[p] || p).join(', ');
       const disabledReason = wrongPos
         ? `Disponível em: ${posTitle}`
@@ -221,13 +246,14 @@ export class CardCombatView {
       const posList = card.positions.map(p => POSITION_SHORT[p] || p);
       const posShort = posList.length > 2 ? `${posList.length} POS` : posList.join('/');
       const priority = derivePriority(card);
+      const rarity = deriveRarity(card);
       // Movement IS the effect when a card repositions you; otherwise fall
       // back to the tag-derived tactical essence.
       const effect = card.moveTo ? `Move → ${POSITION_SHORT[card.moveTo] || card.moveTo}` : deriveEffect(card);
       const cdVal = onCooldown ? `${cooldowns[id]}T` : (card.cooldown > 1 ? `${card.cooldown}T` : '—');
       const usesVal = card.maxUses !== Infinity ? `${remaining ?? card.maxUses}/${card.maxUses}` : '∞';
       return `
-        <button type="button" class="card-item mastery-basic ${disabled ? 'disabled' : ''} ${card.type}" data-card-id="${card.id}" ${disabled ? 'disabled aria-disabled="true"' : ''} aria-label="${card.name}. ${card.description}. Dano ${card.baseDamage}. ${disabledReason}">
+        <button type="button" class="card-item mastery-basic card-rarity--${rarity.tier} ${disabled ? 'disabled' : ''} ${noUses ? 'is-discarded' : ''} ${isDrawn ? 'is-drawn' : ''} ${card.type}" data-card-id="${card.id}" data-card-state="${cardState}" style="--card-index:${index}" ${disabled ? 'disabled aria-disabled="true"' : ''} aria-pressed="false" aria-label="${card.name}. ${card.description}. Dano ${formatCombatDamage(card.baseDamage)}. ${disabledReason}">
           <span class="card-hole h1"></span><span class="card-hole h2"></span>
           <div class="card-category-bar">
             <span class="cat-icon" aria-hidden="true">${category.icon}</span>
@@ -236,6 +262,7 @@ export class CardCombatView {
           </div>
           <div class="card-art">
             ${artHtml}
+            <span class="card-rarity-seal">${rarity.label}</span>
           </div>
           <span class="card-tape tape-r"></span>
           <div class="card-body">
@@ -247,12 +274,15 @@ export class CardCombatView {
               <div class="stat"><span class="stat-label">Recarga</span><span class="stat-val">${cdVal}</span></div>
             </div>
             <div class="card-footer">
-              <span class="card-dmg" title="Dano base">Dano ${card.baseDamage}</span>
+              <span class="card-dmg" title="Dano base">Dano ${formatCombatDamage(card.baseDamage)}</span>
               <span class="card-priority ${priority.cls}" title="Prioridade">${priority.label}</span>
             </div>
             <div class="card-effect">
               <span class="eff-label">Efeito</span>
               <span class="eff-val">${effect}</span>
+            </div>
+            <div class="card-condition ${disabled ? 'is-blocked' : ''}">
+              <span>${disabled ? disabledReason : `Pronta em ${posShort}`}</span>
             </div>
           </div>
         </button>
@@ -301,7 +331,31 @@ export class CardCombatView {
     return this.stage.playExchange(opts);
   }
 
+  playOutcome(opts) {
+    return this.stage.playOutcome(opts);
+  }
+
   setStagePositions(posA, posB) {
     this.stage.setPositions(posA, posB);
+  }
+
+  _schedule(callback, delay) {
+    const timer = setTimeout(() => {
+      this._timers.delete(timer);
+      callback();
+    }, delay);
+    this._timers.add(timer);
+  }
+
+  _clearTimers() {
+    this._timers.forEach(timer => clearTimeout(timer));
+    this._timers.clear();
+  }
+
+  dispose() {
+    this._clearTimers();
+    this.stage.dispose();
+    this.handlers = null;
+    this.handSeen.clear();
   }
 }

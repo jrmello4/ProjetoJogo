@@ -59,4 +59,23 @@ describe('SaveService.importSave', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].narrativeChains).toEqual([]);
   });
+
+  it('round-trips a career export through the validated importer', async () => {
+    const snapshot = validSave({
+      events: [{ id: 'event-1', name: 'Noite de luta' }],
+      fights: [{ id: 'fight-1', fighterAId: 'player-1' }],
+    });
+    const source = new Map(Object.entries(snapshot));
+    const sourceDb = { getAll: async store => structuredClone(source.get(store) || []) };
+    const imported = [];
+    const targetDb = { replaceStores: async data => imported.push(data) };
+
+    const exported = await new SaveService(sourceDb).exportSave();
+    await new SaveService(targetDb).importSave(exported);
+
+    expect(imported).toHaveLength(1);
+    expect(imported[0].events).toEqual(snapshot.events);
+    expect(imported[0].fights).toEqual(snapshot.fights);
+    expect(imported[0].gameState.find(item => item.id === 'career').playerFighterId).toBe('player-1');
+  });
 });

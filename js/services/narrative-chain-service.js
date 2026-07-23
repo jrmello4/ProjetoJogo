@@ -7,6 +7,9 @@
 
 import { generateId } from '../utils/helpers.js';
 
+const MAX_CHAINS_PER_FIGHTER = 60;
+const MAX_CHAINS_GLOBAL = 180;
+
 const WIN_ELEMENTS = {
   rankingUp: (oldRank, newRank, wc) => ({
     icon: '📊', title: 'Subiu no ranking',
@@ -183,7 +186,22 @@ export class NarrativeChainService {
     };
 
     await this.db.add('narrativeChains', chain);
+    await this._prune(fighter.id);
     return chain;
+  }
+
+  async _prune(fighterId) {
+    const all = await this.db.getAll('narrativeChains');
+    const newest = (entries) => entries
+      .sort((a, b) => (b.absWeek || 0) - (a.absWeek || 0));
+    const keep = new Set(newest(all.filter(chain => chain.fighterId === fighterId))
+      .slice(0, MAX_CHAINS_PER_FIGHTER)
+      .map(chain => chain.id));
+    for (const chain of newest(all).slice(0, MAX_CHAINS_GLOBAL)) keep.add(chain.id);
+
+    for (const chain of all) {
+      if (!keep.has(chain.id)) await this.db.delete('narrativeChains', chain.id);
+    }
   }
 
   // Pega as últimas N chains

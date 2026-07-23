@@ -100,6 +100,16 @@ body::before {
   opacity: 0.5;
 }
 
+/* A vinheta dark antiga tinha maior especificidade e escondia a cena arcade. */
+[data-theme="dark"] body::before,
+:root:not([data-theme="light"]) body::before {
+  z-index: 0;
+  background:
+    linear-gradient(180deg, rgba(16, 13, 12, 0.56), rgba(16, 13, 12, 0.94) 78%),
+    var(--scene-image) center top / cover no-repeat;
+  opacity: 0.72;
+}
+
 body[data-scene="career"] { --scene-image: url('../assets/pixel/scenes/career-arena.png'); }
 body[data-scene="training"],
 body[data-scene="combat"] { --scene-image: url('../assets/pixel/scenes/training-gym.png'); }
@@ -406,6 +416,33 @@ tbody tr:hover td { background: color-mix(in srgb, var(--blue) 10%, var(--mat));
   .page-header { padding: 12px; }
   .page-header h2 { font-size: clamp(1.5rem, 9vw, 2.2rem); }
   .card, .stat-card, .modal { box-shadow: 3px 3px 0 #090706; }
+  .legal-data-table { overflow: visible; border: 0; box-shadow: none; }
+  .legal-data-table table,
+  .legal-data-table tbody,
+  .legal-data-table tr,
+  .legal-data-table td { display: block; width: 100%; }
+  .legal-data-table thead { display: none; }
+  .legal-data-table tr {
+    margin-bottom: 8px;
+    border: 2px solid var(--border);
+    background: var(--canvas);
+  }
+  .legal-data-table td {
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .legal-data-table td:last-child { border-bottom: 0; }
+  .legal-data-table td::before {
+    content: attr(data-label);
+    color: var(--ash);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

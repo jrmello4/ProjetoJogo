@@ -72,6 +72,7 @@ export class WeeklyTickRuntime {
     this.consequences.processDnaDiscovery(fighter, preDiscoveredTraits, now);
     await this.consequences.processEndCareer(fighter, now);
     await this.fighterCtrl.updateFighter(fighter);
+    if (now % 4 === 0) await this.notifService.clearOld();
 
     if (fighter.cash < 0) {
       await this.notifService.add('warning', '⚠️ Caixa Negativo', 'Suas finanças estão no vermelho. Aceite lutas ou reduza o padrão de vida antes que as contas atrasem.');

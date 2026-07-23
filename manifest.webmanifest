@@ -1,0 +1,19 @@
+{
+  "name": "MMA Manager — Carreira de Lutador",
+  "short_name": "MMA Manager",
+  "description": "Simulador offline de gerenciamento de carreira no MMA.",
+  "lang": "pt-BR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#100d0c",
+  "theme_color": "#100d0c",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

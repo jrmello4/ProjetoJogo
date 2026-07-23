@@ -15,6 +15,8 @@ const TYPE_ICONS = {
   expectation: 'morale',
 };
 
+const MAX_STORED_NOTIFICATIONS = 250;
+
 export const ICON_MAP = TYPE_ICONS;
 
 export class NotificationService {
@@ -72,10 +74,12 @@ export class NotificationService {
   }
 
   async clearOld() {
-    const all = await this.getAll();
+    const all = (await this.getAll())
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
-    for (const n of all) {
-      if (n.timestamp < cutoff && n.read) {
+    for (const [index, n] of all.entries()) {
+      const aboveHardLimit = index >= MAX_STORED_NOTIFICATIONS;
+      if (aboveHardLimit || (n.timestamp < cutoff && n.read)) {
         await this.db.delete('notifications', n.id);
       }
     }

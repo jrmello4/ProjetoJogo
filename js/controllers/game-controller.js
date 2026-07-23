@@ -356,6 +356,20 @@ export class GameController {
     return this.narrativeCtrl.resolveRivalryInteraction(choice, fighter.id);
   }
 
+  async markDecisionViewed(type, eventId) {
+    if (!eventId) return { ok: false, reason: 'Evento sem rastreamento.' };
+    const fighter = await this.getPlayerFighter();
+    if (!fighter) return { ok: false, reason: 'Nenhum lutador ativo.' };
+    const state = await this.seasonService.getState();
+    if (type === 'rivalry') {
+      return this.rivalryService.markInteractionViewed(fighter.id, eventId, absWeek(state));
+    }
+    if (type === 'narrative') {
+      return this.careerLogService.markNarrativeViewed(fighter.id, eventId, absWeek(state));
+    }
+    return { ok: false, reason: 'Tipo de evento sem rastreamento.' };
+  }
+
   async resolveNarrativeChoice(choiceKey) {
     const fighter = await this.getPlayerFighter();
     if (!fighter) return { ok: false, reason: 'Nenhum lutador ativo.' };

@@ -114,6 +114,25 @@ export function round(value, decimals = 1) {
   return Math.round(value * Math.pow(10, decimals)) / Math.pow(10, decimals);
 }
 
+/**
+ * Sanitiza números calculados pelo motor antes da apresentação.
+ * O combate conserva precisão total internamente; views, logs e
+ * notificações usam esta fronteira para não expor resíduos binários.
+ */
+export function formatCombatNumber(value, maximumFractionDigits = 1) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '0';
+
+  const digits = Math.max(0, Math.min(6, Math.trunc(maximumFractionDigits)));
+  const factor = 10 ** digits;
+  const rounded = Math.round(numeric * factor) / factor;
+  return String(Object.is(rounded, -0) ? 0 : rounded);
+}
+
+export function formatCombatDamage(value) {
+  return formatCombatNumber(value, 1);
+}
+
 export function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
 }

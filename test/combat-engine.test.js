@@ -26,6 +26,12 @@ function createFighter(id, name, overrides = {}) {
 }
 
 describe('CombatEngine', () => {
+  it('gives Fight IQ a bounded tactical advantage', () => {
+    expect(CombatResolver.tacticalMultiplier(createFighter(1, 'Neutral'))).toBe(1);
+    expect(CombatResolver.tacticalMultiplier(createFighter(1, 'Sharp', { fightIQ: 70 }))).toBeCloseTo(1.06);
+    expect(CombatResolver.tacticalMultiplier(createFighter(1, 'Raw', { fightIQ: 30 }))).toBeCloseTo(0.94);
+  });
+
   it('should initialize state correctly', () => {
     const engine = new CombatEngine();
     const fighterA = createFighter(1, 'Player');

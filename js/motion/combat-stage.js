@@ -5,10 +5,10 @@
 // js/motion/combat-pose.js owns the card -> pose mapping.
 
 import { POSITIONS } from '../config/card-config.js';
-import { escapeHtml } from '../utils/helpers.js';
+import { escapeHtml, formatCombatDamage } from '../utils/helpers.js';
 import { POSES, poseForCard, idlePoseForPosition, isHeavyImpact, spriteSrc } from './combat-pose.js';
+import { gsap } from 'gsap';
 
-const gsap = typeof window !== 'undefined' ? window.gsap : null;
 
 const PHASE_LABEL = {
   distance: 'Distância',
@@ -16,10 +16,6 @@ const PHASE_LABEL = {
   clinch: 'Clinch',
   ground: 'Chão',
 };
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
 
 function phaseFromPositions(posA, posB) {
   const g = (p) => p === POSITIONS.GROUND_TOP || p === POSITIONS.GROUND_GUARD;
@@ -40,13 +36,49 @@ export class CombatStage {
           localStorage.getItem('reduceMotion') === 'true')) ||
       false;
     this._playing = false;
+    this._timers = new Set();
   }
 
   attach(root, fighterA = null, fighterB = null) {
+    this._clearVisualWork();
     this.root = root;
     this._pose = { A: POSES.IDLE, B: POSES.IDLE };
+    this.root?.classList.remove('cs-outcome--a', 'cs-outcome--b', 'cs-outcome--draw');
+    const outcome = this._el('[data-cs-outcome]');
+    if (outcome) outcome.hidden = true;
     if (fighterA) this._fighters.A = fighterA;
     if (fighterB) this._fighters.B = fighterB;
+  }
+
+  _schedule(callback, delay) {
+    const timer = setTimeout(() => {
+      this._timers.delete(timer);
+      callback();
+    }, delay);
+    this._timers.add(timer);
+    return timer;
+  }
+
+  _sleep(ms) {
+    return new Promise(resolve => this._schedule(resolve, ms));
+  }
+
+  _clearVisualWork() {
+    this._timers.forEach(timer => clearTimeout(timer));
+    this._timers.clear();
+    if (this.root && gsap) {
+      gsap.killTweensOf(this.root);
+      this.root.querySelectorAll('[data-cs-sprite-a], [data-cs-sprite-b]').forEach(element => {
+        gsap.killTweensOf(element);
+      });
+    }
+  }
+
+  dispose() {
+    this._clearVisualWork();
+    this._playing = false;
+    this.root?.classList.remove('cs-busy', 'cs-shake', 'cs-heavy-impact');
+    this.root = null;
   }
 
   static buildHTML(fighterA, fighterB) {
@@ -62,6 +94,12 @@ export class CombatStage {
         </div>
 
         <div class="cs-impact-flash" data-cs-impact-flash aria-hidden="true"></div>
+
+        <div class="cs-outcome" data-cs-outcome hidden aria-live="polite">
+          <span class="cs-outcome-kicker">Fim da luta</span>
+          <strong data-cs-outcome-title></strong>
+          <span data-cs-outcome-method></span>
+        </div>
 
         <div class="cs-phase" data-cs-phase>
           <span class="cs-phase-dot"></span>
@@ -205,14 +243,14 @@ export class CombatStage {
 
       if (this.reducedMotion) {
         this.setPositions(posA, posB);
-        await sleep(200);
+        await this._sleep(200);
         return;
       }
 
       if (!cardA && !cardB) {
         if (moveSide) await this._pulseCorner(moveSide, 'advance');
         this.setPositions(posA, posB);
-        await sleep(180);
+        await this._sleep(180);
         return;
       }
 
@@ -259,7 +297,7 @@ export class CombatStage {
 
       await this._hideCaption();
       this.setPositions(posA, posB);
-      await sleep(120);
+      await this._sleep(120);
     } finally {
       this._playing = false;
       this.root?.classList.remove('cs-busy');
@@ -267,6 +305,30 @@ export class CombatStage {
   }
 
   // ── Visual beats ──────────────────────────────────────────
+
+  /**
+   * Final beat after the resolver has produced its result. This projects an
+   * immutable outcome into the arena only; score, cards and rewards remain
+   * entirely owned by CombatAdapter/CombatEngine.
+   */
+  async playOutcome({ winnerSide = null, isDraw = false, method = '' } = {}) {
+    if (!this.root) return;
+    const outcome = this._el('[data-cs-outcome]');
+    const title = this._el('[data-cs-outcome-title]');
+    const methodEl = this._el('[data-cs-outcome-method]');
+    const winner = isDraw ? null : winnerSide;
+    const loser = winner === 'A' ? 'B' : winner === 'B' ? 'A' : null;
+
+    this.root.classList.remove('cs-outcome--a', 'cs-outcome--b', 'cs-outcome--draw');
+    this.root.classList.add(winner ? `cs-outcome--${winner.toLowerCase()}` : 'cs-outcome--draw');
+    if (winner) this._setPose(winner, POSES.IDLE);
+    if (loser) this._setPose(loser, POSES.HIT);
+
+    if (title) title.textContent = isDraw ? 'EMPATE' : winner === 'A' ? 'VITÓRIA' : 'DERROTA';
+    if (methodEl) methodEl.textContent = method ? String(method).toUpperCase() : 'DECISÃO';
+    if (outcome) outcome.hidden = false;
+    await this._sleep(this.reducedMotion ? 0 : 560);
+  }
 
   async _showCaption(side, card) {
     const root = this._el('[data-cs-caption]');
@@ -285,7 +347,7 @@ export class CombatStage {
     if (!root || root.hidden) return;
     root.classList.remove('cs-caption-in');
     root.classList.add('cs-caption-out');
-    await sleep(160);
+    await this._sleep(160);
     root.hidden = true;
     root.classList.remove('cs-caption-out');
   }
@@ -302,7 +364,7 @@ export class CombatStage {
       if (damageB > 0) this._floatDmg('B', damageB, 'hit');
       if (damageA > 0) this._floatDmg('A', damageA, 'hit');
       await Promise.all([this._pulseCorner('A', 'hit'), this._pulseCorner('B', 'hit')]);
-      await sleep(160);
+      await this._sleep(160);
     }
   }
 
@@ -316,7 +378,7 @@ export class CombatStage {
     this._impactFlash();
     await this._pulseCorner(def, 'hit');
     this._floatDmg(def, 0, 'down');
-    await sleep(200);
+    await this._sleep(200);
   }
 
   async _resolveBlock(attacker, defender, card) {
@@ -328,14 +390,14 @@ export class CombatStage {
     this._setPose(defender, POSES.DEFENSE);
     await this._pulseCorner(defender, 'block');
     this._floatDmg(attacker, 0, 'block');
-    await sleep(200);
+    await this._sleep(200);
   }
 
   async _resolveSubmission(attacker, defender, card, amount) {
     await this._showCaption(attacker, card);
     await this._tension();
     if (amount > 0) this._floatDmg(defender, amount, 'sub');
-    await sleep(200);
+    await this._sleep(200);
   }
 
   async _landHit(attacker, target, amount, card, attackerPosition) {
@@ -349,7 +411,7 @@ export class CombatStage {
     this._shake(heavy ? 1.1 : 0.65);
     if (heavy) this._impactFlash();
     if (amount > 0) this._floatDmg(target, amount, 'hit');
-    await sleep(200);
+    await this._sleep(200);
   }
 
   async _pulseCorner(side, mode = 'attack', heavy = false) {
@@ -412,7 +474,7 @@ export class CombatStage {
       }
     }
 
-    await sleep(mode === 'shoot' ? 360 : mode === 'hit' ? 300 : 260);
+    await this._sleep(mode === 'shoot' ? 360 : mode === 'hit' ? 300 : 260);
     corner.classList.remove(cls);
   }
 
@@ -420,9 +482,14 @@ export class CombatStage {
     const el = this._el('[data-cs-impact-flash]');
     if (!el || this.reducedMotion) return;
     el.classList.remove('cs-impact-flash--on');
+    this.root?.classList.remove('cs-heavy-impact');
     void el.offsetWidth;
     el.classList.add('cs-impact-flash--on');
-    setTimeout(() => el.classList.remove('cs-impact-flash--on'), 320);
+    this.root?.classList.add('cs-heavy-impact');
+    this._schedule(() => {
+      el.classList.remove('cs-impact-flash--on');
+      this.root?.classList.remove('cs-heavy-impact');
+    }, 320);
   }
 
   async _tension() {
@@ -445,7 +512,7 @@ export class CombatStage {
         );
       });
     }
-    await sleep(this.reducedMotion ? 0 : 550);
+    await this._sleep(this.reducedMotion ? 0 : 550);
   }
 
   _shake(intensity = 1) {
@@ -470,7 +537,7 @@ export class CombatStage {
       this.root.classList.remove('cs-shake');
       void this.root.offsetWidth;
       this.root.classList.add('cs-shake');
-      setTimeout(() => this.root?.classList.remove('cs-shake'), 380);
+      this._schedule(() => this.root?.classList.remove('cs-shake'), 380);
     }
   }
 
@@ -481,16 +548,16 @@ export class CombatStage {
     node.className = `cs-float cs-float--${side.toLowerCase()} cs-float--${kind}`;
     if (kind === 'block') node.textContent = 'DEFENDEU';
     else if (kind === 'down') node.textContent = 'QUEDA';
-    else if (kind === 'sub') node.textContent = amount > 0 ? `SUB −${Math.round(amount)}` : 'SUB';
-    else node.textContent = amount > 0 ? `−${Math.round(amount)}` : 'HIT';
+    else if (kind === 'sub') node.textContent = amount > 0 ? `SUB −${formatCombatDamage(amount)}` : 'SUB';
+    else node.textContent = amount > 0 ? `−${formatCombatDamage(amount)}` : 'HIT';
     host.appendChild(node);
-    setTimeout(() => node.remove(), 900);
+    this._schedule(() => node.remove(), 900);
   }
 
   async _waitIdle() {
     let n = 0;
     while (this._playing && n < 50) {
-      await sleep(40);
+      await this._sleep(40);
       n++;
     }
   }

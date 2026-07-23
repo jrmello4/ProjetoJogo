@@ -4,9 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="MMA Manager — Simulador de gerenciamento de artes marciais mistas">
-  <meta name="theme-color" content="#f8f6f2">
+  <meta name="theme-color" content="#100d0c">
   <title>MMA Manager</title>
   <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <!-- Tema claro é o padrão (mais profissional/chamativo) — aplicado ANTES
        de qualquer CSS pintar, senão toda carga sem preferência salva pisca
        em escuro por um frame antes do JS do app decidir. -->
@@ -22,13 +26,7 @@
   <link rel="stylesheet" href="css/combat-stage.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/pixel-theme.css">
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
-    }
-  }
-  </script>
+  <link rel="stylesheet" href="css/premium-pass.css">
 </head>
 <body>
   <div class="grain" aria-hidden="true"></div>
@@ -99,11 +97,6 @@
     </main>
   </div>
 
-  <!-- GSAP + ScrollTrigger (must load before app.js) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
-  <!-- Lenis smooth scroll -->
-  <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.18/dist/lenis.min.js"></script>
   <script type="module" src="js/app.js"></script>
   <noscript>
     <div style="padding: 2rem; text-align: center; color: #c41e3a; font-family: sans-serif;">
@@ -111,35 +104,14 @@
     </div>
   </noscript>
 
-  <input type="file" id="saveFileInput" accept=".json" aria-label="Importar arquivo de save" style="display: none;">
-
   <!-- Fase 9: Drawer lateral para views secundárias -->
   <div class="drawer-backdrop" id="drawerBackdrop"></div>
-  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Painel lateral">
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Painel lateral" aria-hidden="true" inert>
     <div class="drawer-header">
       <h3 id="drawerTitle">Detalhes</h3>
       <button class="drawer-close" id="drawerCloseBtn" aria-label="Fechar painel">&times;</button>
     </div>
     <div class="drawer-body" id="drawerBody"></div>
   </aside>
-  <script>
-    document.getElementById('saveFileInput').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          try {
-            const saveData = JSON.parse(event.target.result);
-            localStorage.setItem('mmaManagerSave', JSON.stringify(saveData));
-            alert('Save carregado com sucesso!');
-            location.reload();
-          } catch (err) {
-            alert('Erro ao carregar save: arquivo inválido');
-          }
-        };
-        reader.readAsText(file);
-      }
-    });
-  </script>
 </body>
 </html>

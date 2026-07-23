@@ -15,6 +15,7 @@ import { COACH_SKILLS } from '../config/coach-config.js';
 import { CardCombatView } from '../views/card-combat-view.js';
 import { CardRewardService } from '../services/card-reward-service.js';
 import { TapeService } from '../services/tape-service.js';
+import { formatCombatDamage } from '../utils/helpers.js';
 
 export class CombatAdapter {
   constructor() {
@@ -24,6 +25,8 @@ export class CombatAdapter {
     this.metaProgressionService = null;
     this.interactive = true;
     this.isResolving = false;
+    this._timers = new Set();
+    this._disconnectObserver = null;
   }
 
   setContainer(container) {
@@ -312,6 +315,17 @@ export class CombatAdapter {
     const result = this.engine._buildResult();
     result.cornerTally = cornerTally;
 
+    // The arena gets a brief result projection before a reward or the
+    // fight-night hub replaces it. No outcome data is changed here.
+    if (interactive && this.container) {
+      const winnerSide = result.isDraw ? null : result.winnerId === result.fighterAId ? 'A' : 'B';
+      await this.view.playOutcome({
+        winnerSide,
+        isDraw: Boolean(result.isDraw),
+        method: result.method,
+      });
+    }
+
     // Post-fight card reward — only the player (side A) can earn a card,
     // and only on a win (loss/draw leaves rewardCard null). Title fights
     // hand out a fixed powerful card with no selection; regular fights let
@@ -366,6 +380,7 @@ export class CombatAdapter {
       );
     }
 
+    this._disposeInteractiveWork();
     return result;
   }
 
@@ -389,17 +404,24 @@ export class CombatAdapter {
       this.isResolving = false;
       state.isResolving = false;
       this._pendingAction = resolve;
+      this._watchContainerDisconnect(() => this._resolvePendingAction({ type: 'pass' }));
       if (this.container) this.view.update(this.container, state);
     });
+  }
+
+  _resolvePendingAction(action) {
+    if (!this._pendingAction) return;
+    const resolve = this._pendingAction;
+    this._pendingAction = null;
+    this._stopDisconnectWatch();
+    resolve(action);
   }
 
   _onPlayerCardSelected(cardId) {
     if (this._pendingAction && !this.isResolving) {
       this.isResolving = true;
       this.engine.state.isResolving = true;
-      const resolve = this._pendingAction;
-      this._pendingAction = null;
-      resolve({ type: 'card', cardId });
+      this._resolvePendingAction({ type: 'card', cardId });
     }
   }
 
@@ -407,9 +429,7 @@ export class CombatAdapter {
     if (this._pendingAction && !this.isResolving) {
       this.isResolving = true;
       this.engine.state.isResolving = true;
-      const resolve = this._pendingAction;
-      this._pendingAction = null;
-      resolve({ type: 'move', position });
+      this._resolvePendingAction({ type: 'move', position });
     }
   }
 
@@ -417,9 +437,7 @@ export class CombatAdapter {
     if (this._pendingAction && !this.isResolving) {
       this.isResolving = true;
       this.engine.state.isResolving = true;
-      const resolve = this._pendingAction;
-      this._pendingAction = null;
-      resolve({ type: 'pass' });
+      this._resolvePendingAction({ type: 'pass' });
     }
   }
 
@@ -442,10 +460,15 @@ export class CombatAdapter {
           </div>
         </div>
       `;
+      const finish = card => {
+        this._stopDisconnectWatch();
+        resolve(card);
+      };
+      this._watchContainerDisconnect(() => finish(options[0] || null));
       this.container.querySelectorAll('.reward-card').forEach(el => {
         el.addEventListener('click', () => {
           const idx = parseInt(el.dataset.index, 10);
-          resolve(options[idx]);
+          finish(options[idx]);
         });
       });
     });
@@ -480,8 +503,13 @@ export class CombatAdapter {
       `;
       const acceptBtn = this.container.querySelector('.corner-accept-btn');
       const declineBtn = this.container.querySelector('.corner-decline-btn');
-      acceptBtn.addEventListener('click', () => resolve(true));
-      declineBtn.addEventListener('click', () => resolve(false));
+      const finish = accepted => {
+        this._stopDisconnectWatch();
+        resolve(accepted);
+      };
+      this._watchContainerDisconnect(() => finish(false));
+      acceptBtn.addEventListener('click', () => finish(true));
+      declineBtn.addEventListener('click', () => finish(false));
     });
   }
 
@@ -636,7 +664,7 @@ export class CombatAdapter {
     el.textContent = text;
     el.classList.remove('hidden');
     // Brief flash, then clear
-    setTimeout(() => el.classList.add('hidden'), 1800);
+    this._schedule(() => el.classList.add('hidden'), 1800);
   }
 
   /**
@@ -657,7 +685,7 @@ export class CombatAdapter {
       fill.classList.remove('stamina-hit', 'stamina-hit-heavy');
       void fill.offsetWidth;
       fill.classList.add(heavy ? 'stamina-hit-heavy' : 'stamina-hit');
-      setTimeout(() => fill.classList.remove('stamina-hit', 'stamina-hit-heavy'), 450);
+      this._schedule(() => fill.classList.remove('stamina-hit', 'stamina-hit-heavy'), 450);
     };
     // damageA is damage dealt by A → B takes the hit
     if ((turnResult.damageA || 0) > 0) pulse(1, (turnResult.damageA || 0) >= 25);
@@ -668,7 +696,7 @@ export class CombatAdapter {
       header.classList.remove('combat-header-shake');
       void header.offsetWidth;
       header.classList.add('combat-header-shake');
-      setTimeout(() => header.classList.remove('combat-header-shake'), 400);
+      this._schedule(() => header.classList.remove('combat-header-shake'), 400);
     }
   }
 
@@ -679,12 +707,12 @@ export class CombatAdapter {
     const cardB = turnResult?.cardB || aiCard;
     if (cardA) actions.push({
       fighterId: state.fighterA.ref.id,
-      detail: `Você usou ${cardA.name}${turnResult?.damageA ? ` e causou ${turnResult.damageA} de dano` : ''}.`,
+      detail: `Você usou ${cardA.name}${turnResult?.damageA ? ` e causou ${formatCombatDamage(turnResult.damageA)} de dano` : ''}.`,
       type: cardA.type === 'takedown' ? 'takedown' : cardA.type === 'submission' ? 'submission' : 'strike',
     });
     if (cardB) actions.push({
       fighterId: state.fighterB.ref.id,
-      detail: `${state.fighterB.ref.name} usou ${cardB.name}${turnResult?.damageB ? ` e causou ${turnResult.damageB} de dano` : ''}.`,
+      detail: `${state.fighterB.ref.name} usou ${cardB.name}${turnResult?.damageB ? ` e causou ${formatCombatDamage(turnResult.damageB)} de dano` : ''}.`,
       type: cardB.type === 'takedown' ? 'takedown' : cardB.type === 'submission' ? 'submission' : 'strike',
     });
     if (!cardA && !cardB && moveSide && moveTo) {
@@ -712,6 +740,36 @@ export class CombatAdapter {
   }
 
   _delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise(resolve => this._schedule(resolve, ms));
+  }
+
+  _schedule(callback, delay) {
+    const timer = setTimeout(() => {
+      this._timers.delete(timer);
+      callback();
+    }, delay);
+    this._timers.add(timer);
+    return timer;
+  }
+
+  _watchContainerDisconnect(onDisconnect) {
+    this._stopDisconnectWatch();
+    if (!this.container || typeof MutationObserver === 'undefined' || typeof document === 'undefined') return;
+    this._disconnectObserver = new MutationObserver(() => {
+      if (!this.container?.isConnected) onDisconnect();
+    });
+    this._disconnectObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
+  _stopDisconnectWatch() {
+    this._disconnectObserver?.disconnect();
+    this._disconnectObserver = null;
+  }
+
+  _disposeInteractiveWork() {
+    this._stopDisconnectWatch();
+    this._timers.forEach(timer => clearTimeout(timer));
+    this._timers.clear();
+    this.view.dispose();
   }
 }

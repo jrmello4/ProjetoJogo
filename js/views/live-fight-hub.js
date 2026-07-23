@@ -121,10 +121,10 @@ export class LiveFightHubView {
                 ${r.injuries && r.injuries.length > 0 ? r.injuries.map(inj => `
                   <div style="border-left:3px solid var(--red);padding:0.5rem 0.75rem;margin-bottom:0.35rem;background:var(--mat-high);border-radius:var(--radius);font-size:0.85rem">
                     <div style="display:flex;justify-content:space-between;align-items:center">
-                      <span>🤕 ${inj.fighterName} sofreu <strong>lesão no ${inj.attr}</strong></span>
-                      <span style="color:var(--red-ink);font-size:0.75rem">-${inj.reduction}</span>
+                      <span>🤕 ${escapeHtml(inj.fighterName)} sofreu <strong>lesão no ${escapeHtml(inj.attr)}</strong></span>
+                      <span style="color:var(--red-ink);font-size:0.75rem">-${escapeHtml(inj.reduction)}</span>
                     </div>
-                    <div style="color:var(--text-muted);font-size:0.75rem">Atributo reduzido para ${inj.newVal} — afeta rounds seguintes</div>
+                    <div style="color:var(--text-muted);font-size:0.75rem">Atributo reduzido para ${escapeHtml(inj.newVal)} — afeta rounds seguintes</div>
                   </div>
                 `).join('') : ''}
               </div>
@@ -142,7 +142,7 @@ export class LiveFightHubView {
     return `
       <div class="live-beat" data-beat-type="${beat.type}" style="display:none;padding:0.35rem 0;${isSignificant ? 'font-weight:700' : ''}">
         <span style="margin-right:0.5rem">${icon}</span>
-        <span class="${isA ? '' : 'text-danger'}">${beat.detail}</span>
+        <span class="${isA ? '' : 'text-danger'}">${escapeHtml(beat.detail)}</span>
       </div>
     `;
   }
@@ -157,7 +157,7 @@ export class LiveFightHubView {
       return `
         <div style="border-left:3px solid ${successColor};padding:0.5rem 0.75rem;margin-bottom:0.35rem;background:var(--mat-high);border-radius:2px;font-size:0.85rem">
           <div style="display:flex;justify-content:space-between;align-items:center">
-            <span>${icon} <strong>${m.actorName}</strong> ${m.success ? 'acertou' : 'tentou'} <strong>${this._momentLabel(m.type)}</strong> ${m.success ? 'em' : 'contra'} <strong>${m.targetName}</strong></span>
+            <span>${icon} <strong>${escapeHtml(m.actorName)}</strong> ${m.success ? 'acertou' : 'tentou'} <strong>${this._momentLabel(m.type)}</strong> ${m.success ? 'em' : 'contra'} <strong>${escapeHtml(m.targetName)}</strong></span>
             <span style="color:${successColor};font-size:0.75rem">${m.success ? 'Sucesso' : 'Falha'}</span>
           </div>
         </div>`;

@@ -789,7 +789,8 @@ tbody tr:hover td { background: var(--bg-hover); }
 }
 
 .appearance-preview-wrap {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(184px, 0.78fr) minmax(0, 1.22fr);
   gap: 0.875rem;
   align-items: stretch;
   width: 100%;
@@ -807,7 +808,6 @@ tbody tr:hover td { background: var(--bg-hover); }
 }
 
 .appearance-identity {
-  flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -837,7 +837,8 @@ tbody tr:hover td { background: var(--bg-hover); }
 }
 
 .appearance-tabs {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.25rem;
   width: 100%;
   border-bottom: 1px solid var(--border);
@@ -846,7 +847,6 @@ tbody tr:hover td { background: var(--bg-hover); }
 }
 
 .appearance-tab {
-  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -901,9 +901,9 @@ tbody tr:hover td { background: var(--bg-hover); }
 .appearance-actions .btn { flex: 1; min-width: 7rem; }
 
 .appearance-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(92px, 0.75fr) minmax(0, 1.25fr);
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
   padding: 0.35rem 0;
   border-bottom: 1px solid var(--rule);
@@ -919,15 +919,17 @@ tbody tr:hover td { background: var(--bg-hover); }
 }
 
 .appearance-stepper {
-  display: flex;
+  display: grid;
+  grid-template-columns: 34px minmax(80px, 1fr) 34px;
   align-items: center;
   gap: 0.375rem;
+  width: 100%;
 }
 
 .appearance-value {
   font-size: 0.75rem;
-  min-width: 96px;
-  max-width: 120px;
+  min-width: 0;
+  max-width: none;
   text-align: center;
   color: var(--text-secondary);
   overflow: hidden;
@@ -940,8 +942,8 @@ tbody tr:hover td { background: var(--bg-hover); }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--chalk);
-  width: 26px;
-  height: 26px;
+  width: 34px;
+  height: 34px;
   line-height: 1;
   font-size: 0.875rem;
   cursor: pointer;
@@ -954,8 +956,8 @@ tbody tr:hover td { background: var(--bg-hover); }
   display: flex;
   gap: 0.3rem;
   flex-wrap: wrap;
-  justify-content: flex-end;
-  max-width: 70%;
+  justify-content: flex-start;
+  max-width: none;
 }
 
 .appearance-swatch {
@@ -994,13 +996,14 @@ tbody tr:hover td { background: var(--bg-hover); }
 .portrait--pixel { image-rendering: pixelated; }
 
 @media (max-width: 640px) {
-  .appearance-preview-wrap { flex-direction: column; align-items: center; }
+  .appearance-preview-wrap { grid-template-columns: 1fr; align-items: center; }
   .appearance-identity { width: 100%; }
-  .appearance-arrow { width: 34px; height: 34px; font-size: 1.05rem; }
+  .appearance-arrow { font-size: 1.05rem; }
   .appearance-swatch { width: 22px; height: 22px; }
   .appearance-row { padding: 0.45rem 0; }
   .appearance-controls { max-height: 260px; }
   .appearance-tab-label { display: none; }
+  .appearance-row { grid-template-columns: 1fr; align-items: start; }
 }
 
 /* Cosmético "Confete na Vitória" — peças criadas/animadas via GSAP em
@@ -2123,6 +2126,7 @@ tbody tr:hover td { background: var(--bg-hover); }
   background:
     linear-gradient(90deg, rgba(171, 25, 38, 0.08), transparent 26%),
     var(--mat);
+}
 @keyframes cardStrike {
   0% { transform: scale(1) rotate(0deg); box-shadow: var(--card-shadow); }
   35% { transform: scale(1.08) rotate(-3deg); box-shadow: 0 0 0 3px var(--red), var(--card-shadow-up); }

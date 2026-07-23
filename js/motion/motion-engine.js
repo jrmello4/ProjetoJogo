@@ -1,9 +1,8 @@
-// Lenis loaded via <script> tag in index.html
-const Lenis = window.Lenis;
+import Lenis from 'lenis';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
-// GSAP + ScrollTrigger loaded via <script> tags in index.html
-const gsap = window.gsap;
-const ScrollTrigger = window.ScrollTrigger;
+gsap.registerPlugin(ScrollTrigger);
 
 /**
  * Central motion hub — Lenis smooth scroll + GSAP ScrollTrigger.

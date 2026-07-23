@@ -49,10 +49,12 @@ O mundo é simulado por baixo: promoções controladas pela IA realizam os próp
 ## Como rodar
 
 ```bash
-node server.js 8341
+npm run dev
 ```
 
-Abra `http://localhost:8341`.
+Abra a URL exibida pelo Vite (normalmente `http://127.0.0.1:5173`). Não use
+Live Server: o jogo importa dependências locais e precisa passar pelo Vite no
+desenvolvimento.
 
 `server.js` envia `Cache-Control: no-store` em tudo — sem isso (ex.: `python -m
 http.server`), o navegador cacheia módulos ES por heurística e um reload normal

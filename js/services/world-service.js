@@ -32,6 +32,12 @@ import {
   absWeekToDate,
 } from '../config/game-config.js';
 
+export const WORLD_HISTORY_LIMITS = Object.freeze({
+  completedEvents: 520,
+  playerEvents: 120,
+  standalonePlayerFights: 120,
+});
+
 // Motor do mundo vivo: cada promoção de IA agenda e realiza os próprios
 // eventos. Lutas do jogador entram nos cards via ofertas aceitas.
 export class WorldService {
@@ -136,7 +142,6 @@ export class WorldService {
 
     const promotions = await this.getPromotions();
     const playerEvents = [];
-    const aiHeadlines = [];
 
     for (const promo of promotions) {
       if (absWeekNow < promo.nextEventAbsWeek) continue;
@@ -146,17 +151,18 @@ export class WorldService {
 
       if (outcome.playerResults.length > 0) {
         playerEvents.push(outcome);
-      } else {
-        aiHeadlines.push(...this._buildEventHeadlines(outcome));
       }
     }
 
-    for (const headline of aiHeadlines.slice(0, 3)) {
-      await this.notifService.add('info', 'Giro do MMA', headline);
-    }
+    // Resultados de IA continuam alimentando o mundo/rankings, mas não viram
+    // uma pilha semanal de manchetes genéricas. Notificação deve ser algo que
+    // exige ação ou diz respeito diretamente à carreira do jogador.
 
     await this._refillFreeAgents();
     await this._processYearEnd(absWeekNow, playerFighterId, startedAt);
+    if (absWeekNow % 26 === 0) {
+      await this._pruneWorldHistory(playerFighterId);
+    }
     // G1: verificar cinturões interinos (toda semana)
     await this._checkInterimTitles(absWeekNow, promotions);
     await this._evolveAIFighters(absWeekNow, playerFighterId);
@@ -168,6 +174,56 @@ export class WorldService {
     }
 
     return { playerEvents };
+  }
+
+  async _pruneWorldHistory(playerFighterId) {
+    const events = await this.db.getAll('events');
+    const newestFirst = (left, right) => {
+      const weekDelta = (right.absWeek || 0) - (left.absWeek || 0);
+      if (weekDelta !== 0) return weekDelta;
+      return Date.parse(right.date || 0) - Date.parse(left.date || 0);
+    };
+    const sortedEvents = [...events].sort(newestFirst);
+    const playerEvents = sortedEvents.filter(event =>
+      (event.results || []).some(result =>
+        result.fighterAId === playerFighterId || result.fighterBId === playerFighterId
+      )
+    );
+    const keepEventIds = new Set([
+      ...sortedEvents.slice(0, WORLD_HISTORY_LIMITS.completedEvents),
+      ...playerEvents.slice(0, WORLD_HISTORY_LIMITS.playerEvents),
+    ].map(event => event.id));
+
+    for (const event of events) {
+      if (!keepEventIds.has(event.id)) await this.db.delete('events', event.id);
+    }
+
+    const fights = await this.db.getAll('fights');
+    const playerFightIds = new Set(fights
+      .filter(fight =>
+        fight.fighterId === playerFighterId
+        || fight.fighterAId === playerFighterId
+        || fight.fighterBId === playerFighterId
+      )
+      .sort((a, b) => {
+        const weekDelta = (b.absWeek || 0) - (a.absWeek || 0);
+        return weekDelta || Date.parse(b.date || 0) - Date.parse(a.date || 0);
+      })
+      .slice(0, WORLD_HISTORY_LIMITS.standalonePlayerFights)
+      .map(fight => fight.id));
+
+    for (const fight of fights) {
+      if (!keepEventIds.has(fight.eventId) && !playerFightIds.has(fight.id)) {
+        await this.db.delete('fights', fight.id);
+      }
+    }
+
+    return {
+      eventsRemoved: events.length - keepEventIds.size,
+      fightsRemoved: fights.filter(fight =>
+        !keepEventIds.has(fight.eventId) && !playerFightIds.has(fight.id)
+      ).length,
+    };
   }
 
   async _runEvent(promo, absWeekNow, startedAt, playerFighterId, cornerHooks = null) {

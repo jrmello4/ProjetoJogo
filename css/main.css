@@ -2007,6 +2007,18 @@ tbody tr:hover td { background: var(--bg-hover); }
     var(--canvas);
 }
 
+/* Corner offer modal: fixed-position centering on viewport so it's
+   always visible without scrolling, regardless of container height. */
+.card-fight-host.corner-active .corner-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  width: min(90vw, 520px);
+  z-index: 12000;
+}
+
 .action-bar {
   display: flex;
   gap: 8px;

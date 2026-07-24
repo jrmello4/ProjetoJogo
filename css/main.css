@@ -2165,6 +2165,10 @@ tbody tr:hover td { background: var(--bg-hover); }
   background: var(--canvas);
 }
 
+/* Trava o scroll do body durante a luta — senão a barra de rolagem do
+   conteúdo atrás deixa uma faixa de ~15px na direita do overlay. */
+body.fight-active { overflow: hidden; }
+
 /* Palco de fundo — preenche tudo (sobrescreve o box com min-height do stage) */
 .combat-fs-arena { position: absolute; inset: 0; z-index: 0; }
 .combat-fs-arena .combat-stage {
@@ -2175,6 +2179,27 @@ tbody tr:hover td { background: var(--bg-hover); }
   margin: 0;
   border: 0;
   border-radius: 0;
+}
+
+/* Ring/lutadores no full-bleed: o layout do stage era pra um box de ~280px.
+   Ancora o ring no terço superior-médio (acima do leque) e amplia os sprites
+   pra preencher a arena, em vez de ficarem pequenos no topo. */
+.combat-fs-arena .cs-ring {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: 34%;
+  min-height: 0;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 0 clamp(4%, 8vw, 10%);
+}
+.combat-fs-arena .cs-sprite-frame { height: clamp(180px, 34vh, 330px); }
+.combat-fs-arena .cs-center { align-self: center; padding-bottom: 4vh; }
+.combat-fs-arena .cs-vs-mark { top: 40%; }
+
+@media (max-width: 720px) {
+  .combat-fs-arena .cs-ring { bottom: 34%; padding: 0 6%; }
+  .combat-fs-arena .cs-sprite-frame { height: clamp(130px, 26vh, 220px); }
 }
 
 /* HUD sobreposto no topo — nunca some da vista */

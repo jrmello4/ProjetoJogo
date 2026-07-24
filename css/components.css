@@ -1576,8 +1576,11 @@
 .char-forge-hint { font-family: var(--font-mono); font-size: 0.66rem; color: var(--text-muted); }
 .char-forge-start { min-width: 12rem; }
 
-/* Editor de aparência encaixa raso dentro da aba (preview próprio desligado) */
+/* Editor de aparência encaixa raso dentro da aba (preview próprio desligado).
+   Anula o max-height/scroll do design antigo de modal — os controles enchem
+   o painel em vez de rolar numa caixinha e deixar espaço morto embaixo. */
 .char-forge-body .appearance-editor { display: flex; flex-direction: column; gap: 0.75rem; }
+.char-forge-body .appearance-controls { max-height: none; overflow: visible; }
 
 /* ---- Responsivo: empilha, retrato fixo no topo. Palco enxuto (chips fora,
    só no desktop) pra devolver altura ao painel e evitar scroll interno. ---- */

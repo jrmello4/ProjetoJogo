@@ -2150,3 +2150,174 @@ tbody tr:hover td { background: var(--bg-hover); }
   20% { opacity: 1; top: -2px; }
   100% { opacity: 0; top: -26px; }
 }
+
+/* ==========================================================================
+   Combat — full-screen fan (takeover, sem scroll)
+   Palco preenche o fundo; HP/stamina/round/posição sobrepostos; 5 cartas em
+   leque no rodapé. Toque levanta a carta (detalhe cheio), "Usar" confirma.
+   ========================================================================== */
+
+.combat-fs {
+  position: fixed;
+  inset: 0;
+  z-index: 11000;
+  overflow: hidden;
+  background: var(--canvas);
+}
+
+/* Palco de fundo — preenche tudo (sobrescreve o box com min-height do stage) */
+.combat-fs-arena { position: absolute; inset: 0; z-index: 0; }
+.combat-fs-arena .combat-stage {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+/* HUD sobreposto no topo — nunca some da vista */
+.combat-fs-hud {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
+  gap: 10px;
+  padding: 12px 16px;
+  background: linear-gradient(180deg, rgba(10,8,7,0.72), transparent);
+  pointer-events: none;
+}
+.combat-fs-hud .stamina-display {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  gap: 14px;
+}
+.combat-fs-hud .stamina-bar label { color: var(--chalk); text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
+.combat-fs-hud .stamina-bar:last-child label { text-align: right; }
+.combat-fs-hud .stamina-fill { box-shadow: 0 1px 3px rgba(0,0,0,0.5); }
+.combat-fs-hud .round-display {
+  grid-column: 2; grid-row: 2;
+  font-family: var(--font-mono);
+  font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--chalk);
+  background: rgba(0,0,0,0.5);
+  border: 1px solid var(--border-light);
+  padding: 4px 14px; border-radius: 999px;
+  justify-self: center;
+}
+.combat-fs-hud .position-tracker { grid-column: 1 / -1; grid-row: 3; }
+.combat-fs-hud .position-tracker-inner {
+  display: inline-flex; margin: 0 auto; background: rgba(0,0,0,0.4);
+  border-top: 0; padding: 4px 10px; gap: 10px;
+}
+
+/* Ações (passar/mover) + log — canto, fora do leque */
+.combat-fs-controls {
+  position: absolute;
+  top: 84px; right: 14px;
+  z-index: 20;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  max-width: 44vw;
+}
+.combat-fs-controls .action-bar { justify-content: flex-end; }
+.combat-fs-controls .turn-log {
+  max-height: 132px; max-width: 320px;
+  background: rgba(10,8,7,0.55);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  backdrop-filter: blur(2px);
+}
+.combat-fs-controls .turn-log-title { color: var(--text-secondary); font-family: var(--font-mono); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.combat-fs-controls .turn-log-entry { color: var(--chalk); border-color: rgba(243,239,233,0.08); }
+
+/* Resultado do turno — faixa central */
+.combat-fs .turn-result {
+  position: absolute; top: 46%; left: 50%; transform: translate(-50%,-50%);
+  z-index: 25; background: rgba(0,0,0,0.6); color: var(--chalk);
+  padding: 8px 18px; border-radius: var(--radius); border-top: 2px solid var(--red);
+}
+
+/* ---- Leque de cartas no rodapé ---- */
+.card-fan {
+  position: absolute;
+  left: 50%; bottom: 0;
+  transform-origin: bottom center;
+  transform: translateX(-50%) scale(var(--fan-fit, 1));
+  z-index: 15;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  padding-bottom: 6px;
+  --fan-spread: 7deg;
+  --fan-scale: 0.64;
+  --fan-overlap: 30px;
+  --fan-fit: 1;
+  pointer-events: none;
+}
+.card-fan .card-item { pointer-events: auto; }
+
+/* Cada carta gira em leque a partir da base; cantos sobem sozinhos pela
+   transform-origin. Índice/total vêm inline (--card-index / --card-total). */
+.card-fan .card-item {
+  --n: var(--card-total, 5);
+  --mid: calc((var(--n) - 1) / 2);
+  --ang: calc((var(--card-index) - var(--mid)) * var(--fan-spread));
+  transform-origin: bottom center;
+  transform: rotate(var(--ang)) scale(var(--fan-scale));
+  margin: 0 calc(-1 * var(--fan-overlap));
+  transition: transform 0.16s var(--ease-out-quint, ease-out), filter 0.16s ease, opacity 0.16s ease;
+  will-change: transform;
+}
+.card-fan .card-item:hover:not(.is-selected):not(.disabled) {
+  transform: translateY(-6%) rotate(var(--ang)) scale(calc(var(--fan-scale) + 0.06));
+  z-index: 30;
+}
+.card-fan .card-item.is-selected {
+  transform: translateY(-16%) rotate(0deg) scale(1);
+  z-index: 40;
+  box-shadow: 0 18px 44px rgba(0,0,0,0.6), 0 0 0 2px var(--red);
+  margin: 0 8px;
+}
+.card-fan .card-item.is-dimmed { opacity: 0.5; filter: saturate(0.7) brightness(0.85); }
+.card-fan .card-item.disabled { opacity: 0.42; }
+.card-fan .card-item.is-playing { transform: translateY(-22%) rotate(0deg) scale(1.03); }
+
+/* ---- Barra de confirmar (aparece ao levantar carta) ---- */
+.card-confirm {
+  position: absolute;
+  left: 50%; bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 45;
+  display: flex; gap: 8px;
+}
+.card-confirm[hidden] { display: none; }
+.btn-confirm-use, .btn-confirm-cancel {
+  font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 800;
+  padding: 11px 20px; border-radius: var(--radius); cursor: pointer; border: 0;
+  box-shadow: var(--shadow-lg);
+}
+.btn-confirm-use { background: var(--red); color: #fff; }
+.btn-confirm-use:hover { background: var(--red-bright); }
+.btn-confirm-cancel { background: var(--mat-high); color: var(--chalk); border: 1px solid var(--border-light); }
+
+/* Mobile: encolhe o leque inteiro pra caber (--fan-fit escala o container,
+   já que scale por carta não reduz o footprint de layout). */
+@media (max-width: 720px) {
+  .card-fan { --fan-overlap: 38px; --fan-spread: 8deg; --fan-fit: 0.66; }
+  .combat-fs-controls { top: 76px; right: 8px; max-width: 60vw; }
+  .combat-fs-controls .turn-log { max-height: 84px; }
+}
+
+/* Telas médias (tablet retrato): encolhe um pouco */
+@media (max-width: 1024px) and (min-width: 721px) {
+  .card-fan { --fan-fit: 0.82; }
+}
+
+/* Alturas muito curtas (paisagem): encolhe o leque pra não comer o palco */
+@media (max-height: 620px) {
+  .card-fan { --fan-fit: 0.6; }
+}

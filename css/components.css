@@ -1447,104 +1447,164 @@
 }
 
 /* ==========================================================================
-   Character creation wizard (pre-career) — never reuse .onboarding-step
+   Character creation — full-screen forge (takeover, sem scroll de página)
+   Retrato unificado fixo à esquerda + opções em abas à direita. Substitui o
+   antigo wizard modal. Reusa .difficulty-*, .form-*, .char-create-chip/-error.
    ========================================================================== */
 
-.modal--character-create {
+.char-forge-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 11000;
+  background:
+    radial-gradient(1200px 600px at 82% -8%, var(--accent-subtle), transparent 60%),
+    var(--canvas);
+  overflow: hidden;
+}
+
+.char-forge {
+  display: grid;
+  grid-template-columns: minmax(280px, 34%) 1fr;
+  height: 100dvh;
+  width: 100vw;
+}
+
+/* ---- Palco esquerdo: retrato ao vivo, sempre na vista ---- */
+.char-forge-stage {
+  border-right: 1px solid var(--border);
+  padding: clamp(1rem, 2.5vh, 2rem) clamp(1rem, 2vw, 1.75rem);
   display: flex;
   flex-direction: column;
-  max-height: min(92vh, 900px);
-}
-
-.char-create-progress {
-  display: flex;
-  gap: 0.25rem;
-  margin: 0.75rem 0 0.5rem;
-  align-items: center;
-}
-
-.char-create-step {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.25rem;
-  background: transparent;
-  border: none;
-  font: inherit;
-  color: var(--ash);
-  cursor: default;
-  min-width: 0;
-}
-
-.char-create-step.is-clickable { cursor: pointer; }
-.char-create-step.is-clickable:hover .char-create-step-num {
-  border-color: var(--text-secondary);
-}
-
-.char-create-step-num {
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  background: var(--canvas);
-}
-
-.char-create-step.is-active .char-create-step-num {
-  border-color: var(--accent);
-  color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
-}
-
-.char-create-step.is-done .char-create-step-num {
-  background: var(--money, #2d8a4e);
-  border-color: var(--money, #2d8a4e);
-  color: #fff;
-}
-
-.char-create-step-label {
-  font-family: var(--font-mono);
-  font-size: 0.5625rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  line-height: 1.2;
-  text-align: center;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.char-create-lead {
-  color: var(--text-secondary);
-  margin: 0.5rem 0 0.75rem;
-}
-
-.char-create-body {
-  overflow-y: auto;
-  flex: 1;
+  gap: 0.9rem;
   min-height: 0;
-  padding-right: 0.15rem;
+  background: linear-gradient(180deg, var(--accent-subtle), transparent 42%);
 }
 
-.char-create-actions {
+.char-forge-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+}
+
+.char-forge-portrait {
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 12px;
+  box-shadow: var(--shadow-lg);
+  line-height: 0;
+}
+.char-forge-portrait svg,
+.char-forge-portrait img { display: block; width: clamp(160px, 22vh, 240px); height: auto; }
+
+.char-forge-name {
+  font-family: var(--font-display);
+  font-variation-settings: 'wght' 800, 'wdth' 90;
+  text-transform: uppercase;
+  font-size: clamp(1.25rem, 2.4vw, 1.9rem);
+  line-height: 1;
+  text-align: center;
+  color: var(--chalk);
+}
+
+.char-forge-chips { justify-content: center; margin-top: 0; }
+
+/* ---- Painel direito: opções em abas ---- */
+.char-forge-panel {
   display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  margin-top: 1rem;
-  position: sticky;
-  bottom: 0;
-  padding-top: 0.75rem;
-  background: var(--panel, var(--surface, var(--bg)));
+  flex-direction: column;
+  min-height: 0;
+  padding: clamp(1rem, 2.5vh, 1.75rem) clamp(1rem, 2.4vw, 2rem);
+  gap: 0.75rem;
 }
 
-.char-create-actions .btn { flex: 1; min-width: 7rem; }
+.char-forge-head { flex: 0 0 auto; }
+.char-forge-head h2 {
+  font-family: var(--font-display);
+  font-variation-settings: 'wght' 800, 'wdth' 92;
+  text-transform: uppercase;
+  font-size: clamp(1.4rem, 2.6vw, 2rem);
+  color: var(--chalk);
+  margin-bottom: 0.75rem;
+}
+
+.char-forge-tabs { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.char-forge-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font: inherit;
+  transition: var(--transition);
+}
+.char-forge-tab:hover { color: var(--text-secondary); border-color: var(--border-light); }
+.char-forge-tab.is-active { color: var(--chalk); border-color: var(--accent); background: var(--accent-subtle); }
+.char-forge-tab-ic { font-size: 1rem; }
+.char-forge-tab-lb {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.char-forge-lead { flex: 0 0 auto; color: var(--text-secondary); font-size: 0.85rem; margin: 0; }
+
+.char-forge-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;      /* contido no painel — o palco/retrato nunca sai da vista */
+}
+
+.char-forge-foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.85rem;
+}
+.char-forge-hint { font-family: var(--font-mono); font-size: 0.66rem; color: var(--text-muted); }
+.char-forge-start { min-width: 12rem; }
+
+/* Editor de aparência encaixa raso dentro da aba (preview próprio desligado) */
+.char-forge-body .appearance-editor { display: flex; flex-direction: column; gap: 0.75rem; }
+
+/* ---- Responsivo: empilha, retrato fixo no topo. Palco enxuto (chips fora,
+   só no desktop) pra devolver altura ao painel e evitar scroll interno. ---- */
+@media (max-width: 860px) {
+  .char-forge { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .char-forge-stage {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0.55rem 0.9rem;
+    gap: 0.75rem;
+  }
+  .char-forge-kicker { display: none; }
+  .char-forge-portrait { padding: 5px; flex: 0 0 auto; }
+  .char-forge-portrait svg, .char-forge-portrait img { width: clamp(64px, 14vw, 92px); }
+  .char-forge-name { font-size: 1.1rem; text-align: left; }
+  .char-forge-chips { display: none; }          /* resumo é secundário no celular */
+  .char-forge-panel { padding: 0.7rem 1rem 0.85rem; gap: 0.5rem; }
+  .char-forge-head h2 { display: none; }          /* título ocupa altura preciosa */
+  /* Opções mais compactas pra caber sem rolar */
+  .char-forge-body .difficulty-option { padding: 0.5rem 0.6rem; }
+  .char-forge-foot { padding-top: 0.6rem; }
+  .char-forge-hint { display: none; }
+  .char-forge-start { flex: 1; min-width: 0; }
+}
 
 .char-create-error {
   color: var(--danger, #e04);

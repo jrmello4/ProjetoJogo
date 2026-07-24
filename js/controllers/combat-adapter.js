@@ -488,6 +488,7 @@ export class CombatAdapter {
   // from inside them. Resolves true on accept, false on decline.
   _showCornerOffer(skillEntry) {
     return new Promise(resolve => {
+      this.container.classList.add('corner-active');
       this.container.innerHTML = `
         <div class="corner-modal">
           <h2>Conselho do Córner</h2>
@@ -505,6 +506,7 @@ export class CombatAdapter {
       const declineBtn = this.container.querySelector('.corner-decline-btn');
       const finish = accepted => {
         this._stopDisconnectWatch();
+        this.container.classList.remove('corner-active');
         resolve(accepted);
       };
       this._watchContainerDisconnect(() => finish(false));

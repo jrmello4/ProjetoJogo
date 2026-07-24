@@ -1232,12 +1232,24 @@ class App {
         const intro = EventsView.renderCornerFightIntro(fighter, opponent, promo.name);
         await LayoutView.render(intro);
         await new Promise(r => setTimeout(r, 800));
-        await LayoutView.render('<div id="fight-container" class="card-fight-host"></div>');
-        return document.getElementById('fight-container');
+        // Host full-screen ancorado no body: a área de conteúdo (#mainContent)
+        // recebe transform da animação de página, que prenderia o position:fixed
+        // do combate dentro dela (não cobriria sidebar/HUD). No body ele escapa.
+        document.getElementById('fight-container')?.remove();
+        const host = document.createElement('div');
+        host.id = 'fight-container';
+        host.className = 'card-fight-host';
+        document.body.appendChild(host);
+        document.body.classList.add('fight-active');
+        return host;
       },
     };
 
     const summary = await this.game.processWeek(cornerHooks);
+    // Combate acabou (runFight resolveu dentro de processWeek) — remove o host
+    // full-screen do body pra revelar o resto da UI (LiveFightHub etc.).
+    document.getElementById('fight-container')?.remove();
+    document.body.classList.remove('fight-active');
     const { world, offersCreated, economy, milestonesUnlocked, now } = summary;
 
     // §D.3 — checkPostFight (criação/derivação de tipo de rivalidade) agora

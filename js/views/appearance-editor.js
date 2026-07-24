@@ -9,7 +9,9 @@ import { e } from '../utils/helpers.js';
 export class AppearanceEditor {
   /**
    * @param {object} appearance — mutado no lugar
-   * @param {{ group?: string, context?: object, fighter?: object }} [ui]
+   * @param {{ group?: string, context?: object, fighter?: object, preview?: boolean }} [ui]
+   *   preview:false omite o bloco de preview embutido — usado quando um
+   *   retrato externo unificado (ex.: criação full-screen) já mostra o busto.
    */
   static render(appearance, ui = {}) {
     const activeGroup = ui.group || 'rosto';
@@ -19,9 +21,11 @@ export class AppearanceEditor {
     const identity = ui.fighter
       ? VisualIdentityService.describeIdentity({ ...ui.fighter, appearance })
       : null;
+    const showPreview = ui.preview !== false;
 
     return `
       <div class="appearance-editor" data-active-group="${e(activeGroup)}">
+        ${showPreview ? `
         <div class="appearance-preview-wrap">
           <div class="appearance-preview appearance-preview--studio">
             <span class="appearance-preview-kicker">FICHA DO LUTADOR</span>
@@ -40,7 +44,7 @@ export class AppearanceEditor {
             <div class="appearance-identity-line"><span>Estilo</span> ${e(desc.style)}</div>
             <div class="appearance-identity-line"><span>Marcas</span> ${e(desc.marks)}</div>
           </div>
-        </div>
+        </div>` : ''}
 
         <div class="appearance-tabs" role="tablist" aria-label="Categorias de aparência">
           ${APPEARANCE_GROUPS.map(g => `
@@ -99,7 +103,9 @@ export class AppearanceEditor {
   /**
    * @param {HTMLElement} root
    * @param {object} state — mutado
-   * @param {{ context?: object }} [opts] — context alimenta "Visual de atleta"
+   * @param {{ context?: object, preview?: boolean, onChange?: (state:object)=>void }} [opts]
+   *   context alimenta "Visual de atleta"; preview:false espelha render sem
+   *   busto embutido; onChange dispara após cada mudança (retrato externo).
    */
   static wire(root, state, opts = {}) {
     const editor = root.querySelector('.appearance-editor');
@@ -112,6 +118,7 @@ export class AppearanceEditor {
         group: activeGroup,
         fighter: opts.fighter,
         context: opts.context,
+        preview: opts.preview,
       });
       const preview = root.querySelector('.appearance-preview--studio');
       preview?.classList.add('is-changing');
@@ -121,6 +128,7 @@ export class AppearanceEditor {
         root._appearancePreviewTimer = null;
       }, 220);
       AppearanceEditor.wire(root, state, opts);
+      opts.onChange?.(state);
     };
 
     const tabs = [...editor.querySelectorAll('.appearance-tab')];

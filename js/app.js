@@ -260,15 +260,6 @@ class App {
   // Shell + draft em memória; um único createPlayerFighter no Start.
   // Não confundir com ONBOARDING_STEPS (pós-carreira no dashboard).
 
-  static get CHAR_CREATE_STEPS() {
-    return [
-      { id: 1, short: 'Identidade', lead: 'Antes do primeiro round, o mundo só vê um rosto e um nome. Quem entra no octógono?' },
-      { id: 2, short: 'Estilo', lead: 'Todo lutador carrega uma escola e um jeito de apertar o gatilho. Qual é o seu?' },
-      { id: 3, short: 'Corner', lead: 'Ninguém sobe sozinho. Escolha onde treina e quem negocia por você.' },
-      { id: 4, short: 'Jornada', lead: 'Última porta antes da carreira. Quanto risco você aguenta — e sob quais regras?' },
-    ];
-  }
-
   static get CHAR_CREATE_WEIGHT_LABELS() {
     return {
       Flyweight: 'Peso Mosca',
@@ -293,8 +284,7 @@ class App {
 
     const ctx = { academies, managers, hasCompletedCareer };
     const session = {
-      step: 1,
-      maxReachedStep: 1,
+      activeTab: 'identidade',
       draft: {
         name: '',
         appearance: PortraitService.contextualAppearance({
@@ -313,122 +303,106 @@ class App {
       },
     };
 
+    // Full-screen takeover (overlay fixo cobre a sidebar): retrato fixo à
+    // esquerda + abas de opções à direita. Sem scroll de página, sem wizard
+    // linear — navegação livre, retrato unificado atualiza ao vivo.
+    const tabs = App.CC_TABS;
     const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
+    modal.className = 'char-forge-overlay';
     modal.id = 'characterCreationModal';
     modal.innerHTML = `
-      <div class="modal modal--character-create" style="max-width:640px">
-        <div class="modal-header">
-          <h3 id="charCreateTitle">Crie seu Lutador</h3>
-          <span class="char-create-step-meta text-xs text-muted" id="charCreateStepMeta" aria-live="polite">Passo 1 de 4</span>
-        </div>
-        <nav class="char-create-progress" id="charCreateProgress" aria-label="Progresso da criação"></nav>
-        <p class="char-create-lead text-sm" id="charCreateLead"></p>
-        <div id="charCreateError" class="char-create-error" role="alert" hidden></div>
-        <div class="char-create-body" id="charCreateBody" data-step="1"></div>
-        <div class="modal-actions char-create-actions">
-          <button type="button" class="btn btn-secondary" id="charCreateBack" hidden>Voltar</button>
-          <button type="button" class="btn btn-primary" id="charCreateNext">Próximo</button>
-          <button type="button" class="btn btn-primary" id="characterCreationStartBtn" hidden>Começar carreira</button>
-        </div>
+      <div class="char-forge">
+        <aside class="char-forge-stage">
+          <span class="char-forge-kicker">Ficha do Lutador</span>
+          <div class="char-forge-portrait" id="ccPortrait">${PortraitService.render(session.draft.appearance, { size: 240 })}</div>
+          <div class="char-forge-name" id="ccName">Novo Lutador</div>
+          <div class="char-forge-chips char-create-summary" id="ccChips"></div>
+        </aside>
+        <section class="char-forge-panel">
+          <header class="char-forge-head">
+            <h2>Crie seu Lutador</h2>
+            <nav class="char-forge-tabs" id="ccTabs" role="tablist" aria-label="Etapas da criação">
+              ${tabs.map(t => `
+                <button type="button" role="tab" class="char-forge-tab" data-cc-tab="${t.id}" aria-selected="false">
+                  <span class="char-forge-tab-ic" aria-hidden="true">${t.icon}</span>
+                  <span class="char-forge-tab-lb">${t.label}</span>
+                </button>`).join('')}
+            </nav>
+          </header>
+          <p class="char-forge-lead" id="ccLead"></p>
+          <div class="char-forge-error char-create-error" id="ccError" role="alert" hidden></div>
+          <div class="char-forge-body" id="ccBody"></div>
+          <footer class="char-forge-foot">
+            <span class="char-forge-hint">Navegue livre pelas abas — o retrato atualiza na hora.</span>
+            <button type="button" class="btn btn-primary char-forge-start" id="ccStart">Começar carreira ›</button>
+          </footer>
+        </section>
       </div>
     `;
     document.body.appendChild(modal);
 
-    const backBtn = modal.querySelector('#charCreateBack');
-    const nextBtn = modal.querySelector('#charCreateNext');
-    const startBtn = modal.querySelector('#characterCreationStartBtn');
-
-    const goToStep = (target) => {
-      this._syncCharCreateDraft(modal, session, session.step);
-      session.step = target;
-      this._clearCharCreateError(modal);
-      this._renderCharCreateStep(modal, session, ctx);
-      this._bindCharCreateStepControls(modal, session, ctx);
-    };
-
-    backBtn.addEventListener('click', () => {
-      if (session.step <= 1) return;
-      goToStep(session.step - 1);
-    });
-
-    nextBtn.addEventListener('click', () => {
-      this._syncCharCreateDraft(modal, session, session.step);
-      const result = validateCharCreateStep(session.draft, session.step, ctx);
-      if (!result.ok) {
-        this._showCharCreateError(modal, result);
-        return;
-      }
-      this._clearCharCreateError(modal);
-      const next = Math.min(4, session.step + 1);
-      session.step = next;
-      session.maxReachedStep = Math.max(session.maxReachedStep, next);
-      this._renderCharCreateStep(modal, session, ctx);
-      this._bindCharCreateStepControls(modal, session, ctx);
-    });
-
-    startBtn.addEventListener('click', async () => {
-      this._syncCharCreateDraft(modal, session, session.step);
-      // Re-checa unlock HoF fresco no commit (DOM pode estar stale vs progressão)
-      ctx.hasCompletedCareer = await HallOfFame.hasCompletedCareer(this.game.db);
-      const result = validateCharCreateStep(session.draft, 'all', ctx);
-      if (!result.ok) {
-        this._showCharCreateError(modal, result);
-        return;
-      }
-
-      startBtn.disabled = true;
-      backBtn.disabled = true;
-      nextBtn.disabled = true;
-      this._clearCharCreateError(modal);
-
-      try {
-        const name = sanitizePlayerName(session.draft.name, { fallback: '' });
-        await this.game.createPlayerFighter({
-          name,
-          weightClass: session.draft.weightClass,
-          archetype: session.draft.archetype,
-          origin: session.draft.origin,
-          difficultyId: session.draft.difficultyId,
-          academyId: session.draft.academyId,
-          managerId: session.draft.managerId,
-          challengeMode: session.draft.challengeMode || null,
-          appearance: { ...session.draft.appearance },
-        });
-
-        localStorage.setItem('characterCreationDone', '1');
-        LayoutView.closeModal(modal);
-        this.notificationService.add('success', 'Carreira Iniciada', `${name} deu o primeiro passo rumo à elite mundial.`);
-        this.navigateTo('dashboard');
-        setTimeout(() => this._showTutorial(), 600);
-      } catch (err) {
-        console.error('Falha ao criar lutador:', err);
-        this._showCharCreateError(modal, {
-          ok: false,
-          message: 'Não foi possível iniciar a carreira. Tente de novo.',
-        });
-        startBtn.disabled = false;
-        backBtn.disabled = false;
-        nextBtn.disabled = false;
-        this._updateCharCreateNav(modal, session);
-      }
-    });
-
-    // Progresso: jumps só para steps já alcançados
-    modal.querySelector('#charCreateProgress').addEventListener('click', (ev) => {
-      const btn = ev.target.closest('[data-char-step]');
+    modal.querySelector('#ccTabs').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('[data-cc-tab]');
       if (!btn) return;
-      const target = Number(btn.dataset.charStep);
-      if (!target || target > session.maxReachedStep || target === session.step) return;
-      goToStep(target);
+      session.activeTab = btn.dataset.ccTab;
+      this._clearCharCreateError(modal);
+      this._ccRenderTab(modal, session, ctx);
     });
 
-    this._renderCharCreateStep(modal, session, ctx);
-    this._bindCharCreateStepControls(modal, session, ctx);
+    modal.querySelector('#ccStart').addEventListener('click', () => this._ccStart(modal, session, ctx));
+
+    this._ccRenderTab(modal, session, ctx);
+    this._ccUpdateStage(modal, session, ctx);
+  }
+
+  async _ccStart(modal, session, ctx) {
+    // Re-checa unlock HoF fresco no commit (DOM pode estar stale vs progressão)
+    ctx.hasCompletedCareer = await HallOfFame.hasCompletedCareer(this.game.db);
+    const result = validateCharCreateStep(session.draft, 'all', ctx);
+    if (!result.ok) {
+      // Pula pra aba do campo que falhou e mostra o erro lá
+      const tab = App.CC_FIELD_TAB[result.field] || 'identidade';
+      session.activeTab = tab;
+      this._ccRenderTab(modal, session, ctx);
+      this._showCharCreateError(modal, result);
+      return;
+    }
+
+    const startBtn = modal.querySelector('#ccStart');
+    if (startBtn) startBtn.disabled = true;
+    this._clearCharCreateError(modal);
+
+    try {
+      const name = sanitizePlayerName(session.draft.name, { fallback: '' });
+      await this.game.createPlayerFighter({
+        name,
+        weightClass: session.draft.weightClass,
+        archetype: session.draft.archetype,
+        origin: session.draft.origin,
+        difficultyId: session.draft.difficultyId,
+        academyId: session.draft.academyId,
+        managerId: session.draft.managerId,
+        challengeMode: session.draft.challengeMode || null,
+        appearance: { ...session.draft.appearance },
+      });
+
+      localStorage.setItem('characterCreationDone', '1');
+      LayoutView.closeModal(modal);
+      this.notificationService.add('success', 'Carreira Iniciada', `${name} deu o primeiro passo rumo à elite mundial.`);
+      this.navigateTo('dashboard');
+      setTimeout(() => this._showTutorial(), 600);
+    } catch (err) {
+      console.error('Falha ao criar lutador:', err);
+      this._showCharCreateError(modal, {
+        ok: false,
+        message: 'Não foi possível iniciar a carreira. Tente de novo.',
+      });
+      if (startBtn) startBtn.disabled = false;
+    }
   }
 
   _showCharCreateError(modal, result) {
-    const el = modal.querySelector('#charCreateError');
+    const el = modal.querySelector('#ccError');
     if (!el) return;
     el.hidden = false;
     el.textContent = result.message || 'Verifique os campos.';
@@ -439,106 +413,71 @@ class App {
   }
 
   _clearCharCreateError(modal) {
-    const el = modal.querySelector('#charCreateError');
+    const el = modal.querySelector('#ccError');
     if (!el) return;
     el.hidden = true;
     el.textContent = '';
   }
 
-  _updateCharCreateNav(modal, session) {
-    const backBtn = modal.querySelector('#charCreateBack');
-    const nextBtn = modal.querySelector('#charCreateNext');
-    const startBtn = modal.querySelector('#characterCreationStartBtn');
-    const onLast = session.step >= 4;
-    if (backBtn) {
-      backBtn.hidden = session.step <= 1;
-      backBtn.disabled = false;
-    }
-    if (nextBtn) {
-      nextBtn.hidden = onLast;
-      nextBtn.disabled = false;
-    }
-    if (startBtn) {
-      startBtn.hidden = !onLast;
-      startBtn.disabled = false;
-    }
+  static get CC_TABS() {
+    return [
+      { id: 'identidade', label: 'Identidade', icon: '🪪', lead: 'Antes do primeiro round, o mundo só vê um rosto e um nome. Quem entra no octógono?' },
+      { id: 'aparencia',  label: 'Aparência',  icon: '🎨', lead: 'Desenhe o rosto que a torcida vai reconhecer — tudo muda no retrato ao vivo.' },
+      { id: 'estilo',     label: 'Estilo',     icon: '🥋', lead: 'Toda escola aperta o gatilho de um jeito. Qual é o seu?' },
+      { id: 'equipe',     label: 'Equipe',     icon: '🤝', lead: 'Ninguém sobe sozinho. Escolha onde treina e quem negocia por você.' },
+      { id: 'jornada',    label: 'Jornada',    icon: '🎯', lead: 'Última porta antes da carreira. Quanto risco você aguenta — e sob quais regras?' },
+    ];
   }
 
-  _syncCharCreateDraft(modal, session, step) {
-    const d = session.draft;
-    if (step === 1) {
-      const nameEl = modal.querySelector('#charName');
-      const wcEl = modal.querySelector('#charWeightClass');
-      if (nameEl) d.name = nameEl.value;
-      if (wcEl && !wcEl.disabled) d.weightClass = wcEl.value;
-      else if (wcEl && wcEl.value) d.weightClass = wcEl.value;
-    } else if (step === 2) {
-      const arch = modal.querySelector('[data-archetype].selected')?.dataset.archetype;
-      const origin = modal.querySelector('[data-origin].selected')?.dataset.origin;
-      if (arch) d.archetype = arch;
-      if (origin) d.origin = origin;
-    } else if (step === 3) {
-      const academy = modal.querySelector('[data-academy].selected')?.dataset.academy;
-      const manager = modal.querySelector('[data-manager].selected')?.dataset.manager;
-      if (academy) d.academyId = academy;
-      if (manager) d.managerId = manager;
-    } else if (step === 4) {
-      const diff = modal.querySelector('[data-difficulty].selected')?.dataset.difficulty;
-      const challengeEl = modal.querySelector('[data-challenge].selected');
-      if (diff) d.difficultyId = diff;
-      if (challengeEl) {
-        const raw = challengeEl.dataset.challenge;
-        d.challengeMode = raw ? raw : null;
-      }
-    }
+  static get CC_FIELD_TAB() {
+    return {
+      name: 'identidade', weightClass: 'identidade',
+      archetype: 'estilo', origin: 'estilo',
+      academyId: 'equipe', managerId: 'equipe',
+      difficultyId: 'jornada', challengeMode: 'jornada',
+    };
   }
 
-  _renderCharCreateStep(modal, session, ctx) {
-    const { step, draft, maxReachedStep } = session;
-    const steps = App.CHAR_CREATE_STEPS;
-    const meta = modal.querySelector('#charCreateStepMeta');
-    const lead = modal.querySelector('#charCreateLead');
-    const progress = modal.querySelector('#charCreateProgress');
-    const body = modal.querySelector('#charCreateBody');
-    if (meta) meta.textContent = `Passo ${step} de 4`;
-    if (lead) lead.textContent = steps[step - 1]?.lead || '';
+  _ccRenderTab(modal, session, ctx) {
+    const tabs = App.CC_TABS;
+    const active = session.activeTab;
+    const meta = tabs.find(t => t.id === active) || tabs[0];
 
-    if (progress) {
-      progress.innerHTML = steps.map((s) => {
-        const done = s.id < step;
-        const active = s.id === step;
-        const clickable = s.id <= maxReachedStep;
-        const cls = [
-          'char-create-step',
-          done ? 'is-done' : '',
-          active ? 'is-active' : '',
-          clickable ? 'is-clickable' : '',
-        ].filter(Boolean).join(' ');
-        return `
-          <button type="button" class="${cls}" data-char-step="${s.id}"
-            ${clickable ? '' : 'disabled'}
-            ${active ? 'aria-current="step"' : ''}
-            aria-label="Passo ${s.id}: ${e(s.short)}">
-            <span class="char-create-step-num">${s.id}</span>
-            <span class="char-create-step-label">${e(s.short)}</span>
-          </button>`;
-      }).join('');
-    }
+    modal.querySelectorAll('[data-cc-tab]').forEach(btn => {
+      const on = btn.dataset.ccTab === active;
+      btn.classList.toggle('is-active', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
 
+    const lead = modal.querySelector('#ccLead');
+    if (lead) lead.textContent = meta.lead || '';
+
+    const body = modal.querySelector('#ccBody');
     if (body) {
-      body.dataset.step = String(step);
-      body.innerHTML = this._charCreateStepHtml(step, draft, ctx);
-      body.scrollTop = 0;
+      body.dataset.tab = active;
+      body.innerHTML = this._ccTabHtml(active, session.draft, ctx);
     }
-
-    this._updateCharCreateNav(modal, session);
+    this._ccBindTab(modal, session, ctx);
+    this._ccUpdateStage(modal, session, ctx);
   }
 
-  _charCreateStepHtml(step, draft, ctx) {
-    const { academies, managers, hasCompletedCareer } = ctx;
-    const wcLabels = App.CHAR_CREATE_WEIGHT_LABELS;
+  // Retrato unificado + nome + chips vivem no palco fixo à esquerda; qualquer
+  // mudança de opção reflete aqui na hora, sem tirar o preview da vista.
+  _ccUpdateStage(modal, session, ctx) {
+    const { draft } = session;
+    const portrait = modal.querySelector('#ccPortrait');
+    if (portrait) portrait.innerHTML = PortraitService.render(draft.appearance, { size: 240 });
+    const name = modal.querySelector('#ccName');
+    if (name) name.textContent = sanitizePlayerName(draft.name, { fallback: '' }) || 'Novo Lutador';
+    const chips = modal.querySelector('#ccChips');
+    if (chips) chips.innerHTML = this._charCreateSummaryChips(draft, ctx);
+  }
 
-    if (step === 1) {
+  _ccTabHtml(tab, draft, ctx) {
+    const { academies, managers, hasCompletedCareer } = ctx;
+
+    if (tab === 'identidade') {
+      const wcLabels = App.CHAR_CREATE_WEIGHT_LABELS;
       const options = Object.entries(wcLabels).map(([value, label]) => {
         const locked = value === 'Heavyweight' && !hasCompletedCareer;
         const selected = draft.weightClass === value ? 'selected' : '';
@@ -552,16 +491,18 @@ class App {
             placeholder="Seu nome de lutador" value="${e(draft.name || '')}" autocomplete="off">
         </div>
         <div class="form-group">
-          <label class="form-label">Aparência</label>
-          <div id="charAppearance"></div>
-        </div>
-        <div class="form-group">
           <label class="form-label" for="charWeightClass">Categoria de Peso</label>
           <select class="form-select" id="charWeightClass">${options}</select>
         </div>`;
     }
 
-    if (step === 2) {
+    if (tab === 'aparencia') {
+      // Editor sem preview embutido — o retrato unificado do palco à esquerda
+      // já mostra o busto e atualiza via onChange.
+      return `<div id="charAppearance"></div>`;
+    }
+
+    if (tab === 'estilo') {
       return `
         <div class="form-group">
           <label class="form-label">Arquétipo Inicial</label>
@@ -585,7 +526,7 @@ class App {
         </div>`;
     }
 
-    if (step === 3) {
+    if (tab === 'equipe') {
       return `
         <div class="form-group">
           <label class="form-label">Primeira Academia</label>
@@ -611,9 +552,8 @@ class App {
         </div>`;
     }
 
-    // Step 4 — jornada + resumo
+    // jornada — reserva financeira + modo desafio (resumo vive nos chips do palco)
     const challengeSel = draft.challengeMode || '';
-    const summary = this._charCreateSummaryChips(draft, ctx);
     return `
       <div class="form-group">
         <label class="form-label">Reserva Financeira</label>
@@ -645,10 +585,6 @@ class App {
             <div class="text-xs text-muted mt-2">Sem modificações — experiência padrão.</div>
           </button>
         </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Resumo</label>
-        <div class="char-create-summary">${summary}</div>
       </div>`;
   }
 
@@ -663,7 +599,6 @@ class App {
       ? (CHALLENGE_MODES[draft.challengeMode]?.name || draft.challengeMode)
       : 'Normal';
     const chips = [
-      draft.name || '(sem nome)',
       wc,
       arch,
       origin,
@@ -675,11 +610,11 @@ class App {
     return chips.map(c => `<span class="char-create-chip">${e(String(c))}</span>`).join('');
   }
 
-  _bindCharCreateStepControls(modal, session, ctx) {
-    const body = modal.querySelector('#charCreateBody');
+  _ccBindTab(modal, session, ctx) {
+    const body = modal.querySelector('#ccBody');
     if (!body) return;
 
-    // Delegation: um listener por mount do body (nodes recriados a cada step)
+    // Delegation: opções em grade (arquétipo/origem/dificuldade/academia/empresário/desafio)
     body.onclick = (ev) => {
       const opt = ev.target.closest(
         '[data-archetype],[data-origin],[data-difficulty],[data-academy],[data-manager],[data-challenge]'
@@ -700,22 +635,29 @@ class App {
         else if (attr === 'challenge') session.draft.challengeMode = val || null;
         break;
       }
+      this._ccUpdateStage(modal, session, ctx);
     };
 
-    if (session.step === 1) {
+    if (session.activeTab === 'identidade') {
       const nameEl = body.querySelector('#charName');
       const wcEl = body.querySelector('#charWeightClass');
       nameEl?.addEventListener('input', () => {
         session.draft.name = nameEl.value;
+        this._ccUpdateStage(modal, session, ctx);
       });
       wcEl?.addEventListener('change', () => {
         session.draft.weightClass = wcEl.value;
+        this._ccUpdateStage(modal, session, ctx);
       });
-
+      queueMicrotask(() => nameEl?.focus());
+    } else if (session.activeTab === 'aparencia') {
       const appearanceHost = body.querySelector('#charAppearance');
       if (appearanceHost) {
-        appearanceHost.innerHTML = AppearanceEditor.render(session.draft.appearance);
+        // preview:false — retrato unificado do palco à esquerda é o único preview
+        appearanceHost.innerHTML = AppearanceEditor.render(session.draft.appearance, { preview: false });
         AppearanceEditor.wire(appearanceHost, session.draft.appearance, {
+          preview: false,
+          onChange: () => this._ccUpdateStage(modal, session, ctx),
           context: {
             age: 22,
             popularity: 12,
@@ -724,9 +666,6 @@ class App {
           },
         });
       }
-
-      // Foco no nome no primeiro passo
-      queueMicrotask(() => nameEl?.focus());
     } else {
       queueMicrotask(() => {
         const first = body.querySelector('button:not([disabled]), input, select');

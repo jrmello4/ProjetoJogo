@@ -75,30 +75,43 @@ export class CardCombatView {
     this.stage = new CombatStage();
     this.handSeen = new Set();
     this._timers = new Set();
+    this.selectedCardId = null;
   }
 
   render(container, engineState, actions) {
     this._clearTimers();
     this.handlers = actions;
     this.handSeen.clear();
+    this.selectedCardId = null;
     const fa = engineState.fighterA.ref;
     const fb = engineState.fighterB.ref;
 
+    // Full-screen takeover: palco preenche o fundo (HP/stamina/round/posição
+    // sobrepostos), 5 cartas em leque embaixo. Sem scroll — palco e leque
+    // sempre na vista ao mesmo tempo.
     container.innerHTML = `
-      <div class="combat-container">
-        <div class="combat-header" data-combat-header>
+      <div class="combat-fs" data-combat-fs>
+        <div class="combat-fs-arena">
+          ${CombatStage.buildHTML(fa, fb)}
+        </div>
+        <div class="combat-fs-hud" data-combat-header>
           ${this._headerHTML(engineState)}
         </div>
-        ${CombatStage.buildHTML(fa, fb)}
-        <div class="card-hand" data-combat-hand>
-          ${this._renderCardHand(engineState, 'A')}
-        </div>
-        <div class="action-bar" data-combat-actions>
-          ${this._renderActionButtons(engineState)}
+        <div class="combat-fs-controls">
+          <div class="action-bar" data-combat-actions>
+            ${this._renderActionButtons(engineState)}
+          </div>
+          <div class="turn-log" data-combat-log>
+            ${this._renderTurnLog(engineState)}
+          </div>
         </div>
         <div class="turn-result hidden" data-combat-result></div>
-        <div class="turn-log" data-combat-log>
-          ${this._renderTurnLog(engineState)}
+        <div class="card-fan" data-combat-hand style="--card-total:${engineState.activesA.length}">
+          ${this._renderCardHand(engineState, 'A')}
+        </div>
+        <div class="card-confirm" data-combat-confirm hidden>
+          <button type="button" class="btn-confirm-use" data-confirm-use>Usar</button>
+          <button type="button" class="btn-confirm-cancel" data-confirm-cancel>Cancelar</button>
         </div>
       </div>
     `;
@@ -115,16 +128,25 @@ export class CardCombatView {
    * and portraits are not destroyed between turns.
    */
   update(container, engineState) {
-    if (!container.querySelector('.combat-container') || !container.querySelector('[data-combat-stage]')) {
+    if (!container.querySelector('.combat-fs') || !container.querySelector('[data-combat-stage]')) {
       this.render(container, engineState, this.handlers);
       return;
     }
+
+    // Nova mão = seleção anterior morre; barra de confirmar recolhe.
+    this.selectedCardId = null;
 
     const header = container.querySelector('[data-combat-header]');
     if (header) header.innerHTML = this._headerHTML(engineState);
 
     const hand = container.querySelector('[data-combat-hand]');
-    if (hand) hand.innerHTML = this._renderCardHand(engineState, 'A');
+    if (hand) {
+      hand.style.setProperty('--card-total', engineState.activesA.length);
+      hand.innerHTML = this._renderCardHand(engineState, 'A');
+    }
+
+    const confirmBar = container.querySelector('[data-combat-confirm]');
+    if (confirmBar) confirmBar.hidden = true;
 
     const actions = container.querySelector('[data-combat-actions]');
     if (actions) actions.innerHTML = this._renderActionButtons(engineState);
@@ -141,20 +163,16 @@ export class CardCombatView {
   }
 
   _bindInteractions(container) {
+    // Two-step: 1º toque levanta a carta (detalhe cheio + confirmar); botão
+    // "Usar" — ou tocar de novo na carta já levantada — joga. Não erra golpe.
     container.querySelectorAll('.card-item:not(.disabled)').forEach(el => {
       el.addEventListener('click', () => {
         if (el.disabled || el.classList.contains('is-playing') || this.handlers?.isResolving?.()) return;
-        container.querySelectorAll('.card-item.is-selected').forEach(card => card.classList.remove('is-selected'));
-        el.classList.add('is-selected');
-        el.classList.add('is-playing');
-        el.setAttribute('aria-pressed', 'true');
-        container.querySelectorAll('.card-item:not(.is-selected)').forEach(card => card.classList.add('is-waiting'));
-        const cardId = el.dataset.cardId;
-        if (this.handlers?.onCardPlay) this.handlers.onCardPlay(cardId);
-        this._schedule(() => {
-          el.classList.remove('is-playing');
-          el.classList.add('is-played');
-        }, 220);
+        if (el.classList.contains('is-selected')) {
+          this._playSelected(container);
+        } else {
+          this._selectCard(container, el);
+        }
       });
       el.addEventListener('keydown', (event) => {
         if ((event.key === 'Enter' || event.key === ' ') && !el.disabled) {
@@ -163,6 +181,11 @@ export class CardCombatView {
         }
       });
     });
+
+    const useBtn = container.querySelector('[data-confirm-use]');
+    const cancelBtn = container.querySelector('[data-confirm-cancel]');
+    useBtn?.addEventListener('click', () => this._playSelected(container));
+    cancelBtn?.addEventListener('click', () => this._clearSelection(container));
 
     container.querySelectorAll('.move-btn').forEach(el => {
       el.addEventListener('click', () => {
@@ -177,6 +200,47 @@ export class CardCombatView {
         if (!passBtn.disabled && !this.handlers?.isResolving?.() && this.handlers?.onPass) this.handlers.onPass();
       });
     }
+  }
+
+  _selectCard(container, el) {
+    container.querySelectorAll('.card-item').forEach(card => {
+      const isTarget = card === el;
+      card.classList.toggle('is-selected', isTarget);
+      card.classList.toggle('is-dimmed', !isTarget && !card.classList.contains('disabled'));
+      card.setAttribute('aria-pressed', isTarget ? 'true' : 'false');
+    });
+    this.selectedCardId = el.dataset.cardId;
+    const confirmBar = container.querySelector('[data-combat-confirm]');
+    const useBtn = container.querySelector('[data-confirm-use]');
+    if (useBtn) {
+      const card = ACTIVE_CARDS[this.selectedCardId];
+      useBtn.textContent = card ? `Usar ${card.name}` : 'Usar';
+    }
+    if (confirmBar) confirmBar.hidden = false;
+  }
+
+  _clearSelection(container) {
+    this.selectedCardId = null;
+    container.querySelectorAll('.card-item').forEach(card => {
+      card.classList.remove('is-selected', 'is-dimmed');
+      card.setAttribute('aria-pressed', 'false');
+    });
+    const confirmBar = container.querySelector('[data-combat-confirm]');
+    if (confirmBar) confirmBar.hidden = true;
+  }
+
+  _playSelected(container) {
+    const cardId = this.selectedCardId;
+    if (!cardId || this.handlers?.isResolving?.()) return;
+    const el = container.querySelector(`.card-item[data-card-id="${cardId}"]`);
+    const confirmBar = container.querySelector('[data-combat-confirm]');
+    if (confirmBar) confirmBar.hidden = true;
+    if (el) el.classList.add('is-playing');
+    if (this.handlers?.onCardPlay) this.handlers.onCardPlay(cardId);
+    this._schedule(() => {
+      el?.classList.remove('is-playing');
+      el?.classList.add('is-played');
+    }, 220);
   }
 
   _headerHTML(engineState) {

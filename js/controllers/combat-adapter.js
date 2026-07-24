@@ -691,7 +691,7 @@ export class CombatAdapter {
     if ((turnResult.damageA || 0) > 0) pulse(1, (turnResult.damageA || 0) >= 25);
     if ((turnResult.damageB || 0) > 0) pulse(0, (turnResult.damageB || 0) >= 25);
     // Also shake the header strip on heavy exchanges
-    const header = this.container.querySelector('.combat-header');
+    const header = this.container.querySelector('[data-combat-header]');
     if (header && ((turnResult.damageA || 0) >= 25 || (turnResult.damageB || 0) >= 25)) {
       header.classList.remove('combat-header-shake');
       void header.offsetWidth;
